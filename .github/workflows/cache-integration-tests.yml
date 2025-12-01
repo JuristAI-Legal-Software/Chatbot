@@ -52,8 +52,12 @@ jobs:
           redis-cli -p 7002 cluster info || exit 1
           redis-cli -p 7003 cluster info || exit 1
 
+      - name: Clean npm environment
+        run: |
+          rm -rf node_modules package-lock.json
+
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build packages
         run: |
