@@ -1,4 +1,5 @@
 /* eslint-disable react-hooks/rules-of-hooks */
+/* eslint-disable i18next/no-literal-string */
 import { PlusIcon } from 'lucide-react';
 import { Button, Checkbox, DotsIcon, FileIcon } from '@librechat/client';
 import type { ColumnDef } from '@tanstack/react-table';

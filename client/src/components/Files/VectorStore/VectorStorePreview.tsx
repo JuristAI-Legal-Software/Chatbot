@@ -1,3 +1,4 @@
+/* eslint-disable i18next/no-literal-string */
 import React, { useState } from 'react';
 import DeleteIconButton from '../DeleteIconButton';
 import { TrashIcon, Button } from '@librechat/client';

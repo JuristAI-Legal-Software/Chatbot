@@ -43,8 +43,15 @@ const UploadFileModal = ({ open, onOpenChange }) => {
           </div>
           <div className="mt-3 flex w-full flex-col">
             <label htmlFor="name">{localize('com_files_name_label')}</label>
-            <label className="hidden text-[#808080] sm:block">{localize('com_files_name_description')}</label>
-            <Input type="text" id="name" name="name" placeholder={localize('com_files_name_placeholder')} />
+            <label className="hidden text-[#808080] sm:block">
+              {localize('com_files_name_description')}
+            </label>
+            <Input
+              type="text"
+              id="name"
+              name="name"
+              placeholder={localize('com_files_name_placeholder')}
+            />
           </div>
 
           <div className="mt-3 flex w-full flex-col">

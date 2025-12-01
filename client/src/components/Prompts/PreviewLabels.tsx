@@ -1,3 +1,4 @@
+/* eslint-disable i18next/no-literal-string */
 import { useState } from 'react';
 import { Input } from '@librechat/client';
 import { Cross1Icon } from '@radix-ui/react-icons';
