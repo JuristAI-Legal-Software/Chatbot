@@ -1,3 +1,5 @@
+import { Parser } from 'expr-eval';
+
 /**
  * Evaluates a mathematical expression provided as a string and returns the result.
  *
@@ -32,7 +34,15 @@ export function math(str: string | number | undefined, fallbackValue?: number): 
     throw new Error('Invalid characters in string');
   }
 
-  const value = eval(str);
+  let value: unknown;
+  try {
+    value = Parser.evaluate(str);
+  } catch (error) {
+    if (fallback) {
+      return fallbackValue;
+    }
+    throw error;
+  }
 
   if (typeof value !== 'number') {
     if (fallback) {
