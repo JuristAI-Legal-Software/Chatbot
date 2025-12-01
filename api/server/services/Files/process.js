@@ -1,3 +1,4 @@
+/* eslint-disable no-undef, no-redeclare */
 const path = require('path');
 const mime = require('mime');
 const { v4 } = require('uuid');

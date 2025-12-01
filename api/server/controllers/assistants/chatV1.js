@@ -48,6 +48,8 @@ const { getOpenAIClient } = require('./helpers');
 const chatV1 = async (req, res) => {
   logger.debug('[/assistants/chat/] req.body', req.body);
 
+  const appConfig = req.config;
+
   const {
     text,
     model,
