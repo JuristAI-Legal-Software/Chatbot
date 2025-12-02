@@ -22,40 +22,91 @@ describe('limiterCache', () => {
   afterEach(async () => {
     process.env = originalEnv;
 
+    // Close any client attached to testStore (covers various Redis store implementations)
     if (testStore) {
       const maybeClient =
         (testStore as any).client || (testStore as any).redis || (testStore as any).clientRedis;
 
       if (maybeClient) {
         try {
+          // node-redis v4
           if (typeof maybeClient.quit === 'function') {
             await maybeClient.quit();
-          } else if (typeof maybeClient.disconnect === 'function') {
-            await maybeClient.disconnect();
+          }
+          // ioredis or cluster
+          if (typeof maybeClient.disconnect === 'function') {
+            maybeClient.disconnect();
+            // allow some time to close sockets
+            await new Promise((r) => setTimeout(r, 50));
           }
         } catch (err) {
-          // Swallow errors to avoid masking test failures while ensuring cleanup attempts
+          // swallow to avoid masking test failures
         }
       }
 
       testStore = undefined;
     }
 
+    // Try closing shared clients from redisClients module (if present)
     try {
       const redisClients = await import('../../redisClients');
-      if (typeof redisClients.closeRedisClients === 'function') {
-        await redisClients.closeRedisClients();
+      const closers: Promise<any>[] = [];
+
+      if (redisClients) {
+        const maybeClose = (obj: any) => {
+          if (!obj) return;
+          try {
+            if (typeof obj.quit === 'function') {
+              closers.push(obj.quit());
+            } else if (typeof obj.disconnect === 'function') {
+              // ioredis.disconnect is synchronous, but call it and allow a tick for sockets to close
+              obj.disconnect();
+            } else if (typeof obj.end === 'function') {
+              closers.push(obj.end());
+            }
+          } catch (e) {
+            // ignore
+          }
+        };
+
+        // Common exports to try shutting down
+        maybeClose(redisClients.ioredisClient);
+        maybeClose(redisClients.redisClient);
+        maybeClose(redisClients.clusterClient);
       }
+
+      // await any async quits
+      if (closers.length > 0) await Promise.allSettled(closers);
     } catch (err) {
-      // Ignore cleanup errors to prevent interfering with test results
+      // ignore cleanup errors
     }
 
     jest.resetModules();
   });
 
   afterAll(async () => {
-    const redisClients = await import('../../redisClients');
-    await redisClients.closeRedisClients();
+    // Final cleanup: ensure the shared redisClients are closed fully
+    try {
+      const redisClients = await import('../../redisClients');
+      if (redisClients && typeof redisClients.closeRedisClients === 'function') {
+        await redisClients.closeRedisClients();
+      } else {
+        // Fallback: attempt to individually close known clients (non-fatal)
+        const maybeClose = async (c: any) => {
+          if (!c) return;
+          try {
+            if (typeof c.quit === 'function') await c.quit();
+            if (typeof c.disconnect === 'function') c.disconnect();
+          } catch (e) {
+            // swallow
+          }
+        };
+        await maybeClose((redisClients as any)?.ioredisClient);
+        await maybeClose((redisClients as any)?.clusterClient);
+      }
+    } catch (err) {
+      // ignore
+    }
   });
 
   test('should throw error when prefix is not provided', async () => {
