@@ -21,6 +21,35 @@ describe('limiterCache', () => {
 
   afterEach(async () => {
     process.env = originalEnv;
+
+    if (testStore) {
+      const maybeClient =
+        (testStore as any).client || (testStore as any).redis || (testStore as any).clientRedis;
+
+      if (maybeClient) {
+        try {
+          if (typeof maybeClient.quit === 'function') {
+            await maybeClient.quit();
+          } else if (typeof maybeClient.disconnect === 'function') {
+            await maybeClient.disconnect();
+          }
+        } catch (err) {
+          // Swallow errors to avoid masking test failures while ensuring cleanup attempts
+        }
+      }
+
+      testStore = undefined;
+    }
+
+    try {
+      const redisClients = await import('../../redisClients');
+      if (typeof redisClients.closeRedisClients === 'function') {
+        await redisClients.closeRedisClients();
+      }
+    } catch (err) {
+      // Ignore cleanup errors to prevent interfering with test results
+    }
+
     jest.resetModules();
   });
 
