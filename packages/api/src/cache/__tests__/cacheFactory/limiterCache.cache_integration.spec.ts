@@ -24,6 +24,11 @@ describe('limiterCache', () => {
     jest.resetModules();
   });
 
+  afterAll(async () => {
+    const redisClients = await import('../../redisClients');
+    await redisClients.closeRedisClients();
+  });
+
   test('should throw error when prefix is not provided', async () => {
     const cacheFactory = await import('../../cacheFactory');
     expect(() => cacheFactory.limiterCache('')).toThrow('prefix is required');
