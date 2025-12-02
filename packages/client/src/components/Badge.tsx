@@ -5,11 +5,10 @@ import type { ButtonHTMLAttributes } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '~/utils';
 
-interface BadgeProps
-  extends Omit<
-    ButtonHTMLAttributes<HTMLButtonElement>,
-    'onAnimationStart' | 'onDragStart' | 'onDragEnd' | 'onDrag'
-  > {
+interface BadgeProps extends Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  'onAnimationStart' | 'onDragStart' | 'onDragEnd' | 'onDrag'
+> {
   icon?: LucideIcon;
   label: string;
   id?: string;

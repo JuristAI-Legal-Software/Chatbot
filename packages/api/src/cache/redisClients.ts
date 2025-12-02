@@ -216,7 +216,10 @@ if (cacheConfig.USE_REDIS) {
   });
 }
 
-const safeQuit = async (client: { quit?: () => Promise<void>; disconnect?: () => Promise<void> }) => {
+const safeQuit = async (client: {
+  quit?: () => Promise<void>;
+  disconnect?: () => Promise<void>;
+}) => {
   if (!client) {
     return;
   }
@@ -238,10 +241,14 @@ export const closeRedisClients = async (): Promise<void> => {
     pingInterval = null;
   }
 
-  await safeQuit(ioredisClient as unknown as { quit?: () => Promise<void>; disconnect?: () => Promise<void> });
+  await safeQuit(
+    ioredisClient as unknown as { quit?: () => Promise<void>; disconnect?: () => Promise<void> },
+  );
   ioredisClient = null;
 
-  await safeQuit(keyvRedisClient as unknown as { quit?: () => Promise<void>; disconnect?: () => Promise<void> });
+  await safeQuit(
+    keyvRedisClient as unknown as { quit?: () => Promise<void>; disconnect?: () => Promise<void> },
+  );
   keyvRedisClient = null;
 };
 
