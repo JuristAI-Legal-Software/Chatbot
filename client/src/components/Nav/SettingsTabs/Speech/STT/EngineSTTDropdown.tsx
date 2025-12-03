@@ -1,6 +1,6 @@
 import React from 'react';
 import { useRecoilState } from 'recoil';
-import { Dropdown } from '@librechat/client';
+import { Dropdown } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
 
@@ -14,28 +14,25 @@ const EngineSTTDropdown: React.FC<EngineSTTDropdownProps> = ({ external }) => {
 
   const endpointOptions = external
     ? [
-        { value: 'browser', label: localize('com_nav_browser') },
-        { value: 'external', label: localize('com_nav_external') },
-      ]
+      { value: 'browser', label: localize('com_nav_browser') },
+      { value: 'external', label: localize('com_nav_external') },
+    ]
     : [{ value: 'browser', label: localize('com_nav_browser') }];
 
   const handleSelect = (value: string) => {
     setEngineSTT(value);
   };
 
-  const labelId = 'engine-stt-dropdown-label';
-
   return (
     <div className="flex items-center justify-between">
-      <div id={labelId}>{localize('com_nav_engine')}</div>
+      <div>{localize('com_nav_engine')}</div>
       <Dropdown
         value={engineSTT}
         onChange={handleSelect}
         options={endpointOptions}
         sizeClasses="w-[180px]"
+        anchor="bottom start"
         testId="EngineSTTDropdown"
-        className="z-50"
-        aria-labelledby={labelId}
       />
     </div>
   );

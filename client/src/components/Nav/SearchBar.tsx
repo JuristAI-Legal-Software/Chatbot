@@ -1,124 +1,69 @@
-import React, { forwardRef, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import debounce from 'lodash/debounce';
-import { useRecoilState } from 'recoil';
 import { Search, X } from 'lucide-react';
+import { useSetRecoilState } from 'recoil';
 import { QueryKeys } from 'librechat-data-provider';
 import { useQueryClient } from '@tanstack/react-query';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { useLocalize, useNewConvo } from '~/hooks';
+import { forwardRef, useState, useCallback, useMemo, Ref } from 'react';
+import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import store from '~/store';
 
 type SearchBarProps = {
-  isSmallScreen?: boolean;
+  clearSearch: () => void;
 };
 
-const SearchBar = forwardRef((props: SearchBarProps, ref: React.Ref<HTMLDivElement>) => {
-  const localize = useLocalize();
-  const location = useLocation();
+const SearchBar = forwardRef((props: SearchBarProps, ref: Ref<HTMLDivElement>) => {
+  const { clearSearch } = props;
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const { isSmallScreen } = props;
-
-  const [text, setText] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const clearConvoState = store.useClearConvoState();
+  const setSearchQuery = useSetRecoilState(store.searchQuery);
   const [showClearIcon, setShowClearIcon] = useState(false);
+  const [text, setText] = useState('');
+  const localize = useLocalize();
 
-  const { newConversation: newConvo } = useNewConvo();
-  const [search, setSearchState] = useRecoilState(store.search);
+  const clearText = useCallback(() => {
+    setShowClearIcon(false);
+    setSearchQuery('');
+    clearSearch();
+    setText('');
+  }, [setSearchQuery, clearSearch]);
 
-  const clearSearch = useCallback(
-    (pathname?: string) => {
-      if (pathname?.includes('/search') || pathname === '/c/new') {
-        queryClient.removeQueries([QueryKeys.messages]);
-        newConvo({ disableFocus: true });
-        navigate('/c/new');
-      }
-    },
-    [newConvo, navigate, queryClient],
-  );
-
-  const clearText = useCallback(
-    (pathname?: string) => {
-      setShowClearIcon(false);
-      setText('');
-      setSearchState((prev) => ({
-        ...prev,
-        query: '',
-        debouncedQuery: '',
-        isTyping: false,
-      }));
-      clearSearch(pathname);
-      inputRef.current?.focus();
-    },
-    [setSearchState, clearSearch],
-  );
-
-  const handleKeyUp = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      const { value } = e.target as HTMLInputElement;
-      if (e.key === 'Backspace' && value === '') {
-        clearText(location.pathname);
-      }
-    },
-    [clearText, location.pathname],
-  );
+  const handleKeyUp = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const { value } = e.target as HTMLInputElement;
+    if (e.key === 'Backspace' && value === '') {
+      clearText();
+    }
+  };
 
   const sendRequest = useCallback(
     (value: string) => {
+      setSearchQuery(value);
       if (!value) {
         return;
       }
       queryClient.invalidateQueries([QueryKeys.messages]);
+      clearConvoState();
     },
-    [queryClient],
+    [queryClient, clearConvoState, setSearchQuery],
   );
+  const debouncedSendRequest = useMemo(() => debounce(sendRequest, 350), [sendRequest]);
 
-  const debouncedSetDebouncedQuery = useMemo(
-    () =>
-      debounce((value: string) => {
-        setSearchState((prev) => ({ ...prev, debouncedQuery: value, isTyping: false }));
-        sendRequest(value);
-      }, 500),
-    [setSearchState, sendRequest],
-  );
-
-  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+  const onChange = (e: React.FormEvent<HTMLInputElement>) => {
+    const { value } = e.target as HTMLInputElement;
     setShowClearIcon(value.length > 0);
     setText(value);
-    setSearchState((prev) => ({
-      ...prev,
-      query: value,
-      isTyping: true,
-    }));
-    debouncedSetDebouncedQuery(value);
-    if (value.length > 0 && location.pathname !== '/search') {
-      navigate('/search', { replace: true });
-    }
+    debouncedSendRequest(value);
   };
-
-  // Automatically set isTyping to false when loading is done and debouncedQuery matches query
-  // (prevents stuck loading state if input is still focused)
-  useEffect(() => {
-    if (search.isTyping && !search.isSearching && search.debouncedQuery === search.query) {
-      setSearchState((prev) => ({ ...prev, isTyping: false }));
-    }
-  }, [search.isTyping, search.isSearching, search.debouncedQuery, search.query, setSearchState]);
 
   return (
     <div
       ref={ref}
-      className={cn(
-        'group relative mt-1 flex h-10 cursor-pointer items-center gap-3 rounded-lg border-border-medium px-3 py-2 text-text-primary transition-colors duration-200 focus-within:bg-surface-hover hover:bg-surface-hover',
-        isSmallScreen === true ? 'mb-2 h-14 rounded-xl' : '',
-      )}
+      className="relative mt-1 flex h-10 cursor-pointer items-center gap-3 rounded-lg border-border-medium px-3 py-2 text-text-primary transition-colors duration-200 focus-within:bg-surface-hover hover:bg-surface-hover dark:focus-within:bg-surface-hover"
     >
-      <Search className="absolute left-3 h-4 w-4 text-text-secondary group-focus-within:text-text-primary group-hover:text-text-primary" />
+      {<Search className="absolute left-3 h-4 w-4" />}
       <input
         type="text"
-        ref={inputRef}
-        className="m-0 mr-0 w-full border-none bg-transparent p-0 pl-7 text-sm leading-tight placeholder-text-secondary placeholder-opacity-100 focus-visible:outline-none group-focus-within:placeholder-text-primary group-hover:placeholder-text-primary"
+        className="m-0 mr-0 w-full border-none bg-transparent p-0 pl-7 text-sm leading-tight placeholder-text-secondary placeholder-opacity-100 outline-none dark:placeholder-opacity-100"
         value={text}
         onChange={onChange}
         onKeyDown={(e) => {
@@ -127,25 +72,16 @@ const SearchBar = forwardRef((props: SearchBarProps, ref: React.Ref<HTMLDivEleme
         aria-label={localize('com_nav_search_placeholder')}
         placeholder={localize('com_nav_search_placeholder')}
         onKeyUp={handleKeyUp}
-        onFocus={() => setSearchState((prev) => ({ ...prev, isSearching: true }))}
-        onBlur={() => setSearchState((prev) => ({ ...prev, isSearching: false }))}
         autoComplete="off"
         dir="auto"
       />
-      <button
-        type="button"
-        aria-label={`${localize('com_ui_clear')} ${localize('com_ui_search')}`}
+      <X
         className={cn(
-          'absolute right-[7px] flex h-5 w-5 items-center justify-center rounded-full border-none bg-transparent p-0 transition-opacity duration-200',
+          'absolute right-[7px] h-5 w-5 cursor-pointer transition-opacity duration-1000',
           showClearIcon ? 'opacity-100' : 'opacity-0',
-          isSmallScreen === true ? 'right-[16px]' : '',
         )}
-        onClick={() => clearText(location.pathname)}
-        tabIndex={showClearIcon ? 0 : -1}
-        disabled={!showClearIcon}
-      >
-        <X className="h-5 w-5 cursor-pointer" />
-      </button>
+        onClick={clearText}
+      />
     </div>
   );
 });

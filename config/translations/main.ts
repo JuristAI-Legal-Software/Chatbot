@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { processLanguageModule, processMissingKey } from './process';
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default async function main(baseFilePath: string, compareFilePath: string) {
   const prompt = await processLanguageModule(path.basename(compareFilePath), compareFilePath);
@@ -18,30 +17,19 @@ export default async function main(baseFilePath: string, compareFilePath: string
   const compareKeys = Object.keys(compareModule.default);
 
   const missingKeys = baseKeys.filter((key) => !compareKeys.includes(key));
-  const promises: Array<Promise<void>> = [];
   if (missingKeys.length > 0) {
     const keyTranslations = {};
     for (const key of missingKeys) {
       const baselineTranslation = baseModule.default[key] || 'No baseline translation available';
-      const handleMissingKey = async () => {
-        try {
-          const result = await processMissingKey({
-            key,
-            baselineTranslation,
-            translationPrompt: prompt,
-            moduleName: path.basename(compareFilePath),
-          });
-          keyTranslations[key] = result;
-        } catch (e) {
-          console.error(`Error processing key: ${key}`, e);
-        }
-      };
-
-      promises.push(handleMissingKey());
-      await sleep(700);
+      const result = await processMissingKey({
+        key,
+        baselineTranslation,
+        translationPrompt: prompt,
+        moduleName: path.basename(compareFilePath),
+      });
+      keyTranslations[key] = result;
     }
 
-    await Promise.all(promises);
     const outputDir = path.dirname(compareFilePath);
     const outputFileName = `${path.basename(
       compareFilePath,

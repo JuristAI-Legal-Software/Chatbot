@@ -1,33 +1,27 @@
-import CategoryIcon from '~/components/Prompts/Groups/CategoryIcon';
-import { useLocalize, TranslationKeys } from '~/hooks';
 import { useGetCategories } from '~/data-provider';
+import CategoryIcon from '~/components/Prompts/Groups/CategoryIcon';
+import useLocalize from '~/hooks/useLocalize';
 
-const loadingCategories: { label: TranslationKeys; value: string }[] = [
+const loadingCategories = [
   {
-    label: 'com_ui_loading',
+    label: 'Loading...',
     value: '',
   },
 ];
 
-const emptyCategory: { label: TranslationKeys; value: string } = {
-  label: 'com_ui_empty_category',
+const emptyCategory = {
+  label: '-',
   value: '',
 };
 
-const useCategories = ({
-  className = '',
-  hasAccess = true,
-}: {
-  className?: string;
-  hasAccess?: boolean;
-}) => {
+const useCategories = (className = '') => {
   const localize = useLocalize();
-
   const { data: categories = loadingCategories } = useGetCategories({
-    enabled: hasAccess,
     select: (data) =>
       data.map((category) => ({
-        label: localize(category.label as TranslationKeys),
+        label: category.label
+          ? localize(`com_ui_${category.label}`) || category.label
+          : localize('com_ui_select_a_category'),
         value: category.value,
         icon: category.value ? (
           <CategoryIcon category={category.value} className={className} />

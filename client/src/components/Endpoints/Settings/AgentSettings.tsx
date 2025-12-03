@@ -1,3 +1,5 @@
+import type { TModelSelectProps } from '~/common';
+import { ESide } from '~/common';
 import {
   Switch,
   Label,
@@ -6,12 +8,10 @@ import {
   InputNumber,
   SelectDropDown,
   HoverCardTrigger,
-} from '@librechat/client';
-import type { TModelSelectProps } from '~/common';
-import { cn, optionText, defaultTextProps, removeFocusRings } from '~/utils';
+} from '~/components';
 import OptionHover from './OptionHover';
+import { cn, optionText, defaultTextProps, removeFocusRings } from '~/utils';
 import { useLocalize } from '~/hooks';
-import { ESide } from '~/common';
 
 export default function Settings({ conversation, setOption, models, readonly }: TModelSelectProps) {
   const localize = useLocalize();
@@ -53,9 +53,7 @@ export default function Settings({ conversation, setOption, models, readonly }: 
             <div className="flex justify-between">
               <Label htmlFor="temp-int" className="text-left text-sm font-medium">
                 {localize('com_endpoint_temperature')}{' '}
-                <small className="opacity-40">
-                  ({localize('com_endpoint_default_with_num', { 0: '0' })})
-                </small>
+                <small className="opacity-40">({localize('com_endpoint_default')}: 0)</small>
               </Label>
               <InputNumber
                 id="temp-int"
@@ -79,12 +77,11 @@ export default function Settings({ conversation, setOption, models, readonly }: 
               disabled={readonly}
               value={[temperature ?? 0]}
               onValueChange={(value: number[]) => setTemperature(value[0])}
-              onDoubleClick={() => setTemperature(1)}
+              doubleClickHandler={() => setTemperature(1)}
               max={2}
               min={0}
               step={0.01}
               className="flex h-4 w-full"
-              aria-labelledby="temp-int"
             />
           </HoverCardTrigger>
           <OptionHover endpoint={conversation.endpoint ?? ''} type="temp" side={ESide.Left} />
@@ -104,7 +101,6 @@ export default function Settings({ conversation, setOption, models, readonly }: 
                 onCheckedChange={onCheckedChangeAgent}
                 disabled={readonly}
                 className="ml-4 mt-2"
-                aria-label={localize('com_endpoint_plug_use_functions')}
               />
             </HoverCardTrigger>
             <OptionHover endpoint={conversation.endpoint ?? ''} type="func" side={ESide.Bottom} />
@@ -123,7 +119,6 @@ export default function Settings({ conversation, setOption, models, readonly }: 
                 onCheckedChange={onCheckedChangeSkip}
                 disabled={readonly}
                 className="ml-4 mt-2"
-                aria-label={localize('com_endpoint_plug_skip_completion')}
               />
             </HoverCardTrigger>
             <OptionHover endpoint={conversation.endpoint ?? ''} type="skip" side={ESide.Bottom} />

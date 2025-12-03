@@ -1,9 +1,9 @@
-const { logger } = require('@librechat/data-schemas');
 const { errorsToString } = require('librechat-data-provider');
-const { isEnabled, checkEmailConfig } = require('@librechat/api');
 const { Strategy: PassportLocalStrategy } = require('passport-local');
 const { findUser, comparePassword, updateUser } = require('~/models');
+const { isEnabled, checkEmailConfig } = require('~/server/utils');
 const { loginSchema } = require('./validators');
+const logger = require('~/utils/logger');
 
 // Unix timestamp for 2024-06-07 15:20:18 Eastern Time
 const verificationEnabledTimestamp = 1717788018;
@@ -22,15 +22,9 @@ async function passportLogin(req, email, password, done) {
       return done(null, false, { message: validationError });
     }
 
-    const user = await findUser({ email: email.trim() }, '+password');
+    const user = await findUser({ email: email.trim() });
     if (!user) {
       logError('Passport Local Strategy - User Not Found', { email });
-      logger.error(`[Login] [Login failed] [Username: ${email}] [Request-IP: ${req.ip}]`);
-      return done(null, false, { message: 'Email does not exist.' });
-    }
-
-    if (!user.password) {
-      logError('Passport Local Strategy - User has no password', { email });
       logger.error(`[Login] [Login failed] [Username: ${email}] [Request-IP: ${req.ip}]`);
       return done(null, false, { message: 'Email does not exist.' });
     }
@@ -54,12 +48,7 @@ async function passportLogin(req, email, password, done) {
       user.emailVerified = true;
     }
 
-    const unverifiedAllowed = isEnabled(process.env.ALLOW_UNVERIFIED_EMAIL_LOGIN);
-    if (user.expiresAt && unverifiedAllowed) {
-      await updateUser(user._id, {});
-    }
-
-    if (!user.emailVerified && !unverifiedAllowed) {
+    if (!user.emailVerified && !isEnabled(process.env.ALLOW_UNVERIFIED_EMAIL_LOGIN)) {
       logError('Passport Local Strategy - Email not verified', { email });
       logger.error(`[Login] [Login failed] [Username: ${email}] [Request-IP: ${req.ip}]`);
       return done(null, user, { message: 'Email not verified.' });

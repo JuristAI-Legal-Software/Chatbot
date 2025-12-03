@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { TooltipAnchor, OGDialogTrigger, EditIcon, Button } from '@librechat/client';
-import type { TConversationTag } from 'librechat-data-provider';
 import type { FC } from 'react';
+import type { TConversationTag } from 'librechat-data-provider';
 import BookmarkEditDialog from './BookmarkEditDialog';
+import { EditIcon } from '~/components/svg';
 import { useLocalize } from '~/hooks';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui';
 
 const EditBookmarkButton: FC<{
   bookmark: TConversationTag;
@@ -12,34 +12,30 @@ const EditBookmarkButton: FC<{
   onBlur?: () => void;
 }> = ({ bookmark, tabIndex = 0, onFocus, onBlur }) => {
   const localize = useLocalize();
-  const [open, setOpen] = useState(false);
-
   return (
     <BookmarkEditDialog
-      context="EditBookmarkButton"
       bookmark={bookmark}
-      open={open}
-      setOpen={setOpen}
-    >
-      <OGDialogTrigger asChild>
-        <TooltipAnchor
-          description={localize('com_ui_edit')}
-          render={
-            <Button
-              variant="ghost"
-              aria-label={localize('com_ui_bookmarks_edit')}
-              tabIndex={tabIndex}
-              onFocus={onFocus}
-              onBlur={onBlur}
-              onClick={() => setOpen(!open)}
-              className="h-8 w-8 p-0"
-            >
-              <EditIcon />
-            </Button>
-          }
-        />
-      </OGDialogTrigger>
-    </BookmarkEditDialog>
+      trigger={
+        <button
+          type="button"
+          className="transition-color flex h-7 w-7 min-w-7 items-center justify-center rounded-lg duration-200 hover:bg-gray-200 dark:hover:bg-gray-700"
+          tabIndex={tabIndex}
+          onFocus={onFocus}
+          onBlur={onBlur}
+        >
+          <TooltipProvider delayDuration={250}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <EditIcon />
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={0}>
+                {localize('com_ui_edit')}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </button>
+      }
+    />
   );
 };
 

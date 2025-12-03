@@ -4,15 +4,9 @@ export enum FileSources {
   local = 'local',
   firebase = 'firebase',
   azure = 'azure',
-  azure_blob = 'azure_blob',
   openai = 'openai',
   s3 = 's3',
   vectordb = 'vectordb',
-  execute_code = 'execute_code',
-  mistral_ocr = 'mistral_ocr',
-  azure_mistral_ocr = 'azure_mistral_ocr',
-  vertexai_mistral_ocr = 'vertexai_mistral_ocr',
-  text = 'text',
 }
 
 export const checkOpenAIStorage = (source: string) =>
@@ -21,16 +15,13 @@ export const checkOpenAIStorage = (source: string) =>
 export enum FileContext {
   avatar = 'avatar',
   unknown = 'unknown',
-  agents = 'agents',
   assistants = 'assistants',
-  execute_code = 'execute_code',
   image_generation = 'image_generation',
   assistants_output = 'assistants_output',
   message_attachment = 'message_attachment',
   filename = 'filename',
   updatedAt = 'updatedAt',
   source = 'source',
-  filterSource = 'filterSource',
   context = 'context',
   bytes = 'bytes',
 }
@@ -47,48 +38,8 @@ export type FileConfig = {
   endpoints: {
     [key: string]: EndpointFileConfig;
   };
-  fileTokenLimit?: number;
   serverFileSizeLimit?: number;
   avatarSizeLimit?: number;
-  clientImageResize?: {
-    enabled?: boolean;
-    maxWidth?: number;
-    maxHeight?: number;
-    quality?: number;
-  };
-  ocr?: {
-    supportedMimeTypes?: RegExp[];
-  };
-  text?: {
-    supportedMimeTypes?: RegExp[];
-  };
-  stt?: {
-    supportedMimeTypes?: RegExp[];
-  };
-  checkType?: (fileType: string, supportedTypes: RegExp[]) => boolean;
-};
-
-export type FileConfigInput = {
-  endpoints?: {
-    [key: string]: EndpointFileConfig;
-  };
-  serverFileSizeLimit?: number;
-  avatarSizeLimit?: number;
-  clientImageResize?: {
-    enabled?: boolean;
-    maxWidth?: number;
-    maxHeight?: number;
-    quality?: number;
-  };
-  ocr?: {
-    supportedMimeTypes?: string[];
-  };
-  text?: {
-    supportedMimeTypes?: string[];
-  };
-  stt?: {
-    supportedMimeTypes?: string[];
-  };
   checkType?: (fileType: string, supportedTypes: RegExp[]) => boolean;
 };
 
@@ -114,7 +65,6 @@ export type TFile = {
   height?: number;
   expiresAt?: string | Date;
   preview?: string;
-  metadata?: { fileIdentifier?: string };
   createdAt?: string | Date;
   updatedAt?: string | Date;
 };
@@ -173,12 +123,10 @@ export type BatchFile = {
   filepath: string;
   embedded: boolean;
   source: FileSources;
-  temp_file_id?: string;
 };
 
 export type DeleteFilesBody = {
   files: BatchFile[];
-  agent_id?: string;
   assistant_id?: string;
   tool_resource?: EToolResources;
 };

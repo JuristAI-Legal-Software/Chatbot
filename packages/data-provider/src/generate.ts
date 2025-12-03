@@ -13,17 +13,9 @@ export type ComponentType =
   | 'checkbox'
   | 'switch'
   | 'dropdown'
-  | 'combobox'
   | 'tags';
 
 export type OptionType = 'conversation' | 'model' | 'custom';
-
-export type Option = Record<string, unknown> & {
-  label?: string;
-  value: string | number | null;
-};
-
-export type OptionWithIcon = Option & { icon?: React.ReactNode };
 
 export enum ComponentTypes {
   Input = 'input',
@@ -32,7 +24,6 @@ export enum ComponentTypes {
   Checkbox = 'checkbox',
   Switch = 'switch',
   Dropdown = 'dropdown',
-  Combobox = 'combobox',
   Tags = 'tags',
 }
 
@@ -54,7 +45,6 @@ export interface SettingDefinition {
   description?: string;
   type: 'number' | 'boolean' | 'string' | 'enum' | 'array';
   default?: number | boolean | string | string[];
-  showLabel?: boolean;
   showDefault?: boolean;
   options?: string[];
   range?: SettingRange;
@@ -74,18 +64,13 @@ export interface SettingDefinition {
   maxTags?: number; // Specific to tags component
   includeInput?: boolean; // Specific to slider component
   descriptionSide?: 'top' | 'right' | 'bottom' | 'left';
-  items?: OptionWithIcon[]; // Specific to combobox component
-  searchPlaceholder?: string; // Specific to combobox component
-  selectPlaceholder?: string; // Specific to combobox component
-  searchPlaceholderCode?: boolean; // Specific to combobox component
-  selectPlaceholderCode?: boolean; // Specific to combobox component
 }
 
 export type DynamicSettingProps = Partial<SettingDefinition> & {
   readonly?: boolean;
   settingKey: string;
   setOption: TSetOption;
-  conversation: Partial<TConversation> | Partial<TPreset> | null;
+  conversation: TConversation | TPreset | null;
   defaultValue?: number | boolean | string | string[];
   className?: string;
   inputClassName?: string;
@@ -205,7 +190,6 @@ const minColumns = 1;
 const maxColumns = 4;
 const minSliderOptions = 2;
 const minDropdownOptions = 2;
-const minComboboxOptions = 2;
 
 /**
  * Validates the provided setting using the constraints unique to each component type.
@@ -358,7 +342,7 @@ export function validateSettingDefinitions(settings: SettingsConfiguration): voi
         // continue;
       }
       setting.includeInput =
-        setting.type === SettingTypes.Number ? (setting.includeInput ?? true) : false; // Default to true if type is number
+        setting.type === SettingTypes.Number ? setting.includeInput ?? true : false; // Default to true if type is number
     }
 
     if (setting.component === ComponentTypes.Slider && setting.type === SettingTypes.Number) {
@@ -399,22 +383,9 @@ export function validateSettingDefinitions(settings: SettingsConfiguration): voi
       }
     }
 
-    if (setting.component === ComponentTypes.Combobox) {
-      if (!setting.options || setting.options.length < minComboboxOptions) {
-        errors.push({
-          code: ZodIssueCode.custom,
-          message: `Combobox component for setting ${setting.key} requires at least ${minComboboxOptions} options.`,
-          path: ['options'],
-        });
-      }
-      if (!setting.default && setting.options && setting.options.length > 0) {
-        setting.default = setting.options[0];
-      }
-    }
-
     // Default columnSpan
     if (!setting.columnSpan) {
-      setting.columnSpan = Math.floor((columns ?? 0) / 2);
+      setting.columnSpan = Math.floor(columns / 2);
     }
 
     // Default label to key
@@ -445,8 +416,7 @@ export function validateSettingDefinitions(settings: SettingsConfiguration): voi
 
     // Validate optionType and conversation schema
     if (setting.optionType !== OptionTypes.Custom) {
-      const conversationSchema =
-        tConversationSchema.shape[setting.key as keyof Omit<TConversation, 'disableParams'>];
+      const conversationSchema = tConversationSchema.shape[setting.key as keyof TConversation];
       if (!conversationSchema) {
         errors.push({
           code: ZodIssueCode.custom,
@@ -467,11 +437,7 @@ export function validateSettingDefinitions(settings: SettingsConfiguration): voi
     }
 
     /* Default value checks */
-    if (
-      setting.type === SettingTypes.Number &&
-      isNaN(setting.default as number) &&
-      setting.default != null
-    ) {
+    if (setting.type === SettingTypes.Number && isNaN(setting.default as number)) {
       errors.push({
         code: ZodIssueCode.custom,
         message: `Invalid default value for setting ${setting.key}. Must be a number.`,
@@ -479,11 +445,7 @@ export function validateSettingDefinitions(settings: SettingsConfiguration): voi
       });
     }
 
-    if (
-      setting.type === SettingTypes.Boolean &&
-      typeof setting.default !== 'boolean' &&
-      setting.default != null
-    ) {
+    if (setting.type === SettingTypes.Boolean && typeof setting.default !== 'boolean') {
       errors.push({
         code: ZodIssueCode.custom,
         message: `Invalid default value for setting ${setting.key}. Must be a boolean.`,
@@ -493,8 +455,7 @@ export function validateSettingDefinitions(settings: SettingsConfiguration): voi
 
     if (
       (setting.type === SettingTypes.String || setting.type === SettingTypes.Enum) &&
-      typeof setting.default !== 'string' &&
-      setting.default != null
+      typeof setting.default !== 'string'
     ) {
       errors.push({
         code: ZodIssueCode.custom,
@@ -528,19 +489,6 @@ export function validateSettingDefinitions(settings: SettingsConfiguration): voi
         message: `Invalid default value for setting ${setting.key}. Must be within the range [${setting.range.min}, ${setting.range.max}].`,
         path: ['default'],
       });
-    }
-
-    // Validate enumMappings
-    if (setting.enumMappings && setting.type === SettingTypes.Enum && setting.options) {
-      for (const option of setting.options) {
-        if (!(option in setting.enumMappings)) {
-          errors.push({
-            code: ZodIssueCode.custom,
-            message: `Missing enumMapping for option "${option}" in setting ${setting.key}.`,
-            path: ['enumMappings'],
-          });
-        }
-      }
     }
   }
 

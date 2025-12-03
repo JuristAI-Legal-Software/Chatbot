@@ -1,6 +1,7 @@
 import { useRecoilState } from 'recoil';
+import HoverCardSettings from '../HoverCardSettings';
 import { ForkOptions } from 'librechat-data-provider';
-import { Dropdown, Switch, InfoHoverCard, ESide } from '@librechat/client';
+import { Dropdown, Switch } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
 
@@ -8,7 +9,7 @@ export const ForkSettings = () => {
   const localize = useLocalize();
   const [forkSetting, setForkSetting] = useRecoilState(store.forkSetting);
   const [splitAtTarget, setSplitAtTarget] = useRecoilState(store.splitAtTarget);
-  const [remember, setRemember] = useRecoilState<boolean>(store.rememberDefaultFork);
+  const [remember, setRemember] = useRecoilState<boolean>(store.rememberForkOption);
 
   const forkOptions = [
     { value: ForkOptions.DIRECT_PATH, label: localize('com_ui_fork_visible') },
@@ -18,57 +19,46 @@ export const ForkSettings = () => {
 
   return (
     <>
-      <div className="pb-3">
+      <div className="border-b pb-3 last-of-type:border-b-0 dark:border-gray-600">
         <div className="flex items-center justify-between">
-          <div id="remember-default-fork-label"> {localize('com_ui_fork_default')} </div>
-          <Switch
-            id="rememberDefaultFork"
-            checked={remember}
-            onCheckedChange={setRemember}
-            className="ml-4"
-            data-testid="rememberDefaultFork"
-            aria-labelledby="remember-default-fork-label"
+          <div className="flex items-center space-x-2">
+            <div>{localize('com_ui_fork_change_default')}</div>
+            <HoverCardSettings side="bottom" text="com_nav_info_fork_change_default" />
+          </div>
+          <Dropdown
+            value={forkSetting}
+            onChange={setForkSetting}
+            options={forkOptions}
+            sizeClasses="w-[200px]"
+            anchor="bottom start"
+            testId="fork-setting-dropdown"
           />
         </div>
       </div>
-      {remember && (
-        <div className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div id="fork-change-default-label">{localize('com_ui_fork_change_default')}</div>
-              <InfoHoverCard
-                side={ESide.Bottom}
-                text={localize('com_nav_info_fork_change_default')}
-              />
-            </div>
-            <Dropdown
-              value={forkSetting}
-              onChange={setForkSetting}
-              options={forkOptions}
-              sizeClasses="w-[200px]"
-              testId="fork-setting-dropdown"
-              className="z-[50]"
-              aria-labelledby="fork-change-default-label"
-            />
-          </div>
+      <div className="border-b pb-3 last-of-type:border-b-0 dark:border-gray-600">
+        <div className="flex items-center justify-between">
+          <div> {localize('com_ui_fork_default')} </div>
+          <Switch
+            id="rememberForkOption"
+            checked={remember}
+            onCheckedChange={setRemember}
+            className="ml-4 mt-2"
+            data-testid="rememberForkOption"
+          />
         </div>
-      )}
-      <div className="pb-3">
+      </div>
+      <div className="border-b pb-3 last-of-type:border-b-0 dark:border-gray-600">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <div id="split-at-target-label">{localize('com_ui_fork_split_target_setting')}</div>
-            <InfoHoverCard
-              side={ESide.Bottom}
-              text={localize('com_nav_info_fork_split_target_setting')}
-            />
+            <div>{localize('com_ui_fork_split_target_setting')}</div>
+            <HoverCardSettings side="bottom" text="com_nav_info_fork_split_target_setting" />
           </div>
           <Switch
             id="splitAtTarget"
             checked={splitAtTarget}
             onCheckedChange={setSplitAtTarget}
-            className="ml-4"
+            className="ml-4 mt-2"
             data-testid="splitAtTarget"
-            aria-labelledby="split-at-target-label"
           />
         </div>
       </div>

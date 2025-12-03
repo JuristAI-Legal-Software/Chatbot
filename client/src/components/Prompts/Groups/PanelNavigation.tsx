@@ -1,49 +1,33 @@
 import { memo } from 'react';
-import { Button, ThemeSelector } from '@librechat/client';
+import { Button, ThemeSelector } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 
 function PanelNavigation({
-  onPrevious,
-  onNext,
-  hasNextPage,
+  prevPage,
+  nextPage,
   hasPreviousPage,
-  isLoading,
+  hasNextPage,
+  isFetching,
   isChatRoute,
-  children,
 }: {
-  onPrevious: () => void;
-  onNext: () => void;
+  prevPage: () => void;
+  nextPage: () => void;
   hasNextPage: boolean;
   hasPreviousPage: boolean;
-  isLoading?: boolean;
+  isFetching: boolean;
   isChatRoute: boolean;
-  children?: React.ReactNode;
 }) {
   const localize = useLocalize();
-
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex gap-2">
+    <div className="my-1 flex justify-between px-4">
+      <div className="mb-2 flex gap-2">
         {!isChatRoute && <ThemeSelector returnThemeOnly={true} />}
-        {children}
       </div>
-      <div className="flex items-center gap-2" role="navigation" aria-label="Pagination">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onPrevious}
-          disabled={!hasPreviousPage || isLoading}
-          aria-label={localize('com_ui_prev')}
-        >
+      <div className="mb-2 flex gap-2">
+        <Button variant="outline" onClick={() => prevPage()} disabled={!hasPreviousPage}>
           {localize('com_ui_prev')}
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onNext}
-          disabled={!hasNextPage || isLoading}
-          aria-label={localize('com_ui_next')}
-        >
+        <Button variant="outline" onClick={() => nextPage()} disabled={!hasNextPage || isFetching}>
           {localize('com_ui_next')}
         </Button>
       </div>

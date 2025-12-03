@@ -1,6 +1,12 @@
 // AnnouncerContext.tsx
 import React from 'react';
-import type { AnnounceOptions } from '~/common';
+
+export interface AnnounceOptions {
+  message: string;
+  id?: string;
+  isStream?: boolean;
+  isComplete?: boolean;
+}
 
 interface AnnouncerContextType {
   announceAssertive: (options: AnnounceOptions) => void;

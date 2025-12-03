@@ -1,21 +1,11 @@
-import { LockIcon, Trash } from 'lucide-react';
 import React, { useState, useCallback } from 'react';
-import {
-  Label,
-  Input,
-  Button,
-  Spinner,
-  OGDialog,
-  OGDialogContent,
-  OGDialogTrigger,
-  OGDialogHeader,
-  OGDialogTitle,
-} from '@librechat/client';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, Input } from '~/components/ui';
+import { cn, defaultTextProps, removeFocusOutlines } from '~/utils';
 import { useDeleteUserMutation } from '~/data-provider';
+import { Spinner, LockIcon } from '~/components/svg';
 import { useAuthContext } from '~/hooks/AuthContext';
-import { LocalizeFunction } from '~/common';
 import { useLocalize } from '~/hooks';
-import { cn } from '~/utils';
+import DangerButton from '../DangerButton';
 
 const DeleteAccount = ({ disabled = false }: { title?: string; disabled?: boolean }) => {
   const localize = useLocalize();
@@ -25,7 +15,13 @@ const DeleteAccount = ({ disabled = false }: { title?: string; disabled?: boolea
   });
 
   const [isDialogOpen, setDialogOpen] = useState<boolean>(false);
+  const [deleteInput, setDeleteInput] = useState('');
+  const [emailInput, setEmailInput] = useState('');
   const [isLocked, setIsLocked] = useState(true);
+
+  const onClick = useCallback(() => {
+    setDialogOpen(true);
+  }, []);
 
   const handleDeleteUser = () => {
     if (!isLocked) {
@@ -34,38 +30,47 @@ const DeleteAccount = ({ disabled = false }: { title?: string; disabled?: boolea
   };
 
   const handleInputChange = useCallback(
-    (newEmailInput: string) => {
+    (newEmailInput: string, newDeleteInput: string) => {
       const isEmailCorrect =
-        newEmailInput.trim().toLowerCase() === user?.email.trim().toLowerCase();
-      setIsLocked(!isEmailCorrect);
+        newEmailInput.trim().toLowerCase() === user?.email?.trim().toLowerCase();
+      const isDeleteInputCorrect = newDeleteInput === 'DELETE';
+      setIsLocked(!(isEmailCorrect && isDeleteInputCorrect));
     },
     [user?.email],
   );
 
   return (
     <>
-      <OGDialog open={isDialogOpen} onOpenChange={setDialogOpen}>
-        <div className="flex items-center justify-between">
-          <Label id="delete-account-label">{localize('com_nav_delete_account')}</Label>
-          <OGDialogTrigger asChild>
-            <Button
-              aria-labelledby="delete-account-label"
-              variant="destructive"
-              onClick={() => setDialogOpen(true)}
-              disabled={disabled}
-            >
-              {localize('com_ui_delete')}
-            </Button>
-          </OGDialogTrigger>
-        </div>
-        <OGDialogContent className="w-11/12 max-w-md">
-          <OGDialogHeader>
-            <OGDialogTitle className="text-lg font-medium leading-6">
+      <div className="flex items-center justify-between">
+        <span>{localize('com_nav_delete_account')}</span>
+        <label>
+          <DangerButton
+            id={'delete-user-account'}
+            disabled={disabled}
+            onClick={onClick}
+            actionTextCode="com_ui_delete"
+            className={cn(
+              'btn relative border-none bg-red-500 text-white hover:bg-red-700 dark:hover:bg-red-700',
+            )}
+            confirmClear={false}
+            infoTextCode={''}
+            dataTestIdInitial={''}
+            dataTestIdConfirm={''}
+          />
+        </label>
+      </div>
+      <Dialog open={isDialogOpen} onOpenChange={() => setDialogOpen(false)}>
+        <DialogContent
+          className={cn('shadow-2xl md:h-[500px] md:w-[450px]')}
+          style={{ borderRadius: '12px', padding: '20px' }}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-lg font-medium leading-6">
               {localize('com_nav_delete_account_confirm')}
-            </OGDialogTitle>
-          </OGDialogHeader>
-          <div className="mb-8 text-sm text-black dark:text-white">
-            <ul className="font-semibold text-amber-600">
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mb-20 text-sm text-black dark:text-white">
+            <ul>
               <li>{localize('com_nav_delete_warning')}</li>
               <li>{localize('com_nav_delete_data_info')}</li>
             </ul>
@@ -75,14 +80,28 @@ const DeleteAccount = ({ disabled = false }: { title?: string; disabled?: boolea
               {renderInput(
                 localize('com_nav_delete_account_email_placeholder'),
                 'email-confirm-input',
-                user?.email ?? '',
-                (e) => handleInputChange(e.target.value),
+                user?.email || '',
+                (e) => {
+                  setEmailInput(e.target.value);
+                  handleInputChange(e.target.value, deleteInput);
+                },
+              )}
+            </div>
+            <div className="mb-4">
+              {renderInput(
+                localize('com_nav_delete_account_confirm_placeholder'),
+                'delete-confirm-input',
+                '',
+                (e) => {
+                  setDeleteInput(e.target.value);
+                  handleInputChange(emailInput, e.target.value);
+                },
               )}
             </div>
             {renderDeleteButton(handleDeleteUser, isDeleting, isLocked, localize)}
           </div>
-        </OGDialogContent>
-      </OGDialog>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
@@ -94,10 +113,17 @@ const renderInput = (
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void,
 ) => (
   <div className="mb-4">
-    <label className="mb-1 block text-sm font-medium text-black dark:text-white" htmlFor={id}>
-      {label}
-    </label>
-    <Input id={id} onChange={onChange} placeholder={value} />
+    <label className="mb-1 block text-sm font-medium text-black dark:text-white">{label}</label>
+    <Input
+      id={id}
+      onChange={onChange}
+      placeholder={value}
+      className={cn(
+        defaultTextProps,
+        'h-10 max-h-10 w-full max-w-full rounded-md bg-white px-3 py-2',
+        removeFocusOutlines,
+      )}
+    />
   </div>
 );
 
@@ -105,12 +131,16 @@ const renderDeleteButton = (
   handleDeleteUser: () => void,
   isDeleting: boolean,
   isLocked: boolean,
-  localize: LocalizeFunction,
+  localize: (key: string) => string,
 ) => (
   <button
     className={cn(
-      'mt-4 flex w-full items-center justify-center rounded-lg bg-surface-tertiary px-4 py-2 transition-all duration-200',
-      isLocked ? 'cursor-not-allowed opacity-30' : 'bg-destructive text-destructive-foreground',
+      'mt-4 flex w-full items-center justify-center rounded-lg px-4 py-2 transition-colors duration-200',
+      isLocked
+        ? 'cursor-not-allowed bg-gray-200 text-gray-300 dark:bg-gray-500 dark:text-gray-600'
+        : isDeleting
+          ? 'cursor-not-allowed bg-gray-100 text-gray-700 dark:bg-gray-400 dark:text-gray-700'
+          : 'bg-red-700 text-white hover:bg-red-800 ',
     )}
     onClick={handleDeleteUser}
     disabled={isDeleting || isLocked}
@@ -123,12 +153,12 @@ const renderDeleteButton = (
       <>
         {isLocked ? (
           <>
-            <LockIcon className="size-5" />
+            <LockIcon />
             <span className="ml-2">{localize('com_ui_locked')}</span>
           </>
         ) : (
           <>
-            <Trash className="size-5" />
+            <LockIcon />
             <span className="ml-2">{localize('com_nav_delete_account_button')}</span>
           </>
         )}

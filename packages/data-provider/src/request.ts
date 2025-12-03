@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import axios, { AxiosError, AxiosRequestConfig } from 'axios';
-import * as endpoints from './api-endpoints';
+import axios, { AxiosRequestConfig, AxiosError } from 'axios';
 import { setTokenHeader } from './headers-helpers';
-import type * as t from './types';
+import * as endpoints from './api-endpoints';
 
 async function _get<T>(url: string, options?: AxiosRequestConfig): Promise<T> {
   const response = await axios.get(url, { ...options });
@@ -64,13 +63,7 @@ async function _patch(url: string, data?: any) {
 let isRefreshing = false;
 let failedQueue: { resolve: (value?: any) => void; reject: (reason?: any) => void }[] = [];
 
-const refreshToken = (retry?: boolean): Promise<t.TRefreshTokenResponse | undefined> =>
-  _post(endpoints.refreshToken(retry));
-
-const dispatchTokenUpdatedEvent = (token: string) => {
-  setTokenHeader(token);
-  window.dispatchEvent(new CustomEvent('tokenUpdated', { detail: token }));
-};
+const refreshToken = (retry?: boolean) => _post(endpoints.refreshToken(retry));
 
 const processQueue = (error: AxiosError | null, token: string | null = null) => {
   failedQueue.forEach((prom) => {
@@ -83,72 +76,54 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
   failedQueue = [];
 };
 
-if (typeof window !== 'undefined') {
-  axios.interceptors.response.use(
-    (response) => response,
-    async (error) => {
-      const originalRequest = error.config;
-      if (!error.response) {
-        return Promise.reject(error);
-      }
+axios.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
 
-      if (originalRequest.url?.includes('/api/auth/2fa') === true) {
-        return Promise.reject(error);
-      }
-      if (originalRequest.url?.includes('/api/auth/logout') === true) {
-        return Promise.reject(error);
-      }
+    if (error.response.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
 
-      if (error.response.status === 401 && !originalRequest._retry) {
-        console.warn('401 error, refreshing token');
-        originalRequest._retry = true;
-
-        if (isRefreshing) {
-          try {
-            const token = await new Promise((resolve, reject) => {
-              failedQueue.push({ resolve, reject });
-            });
-            originalRequest.headers['Authorization'] = 'Bearer ' + token;
-            return await axios(originalRequest);
-          } catch (err) {
-            return Promise.reject(err);
-          }
-        }
-
-        isRefreshing = true;
-
+      if (isRefreshing) {
         try {
-          const response = await refreshToken(
-            // Handle edge case where we get a blank screen if the initial 401 error is from a refresh token request
-            originalRequest.url?.includes('api/auth/refresh') === true ? true : false,
-          );
-
-          const token = response?.token ?? '';
-
-          if (token) {
-            originalRequest.headers['Authorization'] = 'Bearer ' + token;
-            dispatchTokenUpdatedEvent(token);
-            processQueue(null, token);
-            return await axios(originalRequest);
-          } else if (window.location.href.includes('share/')) {
-            console.log(
-              `Refresh token failed from shared link, attempting request to ${originalRequest.url}`,
-            );
-          } else {
-            window.location.href = endpoints.loginPage();
-          }
+          const token = await new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
+          });
+          originalRequest.headers['Authorization'] = 'Bearer ' + token;
+          return await axios(originalRequest);
         } catch (err) {
-          processQueue(err as AxiosError, null);
           return Promise.reject(err);
-        } finally {
-          isRefreshing = false;
         }
       }
 
-      return Promise.reject(error);
-    },
-  );
-}
+      isRefreshing = true;
+
+      try {
+        const { token } = await refreshToken(
+          // Handle edge case where we get a blank screen if the initial 401 error is from a refresh token request
+          originalRequest.url?.includes('api/auth/refresh') ? true : false,
+        );
+
+        if (token) {
+          originalRequest.headers['Authorization'] = 'Bearer ' + token;
+          setTokenHeader(token);
+          window.dispatchEvent(new CustomEvent('tokenUpdated', { detail: token }));
+          processQueue(null, token);
+          return await axios(originalRequest);
+        } else {
+          window.location.href = '/login';
+        }
+      } catch (err) {
+        processQueue(err as AxiosError, null);
+        return Promise.reject(err);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    return Promise.reject(error);
+  },
+);
 
 export default {
   get: _get,
@@ -161,5 +136,4 @@ export default {
   deleteWithOptions: _deleteWithOptions,
   patch: _patch,
   refreshToken,
-  dispatchTokenUpdatedEvent,
 };

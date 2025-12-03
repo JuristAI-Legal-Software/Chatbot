@@ -1,10 +1,9 @@
-import React, { useCallback } from 'react';
-import { Trash2 } from 'lucide-react';
-import { useDeletePrompt } from '~/data-provider';
-import { Button, OGDialog, OGDialogTrigger, Label, OGDialogTemplate } from '@librechat/client';
+import { Button, OGDialog, OGDialogTrigger, Label } from '~/components/ui';
+import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
+import { TrashIcon } from '~/components/svg';
 import { useLocalize } from '~/hooks';
 
-const DeleteConfirmDialog = ({
+const DeleteVersion = ({
   name,
   disabled,
   selectHandler,
@@ -19,16 +18,14 @@ const DeleteConfirmDialog = ({
     <OGDialog>
       <OGDialogTrigger asChild>
         <Button
-          variant="destructive"
-          size="sm"
-          aria-label="Delete version"
-          className="h-10 w-10 p-0.5"
+          size={'sm'}
+          className="h-10 w-10 border border-transparent bg-red-600 text-red-500 transition-all hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-800"
           disabled={disabled}
           onClick={(e) => {
             e.stopPropagation();
           }}
         >
-          <Trash2 className="size-5 cursor-pointer text-white" />
+          <TrashIcon className="icon-lg cursor-pointer text-white dark:text-white" />
         </Button>
       </OGDialogTrigger>
       <OGDialogTemplate
@@ -43,7 +40,7 @@ const DeleteConfirmDialog = ({
                   htmlFor="dialog-delete-confirm-prompt"
                   className="text-left text-sm font-medium"
                 >
-                  {localize('com_ui_delete_confirm_prompt_version_var', { 0: name })}
+                  {localize('com_ui_delete_confirm_prompt_version_var', name)}
                 </Label>
               </div>
             </div>
@@ -52,7 +49,7 @@ const DeleteConfirmDialog = ({
         selection={{
           selectHandler,
           selectClasses:
-            'bg-surface-destructive hover:bg-surface-destructive-hover transition-colors duration-200 text-white',
+            'bg-red-700 dark:bg-red-600 hover:bg-red-800 dark:hover:bg-red-800 text-white',
           selectText: localize('com_ui_delete'),
         }}
       />
@@ -60,42 +57,4 @@ const DeleteConfirmDialog = ({
   );
 };
 
-interface DeletePromptProps {
-  promptId?: string;
-  groupId: string;
-  promptName: string;
-  disabled: boolean;
-}
-
-const DeletePrompt = React.memo(
-  ({ promptId, groupId, promptName, disabled }: DeletePromptProps) => {
-    const deletePromptMutation = useDeletePrompt();
-
-    const handleDelete = useCallback(() => {
-      if (!promptId) {
-        console.warn('No prompt ID provided for deletion');
-        return;
-      }
-      deletePromptMutation.mutate({
-        _id: promptId,
-        groupId,
-      });
-    }, [promptId, groupId, deletePromptMutation]);
-
-    if (!promptId) {
-      return null;
-    }
-
-    return (
-      <DeleteConfirmDialog
-        name={promptName}
-        disabled={disabled || !promptId}
-        selectHandler={handleDelete}
-      />
-    );
-  },
-);
-
-DeletePrompt.displayName = 'DeletePrompt';
-
-export default DeletePrompt;
+export default DeleteVersion;

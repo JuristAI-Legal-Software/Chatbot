@@ -1,9 +1,8 @@
 const path = require('path');
-const mongoose = require('mongoose');
-const { User } = require('@librechat/data-schemas').createModels(mongoose);
 require('module-alias')({ base: path.resolve(__dirname, '..', 'api') });
 const { registerUser } = require('~/server/services/AuthService');
 const { askQuestion, silentExit } = require('./helpers');
+const User = require('~/models/User');
 const connect = require('./connect');
 
 (async () => {
@@ -23,32 +22,32 @@ const connect = require('./connect');
     console.purple('--------------------------');
   }
 
+  let email = '';
+  let password = '';
+  let name = '';
+  let username = '';
+  let emailVerified = true;
+
   // Parse command line arguments
-  let email, password, name, username, emailVerified, provider;
   for (let i = 2; i < process.argv.length; i++) {
     if (process.argv[i].startsWith('--email-verified=')) {
       emailVerified = process.argv[i].split('=')[1].toLowerCase() !== 'false';
       continue;
     }
 
-    if (process.argv[i].startsWith('--provider=')) {
-      provider = process.argv[i].split('=')[1];
-      continue;
-    }
-
-    if (email === undefined) {
+    if (!email) {
       email = process.argv[i];
-    } else if (name === undefined) {
+    } else if (!name) {
       name = process.argv[i];
-    } else if (username === undefined) {
+    } else if (!username) {
       username = process.argv[i];
-    } else if (password === undefined) {
+    } else if (!password) {
       console.red('Warning: password passed in as argument, this is not secure!');
       password = process.argv[i];
     }
   }
 
-  if (email === undefined) {
+  if (!email) {
     email = await askQuestion('Email:');
   }
   if (!email.includes('@')) {
@@ -57,19 +56,19 @@ const connect = require('./connect');
   }
 
   const defaultName = email.split('@')[0];
-  if (name === undefined) {
+  if (!name) {
     name = await askQuestion('Name: (default is: ' + defaultName + ')');
     if (!name) {
       name = defaultName;
     }
   }
-  if (username === undefined) {
+  if (!username) {
     username = await askQuestion('Username: (default is: ' + defaultName + ')');
     if (!username) {
       username = defaultName;
     }
   }
-  if (password === undefined) {
+  if (!password) {
     password = await askQuestion('Password: (leave blank, to generate one)');
     if (!password) {
       password = Math.random().toString(36).slice(-18);
@@ -78,7 +77,7 @@ const connect = require('./connect');
   }
 
   // Only prompt for emailVerified if it wasn't set via CLI
-  if (emailVerified === undefined) {
+  if (!process.argv.some((arg) => arg.startsWith('--email-verified='))) {
     const emailVerifiedInput = await askQuestion(`Email verified? (Y/n, default is Y):
 
 If \`y\`, the user's email will be considered verified.
@@ -99,7 +98,7 @@ or the user will need to attempt logging in to have a verification link sent to 
     silentExit(1);
   }
 
-  const user = { email, password, name, username, confirm_password: password, provider };
+  const user = { email, password, name, username, confirm_password: password };
   let result;
   try {
     result = await registerUser(user, { emailVerified });

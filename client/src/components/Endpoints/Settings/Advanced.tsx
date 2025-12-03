@@ -1,5 +1,7 @@
 import TextareaAutosize from 'react-textarea-autosize';
 import { ImageDetail, imageDetailNumeric, imageDetailValue } from 'librechat-data-provider';
+import type { ValueType } from '@rc-component/mini-decimal';
+import type { TModelSelectProps } from '~/common';
 import {
   Input,
   Label,
@@ -8,10 +10,8 @@ import {
   HoverCard,
   InputNumber,
   HoverCardTrigger,
-} from '@librechat/client';
-import type { ValueType } from '@rc-component/mini-decimal';
-import type { TModelSelectProps } from '~/common';
-import { cn, defaultTextProps, optionText, removeFocusOutlines } from '~/utils';
+} from '~/components/ui';
+import { cn, defaultTextProps, optionText, removeFocusOutlines } from '~/utils/';
 import { useLocalize, useDebouncedInput } from '~/hooks';
 import OptionHover from './OptionHover';
 import { ESide } from '~/common';
@@ -109,7 +109,7 @@ export default function Settings({
             placeholder={localize('com_endpoint_openai_prompt_prefix_placeholder')}
             className={cn(
               defaultTextProps,
-              'flex max-h-[138px] min-h-[100px] w-full resize-none px-3 py-2',
+              'flex max-h-[138px] min-h-[100px] w-full resize-none px-3 py-2 ',
             )}
           />
         </div>
@@ -121,7 +121,7 @@ export default function Settings({
               <Label htmlFor="temp-int" className="text-left text-sm font-medium">
                 {localize('com_endpoint_temperature')}{' '}
                 <small className="opacity-40">
-                  ({localize('com_endpoint_default_with_num', { 0: '1' })})
+                  ({localize('com_endpoint_default_with_num', '1')})
                 </small>
               </Label>
               <InputNumber
@@ -146,12 +146,11 @@ export default function Settings({
               disabled={readonly}
               value={[(temperatureValue as number) ?? 1]}
               onValueChange={(value) => setTemperature(value[0])}
-              onDoubleClick={() => setTemperature(1)}
+              doubleClickHandler={() => setTemperature(1)}
               max={2}
               min={0}
               step={0.01}
               className="flex h-4 w-full"
-              aria-labelledby="temp-int"
             />
           </HoverCardTrigger>
           <OptionHover endpoint={optionEndpoint ?? ''} type="temp" side={ESide.Left} />
@@ -161,9 +160,7 @@ export default function Settings({
             <div className="flex justify-between">
               <Label htmlFor="top-p-int" className="text-left text-sm font-medium">
                 {localize('com_endpoint_top_p')}{' '}
-                <small className="opacity-40">
-                  ({localize('com_endpoint_default_with_num', { 0: '1' })})
-                </small>
+                <small className="opacity-40">({localize('com_endpoint_default')}: 1)</small>
               </Label>
               <InputNumber
                 id="top-p-int"
@@ -187,12 +184,11 @@ export default function Settings({
               disabled={readonly}
               value={[(topPValue as number) ?? 1]}
               onValueChange={(value) => setTopP(value[0])}
-              onDoubleClick={() => setTopP(1)}
+              doubleClickHandler={() => setTopP(1)}
               max={1}
               min={0}
               step={0.01}
               className="flex h-4 w-full"
-              aria-labelledby="top-p-int"
             />
           </HoverCardTrigger>
           <OptionHover endpoint={optionEndpoint ?? ''} type="topp" side={ESide.Left} />
@@ -203,9 +199,7 @@ export default function Settings({
             <div className="flex justify-between">
               <Label htmlFor="freq-penalty-int" className="text-left text-sm font-medium">
                 {localize('com_endpoint_frequency_penalty')}{' '}
-                <small className="opacity-40">
-                  ({localize('com_endpoint_default_with_num', { 0: '0' })})
-                </small>
+                <small className="opacity-40">({localize('com_endpoint_default')}: 0)</small>
               </Label>
               <InputNumber
                 id="freq-penalty-int"
@@ -229,12 +223,11 @@ export default function Settings({
               disabled={readonly}
               value={[(freqPValue as number) ?? 0]}
               onValueChange={(value) => setFreqP(value[0])}
-              onDoubleClick={() => setFreqP(0)}
+              doubleClickHandler={() => setFreqP(0)}
               max={2}
               min={-2}
               step={0.01}
               className="flex h-4 w-full"
-              aria-labelledby="freq-penalty-int"
             />
           </HoverCardTrigger>
           <OptionHover endpoint={optionEndpoint ?? ''} type="freq" side={ESide.Left} />
@@ -245,9 +238,7 @@ export default function Settings({
             <div className="flex justify-between">
               <Label htmlFor="pres-penalty-int" className="text-left text-sm font-medium">
                 {localize('com_endpoint_presence_penalty')}{' '}
-                <small className="opacity-40">
-                  ({localize('com_endpoint_default_with_num', { 0: '0' })})
-                </small>
+                <small className="opacity-40">({localize('com_endpoint_default')}: 0)</small>
               </Label>
               <InputNumber
                 id="pres-penalty-int"
@@ -271,12 +262,11 @@ export default function Settings({
               disabled={readonly}
               value={[(presPValue as number) ?? 0]}
               onValueChange={(value) => setPresP(value[0])}
-              onDoubleClick={() => setPresP(0)}
+              doubleClickHandler={() => setPresP(0)}
               max={2}
               min={-2}
               step={0.01}
               className="flex h-4 w-full"
-              aria-labelledby="pres-penalty-int"
             />
           </HoverCardTrigger>
           <OptionHover endpoint={optionEndpoint ?? ''} type="pres" side={ESide.Left} />
@@ -316,7 +306,6 @@ export default function Settings({
                   onCheckedChange={(checked: boolean) => setResendFiles(checked)}
                   disabled={readonly}
                   className="flex"
-                  aria-label={localize('com_endpoint_plug_resend_files')}
                 />
                 <OptionHover endpoint={optionEndpoint ?? ''} type="resend" side={ESide.Bottom} />
               </HoverCardTrigger>
@@ -330,11 +319,10 @@ export default function Settings({
                     imageDetailNumeric[imageDetail ?? ''] ?? imageDetailNumeric[ImageDetail.auto],
                   ]}
                   onValueChange={(value) => setImageDetail(imageDetailValue[value[0]])}
-                  onDoubleClick={() => setImageDetail(ImageDetail.auto)}
+                  doubleClickHandler={() => setImageDetail(ImageDetail.auto)}
                   max={2}
                   min={0}
                   step={1}
-                  aria-label={localize('com_endpoint_plug_image_detail')}
                 />
                 <OptionHover endpoint={optionEndpoint ?? ''} type="detail" side={ESide.Bottom} />
               </HoverCardTrigger>

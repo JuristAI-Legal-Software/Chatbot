@@ -1,5 +1,6 @@
 import React, { useState, ChangeEvent } from 'react';
-import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, Input } from '@librechat/client';
+import AttachFile from '~/components/Chat/Input/Files/AttachFile';
+import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, Input } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
@@ -23,7 +24,7 @@ const UploadFileModal = ({ open, onOpenChange }) => {
       >
         <DialogHeader>
           <DialogTitle className="text-lg font-medium leading-6 text-gray-900 dark:text-gray-200">
-            {localize('com_files_upload_title')}
+            Upoad a File
           </DialogTitle>
         </DialogHeader>
         <div className="flex w-full flex-col p-0 sm:p-6 sm:pb-0 sm:pt-4">
@@ -32,44 +33,32 @@ const UploadFileModal = ({ open, onOpenChange }) => {
               <img />
             </div>
             <div className="flex w-full flex-col text-center sm:w-4/5 sm:text-left">
-              <div className="italic">{localize('com_files_upload_hint')}</div>
+              <div className="italic">Please upload square file, size less than 100KB</div>
               <div className="mt-4 flex w-full flex-row items-center bg-[#f9f9f9] p-2">
                 <div className="w-1/2 sm:w-1/3">
-                  <Button>{localize('com_files_choose_file')}</Button>
+                  <Button>Choose File</Button>
                 </div>
-                <div className="w-1/2 sm:w-1/3"> {localize('com_files_no_file_chosen')}</div>
+                <div className="w-1/2 sm:w-1/3"> No File Chosen</div>
               </div>
             </div>
           </div>
           <div className="mt-3 flex w-full flex-col">
-            <label htmlFor="name">{localize('com_files_name_label')}</label>
-            <label className="hidden text-[#808080] sm:block">
-              {localize('com_files_name_description')}
-            </label>
-            <Input
-              type="text"
-              id="name"
-              name="name"
-              placeholder={localize('com_files_name_placeholder')}
-            />
+            <label htmlFor="name">Name</label>
+            <label className="hidden text-[#808080] sm:block">The name of the uploaded file</label>
+            <Input type="text" id="name" name="name" placeholder="Name" />
           </div>
 
           <div className="mt-3 flex w-full flex-col">
-            <label htmlFor="purpose">{localize('com_files_purpose_label')}</label>
+            <label htmlFor="purpose">Purpose</label>
             <label className="hidden text-[#808080] sm:block">
-              {localize('com_files_purpose_description')}
+              The purpose of the uploaded file
             </label>
-            <Input
-              type="text"
-              id="purpose"
-              name="purpose"
-              placeholder={localize('com_files_purpose_placeholder')}
-            />
+            <Input type="text" id="purpose" name="purpose" placeholder="Purpose" />
           </div>
 
           <div className="mt-3 flex w-full flex-row justify-between">
             <div className="hidden w-1/3 sm:block">
-              <span className="font-bold">{localize('com_files_learn_about_purpose')}</span>
+              <span className="font-bold">Learn about file purpose</span>
             </div>
             <div className="flex w-full flex-row justify-evenly sm:w-1/3">
               <Button
@@ -78,7 +67,7 @@ const UploadFileModal = ({ open, onOpenChange }) => {
                   onOpenChange(false);
                 }}
               >
-                {localize('com_ui_cancel')}
+                Cancel
               </Button>
               <Button
                 className="w-full rounded-md border border-black bg-black p-0 text-white"
@@ -86,7 +75,7 @@ const UploadFileModal = ({ open, onOpenChange }) => {
                   console.log('upload file');
                 }}
               >
-                {localize('com_ui_upload')}
+                Upload
               </Button>
             </div>
           </div>

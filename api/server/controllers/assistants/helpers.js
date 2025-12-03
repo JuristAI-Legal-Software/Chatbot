@@ -1,4 +1,5 @@
 const {
+  CacheKeys,
   SystemRoles,
   EModelEndpoint,
   defaultOrderQuery,
@@ -8,10 +9,10 @@ const {
   initializeClient: initAzureClient,
 } = require('~/server/services/Endpoints/azureAssistants');
 const { initializeClient } = require('~/server/services/Endpoints/assistants');
-const { getEndpointsConfig } = require('~/server/services/Config');
+const { getLogStores } = require('~/cache');
 
 /**
- * @param {ServerRequest} req
+ * @param {Express.Request} req
  * @param {string} [endpoint]
  * @returns {Promise<string>}
  */
@@ -22,8 +23,11 @@ const getCurrentVersion = async (req, endpoint) => {
     version = `v${req.body.version}`;
   }
   if (!version && endpoint) {
-    const endpointsConfig = await getEndpointsConfig(req);
-    version = `v${endpointsConfig?.[endpoint]?.version ?? defaultAssistantsVersion[endpoint]}`;
+    const cache = getLogStores(CacheKeys.CONFIG_STORE);
+    const cachedEndpointsConfig = await cache.get(CacheKeys.ENDPOINT_CONFIG);
+    version = `v${
+      cachedEndpointsConfig?.[endpoint]?.version ?? defaultAssistantsVersion[endpoint]
+    }`;
   }
   if (!version?.startsWith('v') && version.length !== 2) {
     throw new Error(`[${req.baseUrl}] Invalid version: ${version}`);
@@ -60,7 +64,7 @@ const _listAssistants = async ({ req, res, version, query }) => {
  * @param {object} params.res - The response object, used for initializing the client.
  * @param {string} params.version - The API version to use.
  * @param {Omit<AssistantListParams, 'endpoint'>} params.query - The query parameters to list assistants (e.g., limit, order).
- * @returns {Promise<Array<Assistant>>} A promise that resolves to the response from the `openai.beta.assistants.list` method call.
+ * @returns {Promise<object>} A promise that resolves to the response from the `openai.beta.assistants.list` method call.
  */
 const listAllAssistants = async ({ req, res, version, query }) => {
   /** @type {{ openai: OpenAIClient }} */
@@ -173,16 +177,6 @@ const listAssistantsForAzure = async ({ req, res, version, azureConfig = {}, que
   };
 };
 
-/**
- * Initializes the OpenAI client.
- * @param {object} params - The parameters object.
- * @param {ServerRequest} params.req - The request object.
- * @param {ServerResponse} params.res - The response object.
- * @param {TEndpointOption} params.endpointOption - The endpoint options.
- * @param {boolean} params.initAppClient - Whether to initialize the app client.
- * @param {string} params.overrideEndpoint - The endpoint to override.
- * @returns {Promise<{ openai: OpenAIClient, openAIApiKey: string; client: import('~/app/clients/OpenAIClient') }>} - The initialized OpenAI client.
- */
 async function getOpenAIClient({ req, res, endpointOption, initAppClient, overrideEndpoint }) {
   let endpoint = overrideEndpoint ?? req.body.endpoint ?? req.query.endpoint;
   const version = await getCurrentVersion(req, endpoint);
@@ -210,7 +204,6 @@ async function getOpenAIClient({ req, res, endpointOption, initAppClient, overri
  * @returns {Promise<AssistantListResponse>} 200 - success response - application/json
  */
 const fetchAssistants = async ({ req, res, overrideEndpoint }) => {
-  const appConfig = req.config;
   const {
     limit = 100,
     order = 'desc',
@@ -231,20 +224,20 @@ const fetchAssistants = async ({ req, res, overrideEndpoint }) => {
   if (endpoint === EModelEndpoint.assistants) {
     ({ body } = await listAllAssistants({ req, res, version, query }));
   } else if (endpoint === EModelEndpoint.azureAssistants) {
-    const azureConfig = appConfig.endpoints?.[EModelEndpoint.azureOpenAI];
+    const azureConfig = req.app.locals[EModelEndpoint.azureOpenAI];
     body = await listAssistantsForAzure({ req, res, version, azureConfig, query });
   }
 
   if (req.user.role === SystemRoles.ADMIN) {
     return body;
-  } else if (!appConfig.endpoints?.[endpoint]) {
+  } else if (!req.app.locals[endpoint]) {
     return body;
   }
 
   body.data = filterAssistants({
     userId: req.user.id,
     assistants: body.data,
-    assistantsConfig: appConfig.endpoints?.[endpoint],
+    assistantsConfig: req.app.locals[endpoint],
   });
   return body;
 };

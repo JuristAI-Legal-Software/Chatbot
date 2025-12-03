@@ -1,25 +1,22 @@
-import {
-  parseConvo,
-  EModelEndpoint,
-  isAssistantsEndpoint,
-  isAgentsEndpoint,
-} from 'librechat-data-provider';
-import type { TConversation, EndpointSchemaKey } from 'librechat-data-provider';
-import { getLocalStorageItems } from './localStorage';
+import { parseConvo, EModelEndpoint, isAssistantsEndpoint } from 'librechat-data-provider';
+import type { TConversation } from 'librechat-data-provider';
+import getLocalStorageItems from './getLocalStorageItems';
 
 const buildDefaultConvo = ({
-  models,
   conversation,
-  endpoint = null,
+  endpoint,
+  models,
   lastConversationSetup,
 }: {
-  models: string[];
   conversation: TConversation;
-  endpoint?: EModelEndpoint | null;
-  lastConversationSetup: TConversation | null;
-}): TConversation => {
-  const { lastSelectedModel, lastSelectedTools } = getLocalStorageItems();
-  const endpointType = lastConversationSetup?.endpointType ?? conversation.endpointType;
+  endpoint: EModelEndpoint;
+  models: string[];
+  // TODO: fix this type as we should allow undefined
+  lastConversationSetup: TConversation;
+}) => {
+  const { lastSelectedModel, lastSelectedTools, lastBingSettings } = getLocalStorageItems();
+  const { jailbreak, toneStyle } = lastBingSettings;
+  const endpointType = lastConversationSetup?.endpointType ?? conversation?.endpointType;
 
   if (!endpoint) {
     return {
@@ -30,10 +27,10 @@ const buildDefaultConvo = ({
   }
 
   const availableModels = models;
-  const model = lastConversationSetup?.model ?? lastSelectedModel?.[endpoint] ?? '';
-  const secondaryModel: string | null =
+  const model = lastConversationSetup?.model ?? lastSelectedModel?.[endpoint];
+  const secondaryModel =
     endpoint === EModelEndpoint.gptPlugins
-      ? (lastConversationSetup?.agentOptions?.model ?? lastSelectedModel?.secondaryModel ?? null)
+      ? lastConversationSetup?.agentOptions?.model ?? lastSelectedModel?.secondaryModel
       : null;
 
   let possibleModels: string[], secondaryModels: string[];
@@ -44,15 +41,15 @@ const buildDefaultConvo = ({
     possibleModels = [...availableModels];
   }
 
-  if (secondaryModel != null && secondaryModel !== '' && availableModels.includes(secondaryModel)) {
+  if (secondaryModel && availableModels.includes(secondaryModel)) {
     secondaryModels = [secondaryModel, ...availableModels];
   } else {
     secondaryModels = [...availableModels];
   }
 
   const convo = parseConvo({
-    endpoint: endpoint as EndpointSchemaKey,
-    endpointType: endpointType as EndpointSchemaKey,
+    endpoint,
+    endpointType,
     conversation: lastConversationSetup,
     possibleValues: {
       models: possibleModels,
@@ -68,20 +65,13 @@ const buildDefaultConvo = ({
   };
 
   // Ensures assistant_id is always defined
-  const assistantId = convo?.assistant_id ?? conversation?.assistant_id ?? '';
-  const defaultAssistantId = lastConversationSetup?.assistant_id ?? '';
-  if (isAssistantsEndpoint(endpoint) && !defaultAssistantId && assistantId) {
-    defaultConvo.assistant_id = assistantId;
-  }
-
-  // Ensures agent_id is always defined
-  const agentId = convo?.agent_id ?? '';
-  const defaultAgentId = lastConversationSetup?.agent_id ?? '';
-  if (isAgentsEndpoint(endpoint) && !defaultAgentId && agentId) {
-    defaultConvo.agent_id = agentId;
+  if (isAssistantsEndpoint(endpoint) && !defaultConvo.assistant_id && convo.assistant_id) {
+    defaultConvo.assistant_id = convo.assistant_id;
   }
 
   defaultConvo.tools = lastConversationSetup?.tools ?? lastSelectedTools ?? defaultConvo.tools;
+  defaultConvo.jailbreak = jailbreak ?? defaultConvo.jailbreak;
+  defaultConvo.toneStyle = toneStyle ?? defaultConvo.toneStyle;
 
   return defaultConvo;
 };

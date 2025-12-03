@@ -3,7 +3,7 @@ import type { Response, Page, BrowserContext } from '@playwright/test';
 
 const basePath = 'http://localhost:3080/c/';
 const initialUrl = `${basePath}new`;
-const endpoints = ['google', 'openAI', 'azureOpenAI', 'chatGPTBrowser', 'gptPlugins'];
+const endpoints = ['google', 'openAI', 'azureOpenAI', 'bingAI', 'chatGPTBrowser', 'gptPlugins'];
 const endpoint = endpoints[1];
 
 function isUUID(uuid: string) {
@@ -12,7 +12,9 @@ function isUUID(uuid: string) {
 }
 
 const waitForServerStream = async (response: Response) => {
-  const endpointCheck = response.url().includes(`/api/agents`);
+  const endpointCheck =
+    response.url().includes(`/api/ask/${endpoint}`) ||
+    response.url().includes(`/api/edit/${endpoint}`);
   return endpointCheck && response.status() === 200;
 };
 
@@ -76,7 +78,7 @@ test.describe('Messaging suite', () => {
     expect(currentUrl).toBe(initialUrl);
 
     //cleanup the conversation
-    await page.getByTestId('nav-new-chat-button').click();
+    await page.getByTestId('new-chat-button').click();
     expect(page.url()).toBe(initialUrl);
 
     // Click on the first conversation
@@ -156,7 +158,7 @@ test.describe('Messaging suite', () => {
     const currentUrl = page.url();
     const conversationId = currentUrl.split(basePath).pop() ?? '';
     expect(isUUID(conversationId)).toBeTruthy();
-    await page.getByTestId('nav-new-chat-button').click();
+    await page.getByTestId('new-chat-button').click();
     expect(page.url()).toBe(initialUrl);
   });
 });

@@ -1,5 +1,4 @@
-const { getBasePath } = require('@librechat/api');
-const { logger } = require('@librechat/data-schemas');
+const { logger } = require('~/config');
 
 /**
  * The `addImages` function corrects any erroneous image URLs in the `responseMessage.text`
@@ -33,8 +32,6 @@ function addImages(intermediateSteps, responseMessage) {
     return;
   }
 
-  const basePath = getBasePath();
-
   // Correct any erroneous URLs in the responseMessage.text first
   intermediateSteps.forEach((step) => {
     const { observation } = step;
@@ -47,14 +44,12 @@ function addImages(intermediateSteps, responseMessage) {
       return;
     }
     const essentialImagePath = match[0];
-    const fullImagePath = `${basePath}${essentialImagePath}`;
 
     const regex = /!\[.*?\]\((.*?)\)/g;
     let matchErroneous;
     while ((matchErroneous = regex.exec(responseMessage.text)) !== null) {
-      if (matchErroneous[1] && !matchErroneous[1].startsWith(`${basePath}/images/`)) {
-        // Replace with the full path including base path
-        responseMessage.text = responseMessage.text.replace(matchErroneous[1], fullImagePath);
+      if (matchErroneous[1] && !matchErroneous[1].startsWith('/images/')) {
+        responseMessage.text = responseMessage.text.replace(matchErroneous[1], essentialImagePath);
       }
     }
   });
@@ -66,23 +61,9 @@ function addImages(intermediateSteps, responseMessage) {
       return;
     }
     const observedImagePath = observation.match(/!\[[^(]*\]\([^)]*\)/g);
-    if (observedImagePath) {
-      // Fix the image path to include base path if it doesn't already
-      let imageMarkdown = observedImagePath[0];
-      const urlMatch = imageMarkdown.match(/\(([^)]+)\)/);
-      if (
-        urlMatch &&
-        urlMatch[1] &&
-        !urlMatch[1].startsWith(`${basePath}/images/`) &&
-        urlMatch[1].startsWith('/images/')
-      ) {
-        imageMarkdown = imageMarkdown.replace(urlMatch[1], `${basePath}${urlMatch[1]}`);
-      }
-
-      if (!responseMessage.text.includes(imageMarkdown)) {
-        responseMessage.text += '\n' + imageMarkdown;
-        logger.debug('[addImages] added image from intermediateSteps:', imageMarkdown);
-      }
+    if (observedImagePath && !responseMessage.text.includes(observedImagePath[0])) {
+      responseMessage.text += '\n' + observedImagePath[0];
+      logger.debug('[addImages] added image from intermediateSteps:', observedImagePath[0]);
     }
   });
 }

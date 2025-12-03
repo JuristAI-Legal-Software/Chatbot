@@ -1,13 +1,11 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, TextareaAutosize, Input } from '@librechat/client';
 import { useForm, Controller, FormProvider } from 'react-hook-form';
 import { LocalStorageKeys, PermissionTypes, Permissions } from 'librechat-data-provider';
 import CategorySelector from '~/components/Prompts/Groups/CategorySelector';
-import VariablesDropdown from '~/components/Prompts/VariablesDropdown';
 import PromptVariables from '~/components/Prompts/PromptVariables';
+import { Button, TextareaAutosize, Input } from '~/components/ui';
 import Description from '~/components/Prompts/Description';
-import { usePromptGroupsContext } from '~/Providers';
 import { useLocalize, useHasAccess } from '~/hooks';
 import Command from '~/components/Prompts/Command';
 import { useCreatePrompt } from '~/data-provider';
@@ -38,12 +36,10 @@ const CreatePromptForm = ({
 }) => {
   const localize = useLocalize();
   const navigate = useNavigate();
-  const { hasAccess: hasUseAccess } = usePromptGroupsContext();
-  const hasCreateAccess = useHasAccess({
+  const hasAccess = useHasAccess({
     permissionType: PermissionTypes.PROMPTS,
     permission: Permissions.CREATE,
   });
-  const hasAccess = hasUseAccess && hasCreateAccess;
 
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout>;
@@ -85,10 +81,10 @@ const CreatePromptForm = ({
       CreateFormValues,
       'name' | 'category' | 'oneliner' | 'command'
     >;
-    if ((oneliner?.length ?? 0) > 0) {
+    if ((oneliner?.length || 0) > 0) {
       groupData.oneliner = oneliner;
     }
-    if ((command?.length ?? 0) > 0) {
+    if ((command?.length || 0) > 0) {
       groupData.command = command;
     }
     createPromptMutation.mutate({
@@ -115,9 +111,10 @@ const CreatePromptForm = ({
                   <Input
                     {...field}
                     type="text"
-                    className="mr-2 w-full border border-border-medium p-2 text-2xl text-text-primary placeholder:text-text-tertiary dark:placeholder:text-text-secondary"
+                    className="mr-2 w-full border border-gray-300 p-2 text-2xl dark:border-gray-600"
                     placeholder={`${localize('com_ui_prompt_name')}*`}
-                    tabIndex={0}
+                    tabIndex={1}
+                    autoFocus={true}
                   />
                   <div
                     className={cn(
@@ -130,16 +127,15 @@ const CreatePromptForm = ({
                 </div>
               )}
             />
-            <CategorySelector />
+            <CategorySelector tabIndex={5} />
           </div>
         </div>
         <div className="flex w-full flex-col gap-4 md:mt-[1.075rem]">
           <div>
-            <h2 className="flex items-center justify-between rounded-t-lg border border-border-medium py-2 pl-4 pr-1 text-base font-semibold dark:text-gray-200">
-              <span>{localize('com_ui_prompt_text')}*</span>
-              <VariablesDropdown fieldName="prompt" className="mr-2" />
+            <h2 className="flex items-center justify-between rounded-t-lg border border-gray-300 py-2 pl-4 pr-1 text-base font-semibold dark:border-gray-600 dark:text-gray-200">
+              {localize('com_ui_prompt_text')}*
             </h2>
-            <div className="min-h-32 rounded-b-lg border border-border-medium p-4 transition-all duration-150">
+            <div className="min-h-32 rounded-b-lg border border-gray-300 p-4 transition-all duration-150 dark:border-gray-600">
               <Controller
                 name="prompt"
                 control={control}
@@ -148,10 +144,9 @@ const CreatePromptForm = ({
                   <div>
                     <TextareaAutosize
                       {...field}
-                      className="w-full rounded border border-border-medium px-2 py-1 focus:outline-none dark:bg-transparent dark:text-gray-200"
+                      className="w-full rounded border border-gray-300 px-2 py-1 focus:outline-none dark:border-gray-600 dark:bg-transparent dark:text-gray-200"
                       minRows={6}
-                      tabIndex={0}
-                      aria-label={localize('com_ui_prompt_input_field')}
+                      tabIndex={2}
                     />
                     <div
                       className={`mt-1 text-sm text-red-500 ${
@@ -168,14 +163,14 @@ const CreatePromptForm = ({
           <PromptVariables promptText={promptText} />
           <Description
             onValueChange={(value) => methods.setValue('oneliner', value)}
-            tabIndex={0}
+            tabIndex={3}
           />
-          <Command onValueChange={(value) => methods.setValue('command', value)} tabIndex={0} />
+          <Command onValueChange={(value) => methods.setValue('command', value)} tabIndex={4} />
           <div className="mt-4 flex justify-end">
             <Button
-              aria-label={localize('com_ui_create_prompt')}
-              tabIndex={0}
+              tabIndex={6}
               type="submit"
+              variant="default"
               disabled={!isDirty || isSubmitting || !isValid}
             >
               {localize('com_ui_create_prompt')}

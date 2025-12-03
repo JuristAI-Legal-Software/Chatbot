@@ -1,8 +1,7 @@
-const { isEnabled } = require('@librechat/api');
-const { Time, CacheKeys } = require('librechat-data-provider');
 const getLogStores = require('./getLogStores');
-
+const { isEnabled } = require('../server/utils');
 const { USE_REDIS, LIMIT_CONCURRENT_MESSAGES } = process.env ?? {};
+const ttl = 1000 * 60 * 1;
 
 /**
  * Clear or decrement pending requests from the cache.
@@ -29,18 +28,18 @@ const clearPendingReq = async ({ userId, cache: _cache }) => {
     return;
   }
 
-  const namespace = CacheKeys.PENDING_REQ;
+  const namespace = 'pending_req';
   const cache = _cache ?? getLogStores(namespace);
 
   if (!cache) {
     return;
   }
 
-  const key = `${isEnabled(USE_REDIS) ? namespace : ''}:${userId ?? ''}`;
+  const key = `${USE_REDIS ? namespace : ''}:${userId ?? ''}`;
   const currentReq = +((await cache.get(key)) ?? 0);
 
   if (currentReq && currentReq >= 1) {
-    await cache.set(key, currentReq - 1, Time.ONE_MINUTE);
+    await cache.set(key, currentReq - 1, ttl);
   } else {
     await cache.delete(key);
   }

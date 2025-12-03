@@ -1,5 +1,5 @@
 import { useRecoilState } from 'recoil';
-import { Switch } from '@librechat/client';
+import { Switch } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import store from '~/store';
@@ -30,7 +30,7 @@ export default function AutoSendPrompt({
     >
       <div> {localize('com_nav_auto_send_prompts')} </div>
       <Switch
-        aria-label={localize('com_nav_auto_send_prompts')}
+        aria-label="toggle-auto-send-prompts"
         id="autoSendPrompts"
         checked={autoSendPrompts}
         onCheckedChange={handleCheckedChange}

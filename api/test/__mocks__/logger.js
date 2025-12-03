@@ -8,7 +8,6 @@ jest.mock('winston', () => {
   mockFormatFunction.printf = jest.fn();
   mockFormatFunction.errors = jest.fn();
   mockFormatFunction.splat = jest.fn();
-  mockFormatFunction.json = jest.fn();
   return {
     format: mockFormatFunction,
     createLogger: jest.fn().mockReturnValue({
@@ -20,7 +19,6 @@ jest.mock('winston', () => {
     transports: {
       Console: jest.fn(),
       DailyRotateFile: jest.fn(),
-      File: jest.fn(),
     },
     addColors: jest.fn(),
   };

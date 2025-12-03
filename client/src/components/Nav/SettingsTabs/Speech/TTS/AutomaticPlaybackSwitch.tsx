@@ -1,4 +1,6 @@
-import ToggleSwitch from '../../ToggleSwitch';
+import { useRecoilState } from 'recoil';
+import { Switch } from '~/components/ui';
+import { useLocalize } from '~/hooks';
 import store from '~/store';
 
 export default function AutomaticPlaybackSwitch({
@@ -6,12 +8,26 @@ export default function AutomaticPlaybackSwitch({
 }: {
   onCheckedChange?: (value: boolean) => void;
 }) {
+  const localize = useLocalize();
+  const [automaticPlayback, setAutomaticPlayback] = useRecoilState(store.automaticPlayback);
+
+  const handleCheckedChange = (value: boolean) => {
+    setAutomaticPlayback(value);
+    if (onCheckedChange) {
+      onCheckedChange(value);
+    }
+  };
+
   return (
-    <ToggleSwitch
-      stateAtom={store.automaticPlayback}
-      localizationKey={'com_nav_automatic_playback' as const}
-      switchId="AutomaticPlayback"
-      onCheckedChange={onCheckedChange}
-    />
+    <div className="flex items-center justify-between">
+      <div>{localize('com_nav_automatic_playback')}</div>
+      <Switch
+        id="AutomaticPlayback"
+        checked={automaticPlayback}
+        onCheckedChange={handleCheckedChange}
+        className="ml-4"
+        data-testid="AutomaticPlayback"
+      />
+    </div>
   );
 }

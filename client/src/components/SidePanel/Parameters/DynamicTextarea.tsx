@@ -1,33 +1,34 @@
+// client/src/components/SidePanel/Parameters/DynamicTextarea.tsx
 import { OptionTypes } from 'librechat-data-provider';
 import type { DynamicSettingProps } from 'librechat-data-provider';
-import { useLocalize, useDebouncedInput, useParameterEffects, TranslationKeys } from '~/hooks';
-import { Label, TextareaAutosize, HoverCard, HoverCardTrigger } from '@librechat/client';
+import { Label, TextareaAutosize, HoverCard, HoverCardTrigger } from '~/components/ui';
+import { useLocalize, useDebouncedInput, useParameterEffects } from '~/hooks';
+import { cn, defaultTextProps } from '~/utils';
 import { useChatContext } from '~/Providers';
 import OptionHover from './OptionHover';
 import { ESide } from '~/common';
-import { cn } from '~/utils';
 
 function DynamicTextarea({
-  label = '',
+  label,
   settingKey,
   defaultValue,
-  description = '',
+  description,
   columnSpan,
   setOption,
   optionType,
-  placeholder = '',
+  placeholder,
   readonly = false,
-  showDefault = false,
-  labelCode = false,
-  descriptionCode = false,
-  placeholderCode = false,
+  showDefault = true,
+  labelCode,
+  descriptionCode,
+  placeholderCode,
   conversation,
 }: DynamicSettingProps) {
   const localize = useLocalize();
   const { preset } = useChatContext();
 
-  const [setInputValue, inputValue, setLocalValue] = useDebouncedInput<string | null>({
-    optionKey: settingKey,
+  const [setInputValue, inputValue] = useDebouncedInput<string | null>({
+    optionKey: optionType !== OptionTypes.Custom ? settingKey : undefined,
     initialValue:
       optionType !== OptionTypes.Custom
         ? (conversation?.[settingKey] as string)
@@ -42,13 +43,13 @@ function DynamicTextarea({
     defaultValue: typeof defaultValue === 'undefined' ? '' : defaultValue,
     conversation,
     inputValue,
-    setInputValue: setLocalValue,
+    setInputValue,
   });
 
   return (
     <div
       className={`flex flex-col items-center justify-start gap-6 ${
-        columnSpan != null ? `col-span-${columnSpan}` : 'col-span-full'
+        columnSpan ? `col-span-${columnSpan}` : 'col-span-full'
       }`}
     >
       <HoverCard openDelay={300}>
@@ -58,11 +59,11 @@ function DynamicTextarea({
               htmlFor={`${settingKey}-dynamic-textarea`}
               className="text-left text-sm font-medium"
             >
-              {labelCode ? (localize(label as TranslationKeys) ?? label) : label || settingKey}{' '}
+              {labelCode ? localize(label ?? '') || label : label ?? settingKey}{' '}
               {showDefault && (
                 <small className="opacity-40">
                   (
-                  {typeof defaultValue === 'undefined' || !(defaultValue as string).length
+                  {typeof defaultValue === 'undefined' || !(defaultValue as string)?.length
                     ? localize('com_endpoint_default_blank')
                     : `${localize('com_endpoint_default')}: ${defaultValue}`}
                   )
@@ -75,25 +76,17 @@ function DynamicTextarea({
             disabled={readonly}
             value={inputValue ?? ''}
             onChange={setInputValue}
-            aria-label={localize(label as TranslationKeys)}
-            placeholder={
-              placeholderCode
-                ? (localize(placeholder as TranslationKeys) ?? placeholder)
-                : placeholder
-            }
+            placeholder={placeholderCode ? localize(placeholder ?? '') || placeholder : placeholder}
             className={cn(
+              defaultTextProps,
               // TODO: configurable max height
-              'flex max-h-[138px] min-h-[100px] w-full resize-none rounded-lg bg-surface-secondary px-3 py-2 focus:outline-none',
+              'flex max-h-[138px] min-h-[100px] w-full resize-none px-3 py-2',
             )}
           />
         </HoverCardTrigger>
         {description && (
           <OptionHover
-            description={
-              descriptionCode
-                ? (localize(description as TranslationKeys) ?? description)
-                : description
-            }
+            description={descriptionCode ? localize(description) || description : description}
             side={ESide.Left}
           />
         )}

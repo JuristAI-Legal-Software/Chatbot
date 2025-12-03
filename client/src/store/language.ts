@@ -1,11 +1,10 @@
-import Cookies from 'js-cookie';
-import { atomWithLocalStorage } from './utils';
+import { atom } from 'recoil';
 
-const defaultLang = () => {
-  const userLang = navigator.language || navigator.languages[0];
-  return Cookies.get('lang') || localStorage.getItem('lang') || userLang;
-};
+const userLang = navigator.language || navigator.languages[0];
 
-const lang = atomWithLocalStorage('lang', defaultLang());
+const lang = atom({
+  key: 'lang',
+  default: localStorage.getItem('lang') || userLang,
+});
 
 export default { lang };

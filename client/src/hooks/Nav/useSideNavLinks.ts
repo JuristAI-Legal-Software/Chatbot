@@ -1,101 +1,59 @@
 import { useMemo } from 'react';
-import { Blocks, MCPIcon, AttachmentIcon } from '@librechat/client';
-import { Database, Bookmark, Settings2, ArrowRightToLine, MessageSquareQuote } from 'lucide-react';
 import {
-  Permissions,
+  ArrowRightToLine,
+  MessageSquareQuote,
+  Bookmark,
+  // Settings2,
+} from 'lucide-react';
+import {
   EModelEndpoint,
-  PermissionTypes,
-  isParamEndpoint,
-  isAgentsEndpoint,
   isAssistantsEndpoint,
+  PermissionTypes,
+  Permissions,
 } from 'librechat-data-provider';
-import type { TInterfaceConfig, TEndpointsConfig } from 'librechat-data-provider';
+import type { TConfig, TInterfaceConfig } from 'librechat-data-provider';
 import type { NavLink } from '~/common';
-import AgentPanelSwitch from '~/components/SidePanel/Agents/AgentPanelSwitch';
 import BookmarkPanel from '~/components/SidePanel/Bookmarks/BookmarkPanel';
-import MemoryViewer from '~/components/SidePanel/Memories/MemoryViewer';
 import PanelSwitch from '~/components/SidePanel/Builder/PanelSwitch';
 import PromptsAccordion from '~/components/Prompts/PromptsAccordion';
-import Parameters from '~/components/SidePanel/Parameters/Panel';
+// import Parameters from '~/components/SidePanel/Parameters/Panel';
 import FilesPanel from '~/components/SidePanel/Files/Panel';
-import MCPPanel from '~/components/SidePanel/MCP/MCPPanel';
-import { useGetStartupConfig } from '~/data-provider';
+import { Blocks, AttachmentIcon } from '~/components/svg';
 import { useHasAccess } from '~/hooks';
 
 export default function useSideNavLinks({
   hidePanel,
+  assistants,
   keyProvided,
   endpoint,
-  endpointType,
   interfaceConfig,
-  endpointsConfig,
 }: {
   hidePanel: () => void;
+  assistants?: TConfig | null;
   keyProvided: boolean;
   endpoint?: EModelEndpoint | null;
-  endpointType?: EModelEndpoint | null;
   interfaceConfig: Partial<TInterfaceConfig>;
-  endpointsConfig: TEndpointsConfig;
 }) {
   const hasAccessToPrompts = useHasAccess({
     permissionType: PermissionTypes.PROMPTS,
     permission: Permissions.USE,
   });
-  const hasAccessToBookmarks = useHasAccess({
-    permissionType: PermissionTypes.BOOKMARKS,
-    permission: Permissions.USE,
-  });
-  const hasAccessToMemories = useHasAccess({
-    permissionType: PermissionTypes.MEMORIES,
-    permission: Permissions.USE,
-  });
-  const hasAccessToReadMemories = useHasAccess({
-    permissionType: PermissionTypes.MEMORIES,
-    permission: Permissions.READ,
-  });
-  const hasAccessToAgents = useHasAccess({
-    permissionType: PermissionTypes.AGENTS,
-    permission: Permissions.USE,
-  });
-  const hasAccessToCreateAgents = useHasAccess({
-    permissionType: PermissionTypes.AGENTS,
-    permission: Permissions.CREATE,
-  });
-  const { data: startupConfig } = useGetStartupConfig();
 
   const Links = useMemo(() => {
     const links: NavLink[] = [];
     if (
       isAssistantsEndpoint(endpoint) &&
-      ((endpoint === EModelEndpoint.assistants &&
-        endpointsConfig?.[EModelEndpoint.assistants] &&
-        endpointsConfig[EModelEndpoint.assistants].disableBuilder !== true) ||
-        (endpoint === EModelEndpoint.azureAssistants &&
-          endpointsConfig?.[EModelEndpoint.azureAssistants] &&
-          endpointsConfig[EModelEndpoint.azureAssistants].disableBuilder !== true)) &&
-      keyProvided
+      assistants &&
+      assistants.disableBuilder !== true &&
+      keyProvided &&
+      interfaceConfig.parameters
     ) {
       links.push({
         title: 'com_sidepanel_assistant_builder',
         label: '',
         icon: Blocks,
-        id: EModelEndpoint.assistants,
+        id: 'assistants',
         Component: PanelSwitch,
-      });
-    }
-
-    if (
-      endpointsConfig?.[EModelEndpoint.agents] &&
-      hasAccessToAgents &&
-      hasAccessToCreateAgents &&
-      endpointsConfig[EModelEndpoint.agents].disableBuilder !== true
-    ) {
-      links.push({
-        title: 'com_sidepanel_agent_builder',
-        label: '',
-        icon: Blocks,
-        id: EModelEndpoint.agents,
-        Component: AgentPanelSwitch,
       });
     }
 
@@ -109,31 +67,6 @@ export default function useSideNavLinks({
       });
     }
 
-    if (hasAccessToMemories && hasAccessToReadMemories) {
-      links.push({
-        title: 'com_ui_memories',
-        label: '',
-        icon: Database,
-        id: 'memories',
-        Component: MemoryViewer,
-      });
-    }
-
-    if (
-      interfaceConfig.parameters === true &&
-      isParamEndpoint(endpoint ?? '', endpointType ?? '') === true &&
-      !isAgentsEndpoint(endpoint) &&
-      keyProvided
-    ) {
-      links.push({
-        title: 'com_sidepanel_parameters',
-        label: '',
-        icon: Settings2,
-        id: 'parameters',
-        Component: Parameters,
-      });
-    }
-
     links.push({
       title: 'com_sidepanel_attach_files',
       label: '',
@@ -142,33 +75,13 @@ export default function useSideNavLinks({
       Component: FilesPanel,
     });
 
-    if (hasAccessToBookmarks) {
-      links.push({
-        title: 'com_sidepanel_conversation_tags',
-        label: '',
-        icon: Bookmark,
-        id: 'bookmarks',
-        Component: BookmarkPanel,
-      });
-    }
-
-    if (
-      startupConfig?.mcpServers &&
-      Object.values(startupConfig.mcpServers).some(
-        (server: any) =>
-          (server.customUserVars && Object.keys(server.customUserVars).length > 0) ||
-          server.isOAuth ||
-          server.startup === false,
-      )
-    ) {
-      links.push({
-        title: 'com_nav_setting_mcp',
-        label: '',
-        icon: MCPIcon,
-        id: 'mcp-settings',
-        Component: MCPPanel,
-      });
-    }
+    links.push({
+      title: 'com_sidepanel_conversation_tags',
+      label: '',
+      icon: Bookmark,
+      id: 'bookmarks',
+      Component: BookmarkPanel,
+    });
 
     links.push({
       title: 'com_sidepanel_hide_panel',
@@ -180,19 +93,12 @@ export default function useSideNavLinks({
 
     return links;
   }, [
-    endpointsConfig,
-    interfaceConfig.parameters,
+    assistants,
     keyProvided,
-    endpointType,
-    endpoint,
-    hasAccessToAgents,
-    hasAccessToPrompts,
-    hasAccessToMemories,
-    hasAccessToReadMemories,
-    hasAccessToBookmarks,
-    hasAccessToCreateAgents,
     hidePanel,
-    startupConfig,
+    endpoint,
+    interfaceConfig.parameters,
+    hasAccessToPrompts,
   ]);
 
   return Links;

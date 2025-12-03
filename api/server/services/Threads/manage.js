@@ -8,9 +8,9 @@ const {
 } = require('librechat-data-provider');
 const { retrieveAndProcessFile } = require('~/server/services/Files/process');
 const { recordMessage, getMessages } = require('~/models/Message');
-const { countTokens, escapeRegExp } = require('~/server/utils');
-const { spendTokens } = require('~/models/spendTokens');
 const { saveConvo } = require('~/models/Conversation');
+const spendTokens = require('~/models/spendTokens');
+const { countTokens } = require('~/server/utils');
 
 /**
  * Initializes a new thread or adds messages to an existing thread.
@@ -33,7 +33,7 @@ async function initThread({ openai, body, thread_id: _thread_id }) {
     thread = await openai.beta.threads.create(body);
   }
 
-  const thread_id = _thread_id || thread.id;
+  const thread_id = _thread_id ?? thread.id;
   return { messages, thread_id, ...thread };
 }
 
@@ -132,8 +132,6 @@ async function saveUserMessage(req, params) {
  * @param {string} params.endpoint - The conversation endpoint
  * @param {string} params.parentMessageId - The latest user message that triggered this response.
  * @param {string} [params.instructions] - Optional: from preset for `instructions` field.
- * @param {string} [params.spec] - Optional: Model spec identifier.
- * @param {string} [params.iconURL]
  * Overrides the instructions of the assistant.
  * @param {string} [params.promptPrefix] - Optional: from preset for `additional_instructions` field.
  * @return {Promise<Run>} A promise that resolves to the created run object.
@@ -156,8 +154,6 @@ async function saveAssistantMessage(req, params) {
     text: params.text,
     unfinished: false,
     // tokenCount,
-    iconURL: params.iconURL,
-    spec: params.spec,
   });
 
   await saveConvo(
@@ -169,8 +165,6 @@ async function saveAssistantMessage(req, params) {
       instructions: params.instructions,
       assistant_id: params.assistant_id,
       model: params.model,
-      iconURL: params.iconURL,
-      spec: params.spec,
     },
     { context: 'api/server/services/Threads/manage.js #saveAssistantMessage' },
   );
@@ -192,8 +186,7 @@ async function addThreadMetadata({ openai, thread_id, messageId, messages }) {
   const promises = [];
   for (const message of messages) {
     promises.push(
-      openai.beta.threads.messages.update(message.id, {
-        thread_id,
+      openai.beta.threads.messages.update(thread_id, message.id, {
         metadata: {
           messageId,
         },
@@ -264,8 +257,7 @@ async function syncMessages({
     }
 
     modifyPromises.push(
-      openai.beta.threads.messages.update(apiMessage.id, {
-        thread_id,
+      openai.beta.threads.messages.update(thread_id, apiMessage.id, {
         metadata: {
           messageId: dbMessage.messageId,
         },
@@ -415,7 +407,7 @@ async function checkMessageGaps({
 }) {
   const promises = [];
   promises.push(openai.beta.threads.messages.list(thread_id, defaultOrderQuery));
-  promises.push(openai.beta.threads.runs.steps.list(run_id, { thread_id }));
+  promises.push(openai.beta.threads.runs.steps.list(thread_id, run_id));
   /** @type {[{ data: ThreadMessage[] }, { data: RunStep[] }]} */
   const [response, stepsResponse] = await Promise.all(promises);
 
@@ -525,6 +517,14 @@ const recordUsage = async ({
 
 const uniqueCitationStart = '^====||===';
 const uniqueCitationEnd = '==|||||^';
+
+/** Helper function to escape special characters in regex
+ * @param {string} string - The string to escape.
+ * @returns {string} The escaped string.
+ */
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 /**
  * Sorts, processes, and flattens messages to a single string.

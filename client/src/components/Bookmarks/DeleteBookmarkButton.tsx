@@ -1,17 +1,11 @@
-import { useCallback, useState } from 'react';
-import {
-  Button,
-  TrashIcon,
-  Label,
-  OGDialog,
-  OGDialogTrigger,
-  TooltipAnchor,
-  OGDialogTemplate,
-  useToastContext,
-} from '@librechat/client';
+import { useCallback } from 'react';
 import type { FC } from 'react';
 import { useDeleteConversationTagMutation } from '~/data-provider';
+import TooltipIcon from '~/components/ui/TooltipIcon';
 import { NotificationSeverity } from '~/common';
+import { useToastContext } from '~/Providers';
+import { TrashIcon } from '~/components/svg';
+import { Label } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 
 const DeleteBookmarkButton: FC<{
@@ -22,7 +16,6 @@ const DeleteBookmarkButton: FC<{
 }> = ({ bookmark, tabIndex = 0, onFocus, onBlur }) => {
   const localize = useLocalize();
   const { showToast } = useToastContext();
-  const [open, setOpen] = useState(false);
 
   const deleteBookmarkMutation = useDeleteConversationTagMutation({
     onSuccess: () => {
@@ -43,44 +36,22 @@ const DeleteBookmarkButton: FC<{
   }, [bookmark, deleteBookmarkMutation]);
 
   return (
-    <>
-      <OGDialog open={open} onOpenChange={setOpen}>
-        <OGDialogTrigger asChild>
-          <TooltipAnchor
-            description={localize('com_ui_delete')}
-            render={
-              <Button
-                variant="ghost"
-                aria-label={localize('com_ui_bookmarks_delete')}
-                tabIndex={tabIndex}
-                onFocus={onFocus}
-                onBlur={onBlur}
-                onClick={() => setOpen(!open)}
-                className="h-8 w-8 p-0"
-              >
-                <TrashIcon />
-              </Button>
-            }
-          />
-        </OGDialogTrigger>
-        <OGDialogTemplate
-          showCloseButton={false}
-          title={localize('com_ui_bookmarks_delete')}
-          className="w-11/12 max-w-lg"
-          main={
-            <Label className="text-left text-sm font-medium">
-              {localize('com_ui_bookmark_delete_confirm')} {bookmark}
-            </Label>
-          }
-          selection={{
-            selectHandler: confirmDelete,
-            selectClasses:
-              'bg-red-700 dark:bg-red-600 hover:bg-red-800 dark:hover:bg-red-800 text-white',
-            selectText: localize('com_ui_delete'),
-          }}
-        />
-      </OGDialog>
-    </>
+    <TooltipIcon
+      disabled={false}
+      appendLabel={false}
+      title="Delete Bookmark"
+      confirmMessage={
+        <Label htmlFor="bookmark" className="text-left text-sm font-medium">
+          {localize('com_ui_bookmark_delete_confirm')} {bookmark}
+        </Label>
+      }
+      confirm={confirmDelete}
+      className="transition-color flex h-7 w-7 min-w-7 items-center justify-center rounded-lg duration-200 hover:bg-gray-200 dark:hover:bg-gray-700"
+      icon={<TrashIcon className="size-4" />}
+      tabIndex={tabIndex}
+      onFocus={onFocus}
+      onBlur={onBlur}
+    />
   );
 };
 

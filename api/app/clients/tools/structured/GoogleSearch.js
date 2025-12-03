@@ -4,12 +4,11 @@ const { getEnvironmentVariable } = require('@langchain/core/utils/env');
 
 class GoogleSearchResults extends Tool {
   static lc_name() {
-    return 'google';
+    return 'GoogleSearchResults';
   }
 
   constructor(fields = {}) {
     super(fields);
-    this.name = 'google';
     this.envVarApiKey = 'GOOGLE_SEARCH_API_KEY';
     this.envVarSearchEngineId = 'GOOGLE_CSE_ID';
     this.override = fields.override ?? false;

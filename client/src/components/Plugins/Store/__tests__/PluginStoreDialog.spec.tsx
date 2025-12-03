@@ -2,8 +2,6 @@ import { render, screen, fireEvent } from 'test/layout-test-utils';
 import PluginStoreDialog from '../PluginStoreDialog';
 import userEvent from '@testing-library/user-event';
 import * as mockDataProvider from 'librechat-data-provider/react-query';
-import * as authMutations from '~/data-provider/Auth/mutations';
-import * as authQueries from '~/data-provider/Auth/queries';
 
 jest.mock('librechat-data-provider/react-query');
 
@@ -145,11 +143,11 @@ const setup = ({
     //@ts-ignore - we don't need all parameters of the QueryObserverSuccessResult
     .mockReturnValue(useUpdateUserPluginsMutationReturnValue);
   const mockUseGetUserQuery = jest
-    .spyOn(authQueries, 'useGetUserQuery')
+    .spyOn(mockDataProvider, 'useGetUserQuery')
     //@ts-ignore - we don't need all parameters of the QueryObserverSuccessResult
     .mockReturnValue(useGetUserQueryReturnValue);
   const mockUseRefreshTokenMutation = jest
-    .spyOn(authMutations, 'useRefreshTokenMutation')
+    .spyOn(mockDataProvider, 'useRefreshTokenMutation')
     //@ts-ignore - we don't need all parameters of the QueryObserverSuccessResult
     .mockReturnValue(useRefreshTokenMutationReturnValue);
   const mockSetIsOpen = jest.fn();

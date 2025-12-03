@@ -1,61 +1,51 @@
-const accessPermissions = require('./accessPermissions');
-const assistants = require('./assistants');
-const categories = require('./categories');
-const tokenizer = require('./tokenizer');
-const endpoints = require('./endpoints');
-const staticRoute = require('./static');
+const ask = require('./ask');
+const edit = require('./edit');
 const messages = require('./messages');
-const memories = require('./memories');
+const convos = require('./convos');
 const presets = require('./presets');
 const prompts = require('./prompts');
-const balance = require('./balance');
-const plugins = require('./plugins');
-const actions = require('./actions');
-const banner = require('./banner');
 const search = require('./search');
-const models = require('./models');
-const convos = require('./convos');
-const config = require('./config');
-const agents = require('./agents');
-const roles = require('./roles');
-const oauth = require('./oauth');
-const files = require('./files');
-const share = require('./share');
-const tags = require('./tags');
+const tokenizer = require('./tokenizer');
 const auth = require('./auth');
-const edit = require('./edit');
 const keys = require('./keys');
+const oauth = require('./oauth');
+const endpoints = require('./endpoints');
+const balance = require('./balance');
+const models = require('./models');
+const plugins = require('./plugins');
 const user = require('./user');
-const mcp = require('./mcp');
+const config = require('./config');
+const assistants = require('./assistants');
+const files = require('./files');
+const staticRoute = require('./static');
+const share = require('./share');
+const categories = require('./categories');
+const roles = require('./roles');
+const tags = require('./tags');
 
 module.exports = {
-  mcp,
+  search,
+  ask,
   edit,
+  messages,
+  convos,
+  presets,
+  prompts,
   auth,
   keys,
-  user,
-  tags,
-  roles,
   oauth,
-  files,
-  share,
-  banner,
-  agents,
-  convos,
-  search,
-  config,
-  models,
-  prompts,
-  plugins,
-  actions,
-  presets,
-  balance,
-  messages,
-  memories,
-  endpoints,
+  user,
   tokenizer,
+  endpoints,
+  balance,
+  models,
+  plugins,
+  config,
   assistants,
-  categories,
+  files,
   staticRoute,
-  accessPermissions,
+  share,
+  categories,
+  roles,
+  tags,
 };

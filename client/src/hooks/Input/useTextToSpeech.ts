@@ -3,9 +3,10 @@ import { useRef, useMemo, useEffect, useState } from 'react';
 import { parseTextParts } from 'librechat-data-provider';
 import type { TMessageContentParts } from 'librechat-data-provider';
 import type { Option } from '~/common';
-import useTextToSpeechExternal from '~/hooks/Input/useTextToSpeechExternal';
-import useTextToSpeechBrowser from '~/hooks/Input/useTextToSpeechBrowser';
-import useGetAudioSettings from '~/hooks/Input/useGetAudioSettings';
+import useTextToSpeechExternal from './useTextToSpeechExternal';
+import useTextToSpeechBrowser from './useTextToSpeechBrowser';
+import useGetAudioSettings from './useGetAudioSettings';
+import useTextToSpeechEdge from './useTextToSpeechEdge';
 import useAudioRef from '~/hooks/Audio/useAudioRef';
 import { usePauseGlobalAudio } from '../Audio';
 import { logger } from '~/utils';
@@ -40,6 +41,12 @@ const useTextToSpeech = (props?: TUseTextToSpeech) => {
   } = useTextToSpeechBrowser({ setIsSpeaking });
 
   const {
+    generateSpeechEdge,
+    cancelSpeechEdge,
+    voices: voicesEdge,
+  } = useTextToSpeechEdge({ setIsSpeaking });
+
+  const {
     generateSpeechExternal,
     cancelSpeech: cancelSpeechExternal,
     isLoading: isLoadingExternal,
@@ -54,23 +61,26 @@ const useTextToSpeech = (props?: TUseTextToSpeech) => {
 
   const generateSpeech = useMemo(() => {
     const map = {
+      edge: generateSpeechEdge,
       browser: generateSpeechLocal,
       external: generateSpeechExternal,
     };
 
     return map[textToSpeechEndpoint];
-  }, [generateSpeechExternal, generateSpeechLocal, textToSpeechEndpoint]);
+  }, [generateSpeechEdge, generateSpeechExternal, generateSpeechLocal, textToSpeechEndpoint]);
 
   const cancelSpeech = useMemo(() => {
     const map = {
+      edge: cancelSpeechEdge,
       browser: cancelSpeechLocal,
       external: cancelSpeechExternal,
     };
     return map[textToSpeechEndpoint];
-  }, [cancelSpeechExternal, cancelSpeechLocal, textToSpeechEndpoint]);
+  }, [cancelSpeechEdge, cancelSpeechExternal, cancelSpeechLocal, textToSpeechEndpoint]);
 
   const isLoading = useMemo(() => {
     const map = {
+      edge: false,
       browser: false,
       external: isLoadingExternal,
     };
@@ -79,12 +89,13 @@ const useTextToSpeech = (props?: TUseTextToSpeech) => {
 
   const voices: Option[] | string[] = useMemo(() => {
     const voiceMap = {
+      edge: voicesEdge,
       browser: voicesLocal,
       external: voicesExternal,
     };
 
     return voiceMap[textToSpeechEndpoint];
-  }, [textToSpeechEndpoint, voicesExternal, voicesLocal]);
+  }, [textToSpeechEndpoint, voicesEdge, voicesExternal, voicesLocal]);
 
   useEffect(() => {
     const firstVoice = voices[0];

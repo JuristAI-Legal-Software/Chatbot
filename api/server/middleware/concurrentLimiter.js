@@ -1,7 +1,7 @@
-const { isEnabled } = require('@librechat/api');
-const { Time, CacheKeys, ViolationTypes } = require('librechat-data-provider');
+const { Time } = require('librechat-data-provider');
 const clearPendingReq = require('~/cache/clearPendingReq');
 const { logViolation, getLogStores } = require('~/cache');
+const { isEnabled } = require('~/server/utils');
 const denyRequest = require('./denyRequest');
 
 const {
@@ -21,11 +21,11 @@ const {
  * @function
  * @param {Object} req - Express request object containing user information.
  * @param {Object} res - Express response object.
- * @param {import('express').NextFunction} next - Next middleware function.
+ * @param {function} next - Express next middleware function.
  * @throws {Error} Throws an error if the user exceeds the concurrent request limit.
  */
 const concurrentLimiter = async (req, res, next) => {
-  const namespace = CacheKeys.PENDING_REQ;
+  const namespace = 'pending_req';
   const cache = getLogStores(namespace);
   if (!cache) {
     return next();
@@ -37,7 +37,7 @@ const concurrentLimiter = async (req, res, next) => {
 
   const userId = req.user?.id ?? req.user?._id ?? '';
   const limit = Math.max(CONCURRENT_MESSAGE_MAX, 1);
-  const type = ViolationTypes.CONCURRENT;
+  const type = 'concurrent';
 
   const key = `${isEnabled(USE_REDIS) ? namespace : ''}:${userId}`;
   const pendingRequests = +((await cache.get(key)) ?? 0);

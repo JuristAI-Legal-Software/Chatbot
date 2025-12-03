@@ -1,44 +1,34 @@
-import { RefObject } from 'react';
-import { Constants, FileSources, EModelEndpoint } from 'librechat-data-provider';
-import type { UseMutationResult } from '@tanstack/react-query';
+import React from 'react';
+import { FileSources } from 'librechat-data-provider';
 import type * as InputNumberPrimitive from 'rc-input-number';
-import type { SetterOrUpdater, RecoilState } from 'recoil';
 import type { ColumnDef } from '@tanstack/react-table';
-import type * as t from 'librechat-data-provider';
+import type { SetterOrUpdater } from 'recoil';
+import type {
+  TRole,
+  TUser,
+  Action,
+  TPreset,
+  TPlugin,
+  TMessage,
+  Assistant,
+  TResPlugin,
+  TLoginUser,
+  AuthTypeEnum,
+  TModelsConfig,
+  TConversation,
+  TStartupConfig,
+  EModelEndpoint,
+  AssistantsEndpoint,
+  AuthorizationTypeEnum,
+  TSetOption as SetOption,
+  TokenExchangeMethodEnum,
+} from 'librechat-data-provider';
+import type { UseMutationResult } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import type { TranslationKeys } from '~/hooks';
-
-export function isEphemeralAgent(agentId: string | null | undefined): boolean {
-  return agentId == null || agentId === '' || agentId === Constants.EPHEMERAL_AGENT_ID;
-}
-
-export interface ConfigFieldDetail {
-  title: string;
-  description: string;
-}
-
-export type CodeBarProps = {
-  lang: string;
-  error?: boolean;
-  plugin?: boolean;
-  blockIndex?: number;
-  allowExecution?: boolean;
-  codeRef: RefObject<HTMLElement>;
-};
 
 export enum PromptsEditorMode {
   SIMPLE = 'simple',
   ADVANCED = 'advanced',
-}
-
-export enum STTEndpoints {
-  browser = 'browser',
-  external = 'external',
-}
-
-export enum TTSEndpoints {
-  browser = 'browser',
-  external = 'external',
 }
 
 export type AudioChunk = {
@@ -56,37 +46,20 @@ export type AudioChunk = {
   };
 };
 
-export type BadgeItem = {
-  id: string;
-  icon: React.ComponentType<any>;
-  label: string;
-  atom: RecoilState<boolean>;
-  isAvailable: boolean;
-};
-
 export type AssistantListItem = {
   id: string;
   name: string;
-  metadata: t.Assistant['metadata'];
+  metadata: Assistant['metadata'];
   model: string;
 };
 
-export type AgentListItem = {
-  id: string;
-  name: string;
-  avatar: t.Agent['avatar'];
-};
-
-export type TPluginMap = Record<string, t.TPlugin>;
+export type TPluginMap = Record<string, TPlugin>;
 
 export type GenericSetter<T> = (value: T | ((currentValue: T) => T)) => void;
 
-export type LastSelectedModels = Record<t.EModelEndpoint, string>;
+export type LastSelectedModels = Record<EModelEndpoint, string>;
 
-export type LocalizeFunction = (
-  phraseKey: TranslationKeys,
-  options?: Record<string, string | number>,
-) => string;
+export type LocalizeFunction = (phraseKey: string, ...values: string[]) => string;
 
 export type ChatFormValues = { text: string };
 
@@ -105,24 +78,13 @@ export type IconMapProps = {
   iconURL?: string;
   context?: 'landing' | 'menu-item' | 'nav' | 'message';
   endpoint?: string | null;
-  endpointType?: string;
   assistantName?: string;
-  agentName?: string;
   avatar?: string;
   size?: number;
 };
 
-export type IconComponent = React.ComponentType<IconMapProps>;
-export type AgentIconComponent = React.ComponentType<AgentIconMapProps>;
-export type IconComponentTypes = IconComponent | AgentIconComponent;
-export type IconsRecord = {
-  [key in t.EModelEndpoint | 'unknown' | string]: IconComponentTypes | null | undefined;
-};
-
-export type AgentIconMapProps = IconMapProps & { agentName?: string };
-
 export type NavLink = {
-  title: TranslationKeys;
+  title: string;
   label?: string;
   icon: LucideIcon | React.FC;
   Component?: React.ComponentType;
@@ -138,21 +100,15 @@ export interface NavProps {
   defaultActive?: string;
 }
 
-export interface DataColumnMeta {
-  meta:
-    | {
-        size: number | string;
-      }
-    | undefined;
+interface ColumnMeta {
+  meta: {
+    size: number | string;
+  };
 }
 
 export enum Panel {
-  advanced = 'advanced',
   builder = 'builder',
   actions = 'actions',
-  model = 'model',
-  version = 'version',
-  mcp = 'mcp',
 }
 
 export type FileSetter =
@@ -161,11 +117,11 @@ export type FileSetter =
 
 export type ActionAuthForm = {
   /* General */
-  type: t.AuthTypeEnum;
+  type: AuthTypeEnum;
   saved_auth_fields: boolean;
   /* API key */
   api_key: string; // not nested
-  authorization_type: t.AuthorizationTypeEnum;
+  authorization_type: AuthorizationTypeEnum;
   custom_auth_header: string;
   /* OAuth */
   oauth_client_id: string; // not nested
@@ -173,91 +129,25 @@ export type ActionAuthForm = {
   authorization_url: string;
   client_url: string;
   scope: string;
-  token_exchange_method: t.TokenExchangeMethodEnum;
-};
-
-export type MCPForm = ActionAuthForm & {
-  name?: string;
-  description?: string;
-  url?: string;
-  tools?: string[];
-  icon?: string;
-  trust?: boolean;
-};
-
-export type ActionWithNullableMetadata = Omit<t.Action, 'metadata'> & {
-  metadata: t.ActionMetadata | null;
+  token_exchange_method: TokenExchangeMethodEnum;
 };
 
 export type AssistantPanelProps = {
   index?: number;
-  action?: ActionWithNullableMetadata;
-  actions?: t.Action[];
+  action?: Action;
+  actions?: Action[];
   assistant_id?: string;
   activePanel?: string;
-  endpoint: t.AssistantsEndpoint;
+  endpoint: AssistantsEndpoint;
   version: number | string;
-  documentsMap: Map<string, t.AssistantDocument> | null;
-  setAction: React.Dispatch<React.SetStateAction<t.Action | undefined>>;
+  setAction: React.Dispatch<React.SetStateAction<Action | undefined>>;
   setCurrentAssistantId: React.Dispatch<React.SetStateAction<string | undefined>>;
   setActivePanel: React.Dispatch<React.SetStateAction<Panel>>;
 };
 
-export type AgentPanelProps = {
-  index?: number;
-  agent_id?: string;
-  activePanel?: string;
-  mcp?: t.MCP;
-  mcps?: t.MCP[];
-  action?: t.Action;
-  actions?: t.Action[];
-  createMutation: UseMutationResult<t.Agent, Error, t.AgentCreateParams>;
-  setActivePanel: React.Dispatch<React.SetStateAction<Panel>>;
-  setMcp: React.Dispatch<React.SetStateAction<t.MCP | undefined>>;
-  setAction: React.Dispatch<React.SetStateAction<t.Action | undefined>>;
-  endpointsConfig?: t.TEndpointsConfig;
-  setCurrentAgentId: React.Dispatch<React.SetStateAction<string | undefined>>;
-  agentsConfig?: t.TAgentsEndpoint | null;
-};
+export type AugmentedColumnDef<TData, TValue> = ColumnDef<TData, TValue> & ColumnMeta;
 
-export interface MCPServerInfo {
-  serverName: string;
-  tools: t.AgentToolType[];
-  isConfigured: boolean;
-  isConnected: boolean;
-  metadata: t.TPlugin;
-}
-
-export type AgentPanelContextType = {
-  action?: t.Action;
-  actions?: t.Action[];
-  setAction: React.Dispatch<React.SetStateAction<t.Action | undefined>>;
-  mcp?: t.MCP;
-  mcps?: t.MCP[];
-  setMcp: React.Dispatch<React.SetStateAction<t.MCP | undefined>>;
-  setMcps: React.Dispatch<React.SetStateAction<t.MCP[] | undefined>>;
-  activePanel?: string;
-  regularTools?: t.TPlugin[];
-  setActivePanel: React.Dispatch<React.SetStateAction<Panel>>;
-  setCurrentAgentId: React.Dispatch<React.SetStateAction<string | undefined>>;
-  agent_id?: string;
-  startupConfig?: t.TStartupConfig | null;
-  agentsConfig?: t.TAgentsEndpoint | null;
-  endpointsConfig?: t.TEndpointsConfig | null;
-  /** Pre-computed MCP server information indexed by server key */
-  mcpServersMap: Map<string, MCPServerInfo>;
-};
-
-export type AgentModelPanelProps = {
-  agent_id?: string;
-  providers: Option[];
-  models: Record<string, string[] | undefined>;
-  setActivePanel: React.Dispatch<React.SetStateAction<Panel>>;
-};
-
-export type AugmentedColumnDef<TData, TValue> = ColumnDef<TData, TValue> & DataColumnMeta;
-
-export type TSetOption = t.TSetOption;
+export type TSetOption = SetOption;
 
 export type TSetExample = (
   i: number,
@@ -292,7 +182,7 @@ export type TShowToast = {
 };
 
 export type TBaseSettingsProps = {
-  conversation: t.TConversation | t.TPreset | null;
+  conversation: TConversation | TPreset | null;
   className?: string;
   isPreset?: boolean;
   readonly?: boolean;
@@ -313,7 +203,7 @@ export type TModelSelectProps = TSettingsProps & TModels;
 export type TEditPresetProps = {
   open: boolean;
   onOpenChange: React.Dispatch<React.SetStateAction<boolean>>;
-  preset: t.TPreset;
+  preset: TPreset;
   title?: string;
 };
 
@@ -324,18 +214,18 @@ export type TSetOptionsPayload = {
   addExample: () => void;
   removeExample: () => void;
   setAgentOption: TSetOption;
-  // getConversation: () => t.TConversation | t.TPreset | null;
+  // getConversation: () => TConversation | TPreset | null;
   checkPluginSelection: (value: string) => boolean;
   setTools: (newValue: string, remove?: boolean) => void;
   setOptions?: TSetOptions;
 };
 
 export type TPresetItemProps = {
-  preset: t.TPreset;
-  value: t.TPreset;
-  onSelect: (preset: t.TPreset) => void;
-  onChangePreset: (preset: t.TPreset) => void;
-  onDeletePreset: (preset: t.TPreset) => void;
+  preset: TPreset;
+  value: TPreset;
+  onSelect: (preset: TPreset) => void;
+  onChangePreset: (preset: TPreset) => void;
+  onDeletePreset: (preset: TPreset) => void;
 };
 
 export type TOnClick = (e: React.MouseEvent<HTMLButtonElement>) => void;
@@ -351,30 +241,25 @@ export type TAskProps = {
   parentMessageId?: string | null;
   conversationId?: string | null;
   messageId?: string | null;
-  clientTimestamp?: string;
 };
 
 export type TOptions = {
   editedMessageId?: string | null;
-  editedContent?: t.TEditedContent;
   editedText?: string | null;
+  resubmitFiles?: boolean;
   isRegenerate?: boolean;
   isContinued?: boolean;
   isEdited?: boolean;
-  overrideMessages?: t.TMessage[];
-  /** This value is only true when the user submits a message with "Save & Submit" for a user-created message */
-  isResubmission?: boolean;
-  /** Currently only utilized when `isResubmission === true`, uses that message's currently attached files */
-  overrideFiles?: t.TMessage['files'];
+  overrideMessages?: TMessage[];
 };
 
 export type TAskFunction = (props: TAskProps, options?: TOptions) => void;
 
 export type TMessageProps = {
-  conversation?: t.TConversation | null;
+  conversation?: TConversation | null;
   messageId?: string | null;
-  message?: t.TMessage;
-  messagesTree?: t.TMessage[];
+  message?: TMessage;
+  messagesTree?: TMessage[];
   currentEditId: string | number | null;
   isSearchView?: boolean;
   siblingIdx?: number;
@@ -382,12 +267,6 @@ export type TMessageProps = {
   setCurrentEditId?: React.Dispatch<React.SetStateAction<string | number | null>> | null;
   setSiblingIdx?: ((value: number) => void | React.Dispatch<React.SetStateAction<number>>) | null;
 };
-
-export type TMessageIcon = { endpoint?: string | null; isCreatedByUser?: boolean } & Pick<
-  t.TConversation,
-  'modelLabel'
-> &
-  Pick<t.TMessage, 'model' | 'iconURL'>;
 
 export type TInitialProps = {
   text: string;
@@ -399,7 +278,7 @@ export type TInitialProps = {
 };
 export type TAdditionalProps = {
   ask: TAskFunction;
-  message: t.TMessage;
+  message: TMessage;
   isCreatedByUser: boolean;
   siblingIdx: number;
   enterEdit: (cancel: boolean) => void;
@@ -409,12 +288,8 @@ export type TAdditionalProps = {
 export type TMessageContentProps = TInitialProps & TAdditionalProps;
 
 export type TText = Pick<TInitialProps, 'text'> & { className?: string };
-export type TEditProps = Pick<TInitialProps, 'isSubmitting'> &
-  Omit<TAdditionalProps, 'isCreatedByUser' | 'siblingIdx'> & {
-    text?: string;
-    index?: number;
-    siblingIdx: number | null;
-  };
+export type TEditProps = Pick<TInitialProps, 'text' | 'isSubmitting'> &
+  Omit<TAdditionalProps, 'isCreatedByUser'>;
 export type TDisplayProps = TText &
   Pick<TAdditionalProps, 'isCreatedByUser' | 'message'> & {
     showCursor?: boolean;
@@ -423,7 +298,7 @@ export type TDisplayProps = TText &
 export type TConfigProps = {
   userKey: string;
   setUserKey: React.Dispatch<React.SetStateAction<string>>;
-  endpoint: t.EModelEndpoint | string;
+  endpoint: EModelEndpoint | string;
 };
 
 export type TDangerButtonProps = {
@@ -434,12 +309,12 @@ export type TDangerButtonProps = {
   showText?: boolean;
   mutation?: UseMutationResult<unknown>;
   onClick: () => void;
-  infoTextCode: TranslationKeys;
-  actionTextCode: TranslationKeys;
+  infoTextCode: string;
+  actionTextCode: string;
   dataTestIdInitial: string;
   dataTestIdConfirm: string;
-  infoDescriptionCode?: TranslationKeys;
-  confirmActionTextCode?: TranslationKeys;
+  infoDescriptionCode?: string;
+  confirmActionTextCode?: string;
 };
 
 export type TDialogProps = {
@@ -458,18 +333,18 @@ export type TResError = {
 };
 
 export type TAuthContext = {
-  user: t.TUser | undefined;
+  user: TUser | undefined;
   token: string | undefined;
   isAuthenticated: boolean;
   error: string | undefined;
-  login: (data: t.TLoginUser) => void;
-  logout: (redirect?: string) => void;
+  login: (data: TLoginUser) => void;
+  logout: () => void;
   setError: React.Dispatch<React.SetStateAction<string | undefined>>;
-  roles?: Record<string, t.TRole | null | undefined>;
+  roles?: Record<string, TRole | null | undefined>;
 };
 
 export type TUserContext = {
-  user?: t.TUser | undefined;
+  user?: TUser | undefined;
   token: string | undefined;
   isAuthenticated: boolean;
   redirect?: string;
@@ -480,18 +355,17 @@ export type TAuthConfig = {
   test?: boolean;
 };
 
-export type IconProps = Pick<t.TMessage, 'isCreatedByUser' | 'model'> &
-  Pick<t.TConversation, 'chatGptLabel' | 'modelLabel'> & {
+export type IconProps = Pick<TMessage, 'isCreatedByUser' | 'model'> &
+  Pick<TConversation, 'chatGptLabel' | 'modelLabel' | 'jailbreak'> & {
     size?: number;
     button?: boolean;
     iconURL?: string;
     message?: boolean;
     className?: string;
     iconClassName?: string;
-    endpoint?: t.EModelEndpoint | string | null;
-    endpointType?: t.EModelEndpoint | null;
+    endpoint?: EModelEndpoint | string | null;
+    endpointType?: EModelEndpoint | null;
     assistantName?: string;
-    agentName?: string;
     error?: boolean;
   };
 
@@ -500,32 +374,7 @@ export type Option = Record<string, unknown> & {
   value: string | number | null;
 };
 
-export type StringOption = Option & { value: string | null };
-
-export type VoiceOption = {
-  value: string;
-  label: string;
-};
-
-export type TMessageAudio = {
-  isLast?: boolean;
-  index: number;
-  messageId: string;
-  content: string;
-  className?: string;
-  renderButton?: (props: {
-    onClick: (e?: React.MouseEvent<HTMLButtonElement>) => void;
-    title: string;
-    icon: React.ReactNode;
-    isActive?: boolean;
-    isVisible?: boolean;
-    isDisabled?: boolean;
-    className?: string;
-  }) => React.ReactNode;
-};
-
 export type OptionWithIcon = Option & { icon?: React.ReactNode };
-export type DropdownValueSetter = (value: string | Option | OptionWithIcon) => void;
 export type MentionOption = OptionWithIcon & {
   type: string;
   value: string;
@@ -555,32 +404,17 @@ export interface ExtendedFile {
   source?: FileSources;
   attached?: boolean;
   embedded?: boolean;
-  tool_resource?: string;
-  metadata?: t.TFile['metadata'];
 }
 
-export interface ModelItemProps {
-  modelName: string;
-  endpoint: EModelEndpoint;
-  isSelected: boolean;
-  onSelect: () => void;
-  onNavigateBack: () => void;
-  icon?: JSX.Element;
-  className?: string;
-}
-
-export type ContextType = {
-  navVisible: boolean;
-  setNavVisible: React.Dispatch<React.SetStateAction<boolean>>;
-};
+export type ContextType = { navVisible: boolean; setNavVisible: (visible: boolean) => void };
 
 export interface SwitcherProps {
-  endpoint?: t.EModelEndpoint | null;
+  endpoint?: EModelEndpoint | null;
   endpointKeyProvided: boolean;
   isCollapsed: boolean;
 }
 export type TLoginLayoutContext = {
-  startupConfig: t.TStartupConfig | null;
+  startupConfig: TStartupConfig | null;
   startupConfigError: unknown;
   isFetching: boolean;
   error: string | null;
@@ -590,38 +424,27 @@ export type TLoginLayoutContext = {
 };
 
 export type NewConversationParams = {
-  template?: Partial<t.TConversation>;
-  preset?: Partial<t.TPreset>;
-  modelsData?: t.TModelsConfig;
+  template?: Partial<TConversation>;
+  preset?: Partial<TPreset>;
+  modelsData?: TModelsConfig;
   buildDefault?: boolean;
   keepLatestMessage?: boolean;
   keepAddedConvos?: boolean;
-  disableParams?: boolean;
 };
 
-export type ConvoGenerator = (params: NewConversationParams) => void | t.TConversation;
+export type ConvoGenerator = (params: NewConversationParams) => void | TConversation;
 
-export type TBaseResData = {
-  plugin?: t.TResPlugin;
+export type TResData = {
+  plugin?: TResPlugin;
   final?: boolean;
   initial?: boolean;
-  previousMessages?: t.TMessage[];
-  conversation: t.TConversation;
+  previousMessages?: TMessage[];
+  requestMessage: TMessage;
+  responseMessage: TMessage;
+  conversation: TConversation;
   conversationId?: string;
-  runMessages?: t.TMessage[];
+  runMessages?: TMessage[];
 };
-
-export type TResData = TBaseResData & {
-  requestMessage: t.TMessage;
-  responseMessage: t.TMessage;
-};
-
-export type TFinalResData = Omit<TBaseResData, 'conversation'> & {
-  conversation: Partial<t.TConversation> & Pick<t.TConversation, 'conversationId'>;
-  requestMessage?: t.TMessage;
-  responseMessage?: t.TMessage;
-};
-
 export type TVectorStore = {
   _id: string;
   object: 'vector_store';
@@ -638,9 +461,3 @@ export type TVectorStore = {
 };
 
 export type TThread = { id: string; createdAt: string };
-
-declare global {
-  interface Window {
-    google_tag_manager?: unknown;
-  }
-}

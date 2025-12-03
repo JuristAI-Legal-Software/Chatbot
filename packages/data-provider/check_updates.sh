@@ -1,5 +1,4 @@
 #!/bin/bash
-# SCRIPT USED TO DETERMINE WHICH PACKAGE HAD CHANGES
 
 # Set the directory containing the package.json file
 dir=${1:-.}
