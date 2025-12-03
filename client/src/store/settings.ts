@@ -1,5 +1,5 @@
 import { atom } from 'recoil';
-import { SettingsViews } from 'librechat-data-provider';
+import { SettingsViews, LocalStorageKeys } from 'librechat-data-provider';
 import { atomWithLocalStorage } from '~/store/utils';
 import type { TOptionSettings } from '~/common';
 
@@ -14,7 +14,6 @@ const staticAtoms = {
     key: 'currentSettingsView',
     default: SettingsViews.default,
   }),
-  showBingToneSetting: atom<boolean>({ key: 'showBingToneSetting', default: false }),
   showPopover: atom<boolean>({ key: 'showPopover', default: false }),
 };
 
@@ -22,21 +21,30 @@ const localStorageAtoms = {
   // General settings
   autoScroll: atomWithLocalStorage('autoScroll', false),
   hideSidePanel: atomWithLocalStorage('hideSidePanel', false),
-  fontSize: atomWithLocalStorage('fontSize', 'text-base'),
+  enableUserMsgMarkdown: atomWithLocalStorage<boolean>(
+    LocalStorageKeys.ENABLE_USER_MSG_MARKDOWN,
+    true,
+  ),
+  keepScreenAwake: atomWithLocalStorage('keepScreenAwake', true),
 
-  // Messages settings
+  // Chat settings
   enterToSend: atomWithLocalStorage('enterToSend', true),
+  maximizeChatSpace: atomWithLocalStorage('maximizeChatSpace', false),
   chatDirection: atomWithLocalStorage('chatDirection', 'LTR'),
-  showCode: atomWithLocalStorage('showCode', false),
-  saveDrafts: atomWithLocalStorage('saveDrafts', false),
+  showCode: atomWithLocalStorage(LocalStorageKeys.SHOW_ANALYSIS_CODE, true),
+  saveDrafts: atomWithLocalStorage('saveDrafts', true),
+  showScrollButton: atomWithLocalStorage('showScrollButton', true),
   forkSetting: atomWithLocalStorage('forkSetting', ''),
   splitAtTarget: atomWithLocalStorage('splitAtTarget', false),
-
-  rememberForkOption: atomWithLocalStorage('rememberForkOption', true),
+  rememberDefaultFork: atomWithLocalStorage(LocalStorageKeys.REMEMBER_FORK_OPTION, false),
+  showThinking: atomWithLocalStorage('showThinking', false),
+  saveBadgesState: atomWithLocalStorage('saveBadgesState', false),
 
   // Beta features settings
   modularChat: atomWithLocalStorage('modularChat', true),
   LaTeXParsing: atomWithLocalStorage('LaTeXParsing', true),
+  centerFormOnLanding: atomWithLocalStorage('centerFormOnLanding', true),
+  showFooter: atomWithLocalStorage('showFooter', true),
 
   // Commands settings
   atCommand: atomWithLocalStorage('atCommand', true),

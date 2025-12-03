@@ -1,4 +1,4 @@
-const { Constants, EModelEndpoint, actionDomainSeparator } = require('librechat-data-provider');
+const { Constants, actionDomainSeparator } = require('librechat-data-provider');
 const { domainParser } = require('./ActionService');
 
 jest.mock('keyv');
@@ -50,45 +50,25 @@ jest.mock('~/cache/getLogStores', () => {
 });
 
 describe('domainParser', () => {
-  const req = {
-    app: {
-      locals: {
-        [EModelEndpoint.azureOpenAI]: {
-          assistants: true,
-        },
-      },
-    },
-  };
-
-  const reqNoAzure = {
-    app: {
-      locals: {
-        [EModelEndpoint.azureOpenAI]: {
-          assistants: false,
-        },
-      },
-    },
-  };
-
   const TLD = '.com';
 
   // Non-azure request
   it('does not return domain as is if not azure', async () => {
     const domain = `example.com${actionDomainSeparator}test${actionDomainSeparator}`;
-    const result1 = await domainParser(reqNoAzure, domain, false);
-    const result2 = await domainParser(reqNoAzure, domain, true);
+    const result1 = await domainParser(domain, false);
+    const result2 = await domainParser(domain, true);
     expect(result1).not.toEqual(domain);
     expect(result2).not.toEqual(domain);
   });
 
   // Test for Empty or Null Inputs
   it('returns undefined for null domain input', async () => {
-    const result = await domainParser(req, null, true);
+    const result = await domainParser(null, true);
     expect(result).toBeUndefined();
   });
 
   it('returns undefined for empty domain input', async () => {
-    const result = await domainParser(req, '', true);
+    const result = await domainParser('', true);
     expect(result).toBeUndefined();
   });
 
@@ -99,7 +79,7 @@ describe('domainParser', () => {
       .toString('base64')
       .substring(0, Constants.ENCODED_DOMAIN_LENGTH);
 
-    await domainParser(req, domain, true);
+    await domainParser(domain, true);
 
     const cachedValue = await globalCache[encodedDomain];
     expect(cachedValue).toEqual(Buffer.from(domain).toString('base64'));
@@ -109,14 +89,14 @@ describe('domainParser', () => {
   it('encodes domain exactly at threshold without modification', async () => {
     const domain = 'a'.repeat(Constants.ENCODED_DOMAIN_LENGTH - TLD.length) + TLD;
     const expected = domain.replace(/\./g, actionDomainSeparator);
-    const result = await domainParser(req, domain, true);
+    const result = await domainParser(domain, true);
     expect(result).toEqual(expected);
   });
 
   it('encodes domain just below threshold without modification', async () => {
     const domain = 'a'.repeat(Constants.ENCODED_DOMAIN_LENGTH - 1 - TLD.length) + TLD;
     const expected = domain.replace(/\./g, actionDomainSeparator);
-    const result = await domainParser(req, domain, true);
+    const result = await domainParser(domain, true);
     expect(result).toEqual(expected);
   });
 
@@ -126,7 +106,7 @@ describe('domainParser', () => {
     const encodedDomain = Buffer.from(unicodeDomain)
       .toString('base64')
       .substring(0, Constants.ENCODED_DOMAIN_LENGTH);
-    const result = await domainParser(req, unicodeDomain, true);
+    const result = await domainParser(unicodeDomain, true);
     expect(result).toEqual(encodedDomain);
   });
 
@@ -136,7 +116,6 @@ describe('domainParser', () => {
     globalCache[encodedDomain.substring(0, Constants.ENCODED_DOMAIN_LENGTH)] = encodedDomain; // Simulate caching
 
     const result = await domainParser(
-      req,
       encodedDomain.substring(0, Constants.ENCODED_DOMAIN_LENGTH),
       false,
     );
@@ -147,27 +126,27 @@ describe('domainParser', () => {
   it('returns domain with replaced separators if no cached domain exists', async () => {
     const domain = 'example.com';
     const withSeparator = domain.replace(/\./g, actionDomainSeparator);
-    const result = await domainParser(req, withSeparator, false);
+    const result = await domainParser(withSeparator, false);
     expect(result).toEqual(domain);
   });
 
   it('returns domain with replaced separators when inverse is false and under encoding length', async () => {
     const domain = 'examp.com';
     const withSeparator = domain.replace(/\./g, actionDomainSeparator);
-    const result = await domainParser(req, withSeparator, false);
+    const result = await domainParser(withSeparator, false);
     expect(result).toEqual(domain);
   });
 
   it('replaces periods with actionDomainSeparator when inverse is true and under encoding length', async () => {
     const domain = 'examp.com';
     const expected = domain.replace(/\./g, actionDomainSeparator);
-    const result = await domainParser(req, domain, true);
+    const result = await domainParser(domain, true);
     expect(result).toEqual(expected);
   });
 
   it('encodes domain when length is above threshold and inverse is true', async () => {
     const domain = 'a'.repeat(Constants.ENCODED_DOMAIN_LENGTH + 1).concat('.com');
-    const result = await domainParser(req, domain, true);
+    const result = await domainParser(domain, true);
     expect(result).not.toEqual(domain);
     expect(result.length).toBeLessThanOrEqual(Constants.ENCODED_DOMAIN_LENGTH);
   });
@@ -177,20 +156,20 @@ describe('domainParser', () => {
     const encodedDomain = Buffer.from(
       originalDomain.replace(/\./g, actionDomainSeparator),
     ).toString('base64');
-    const result = await domainParser(req, encodedDomain, false);
+    const result = await domainParser(encodedDomain, false);
     expect(result).toEqual(encodedDomain);
   });
 
   it('decodes encoded value if cached and encoded value is provided, and inverse is false', async () => {
     const originalDomain = 'example.com';
-    const encodedDomain = await domainParser(req, originalDomain, true);
-    const result = await domainParser(req, encodedDomain, false);
+    const encodedDomain = await domainParser(originalDomain, true);
+    const result = await domainParser(encodedDomain, false);
     expect(result).toEqual(originalDomain);
   });
 
   it('handles invalid base64 encoded values gracefully', async () => {
     const invalidBase64Domain = 'not_base64_encoded';
-    const result = await domainParser(req, invalidBase64Domain, false);
+    const result = await domainParser(invalidBase64Domain, false);
     expect(result).toEqual(invalidBase64Domain);
   });
 });

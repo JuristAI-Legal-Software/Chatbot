@@ -1,13 +1,20 @@
 const { ObjectId } = require('mongodb');
-const { SystemRoles, SystemCategories } = require('librechat-data-provider');
+const { logger } = require('@librechat/data-schemas');
 const {
-  getProjectByName,
-  addGroupIdsToProject,
-  removeGroupIdsFromProject,
+  Constants,
+  SystemRoles,
+  ResourceType,
+  SystemCategories,
+} = require('librechat-data-provider');
+const {
   removeGroupFromAllProjects,
+  removeGroupIdsFromProject,
+  addGroupIdsToProject,
+  getProjectByName,
 } = require('./Project');
-const { Prompt, PromptGroup } = require('./schema/promptSchema');
-const { logger } = require('~/config');
+const { removeAllPermissions } = require('~/server/services/PermissionService');
+const { PromptGroup, Prompt, AclEntry } = require('~/db/models');
+const { escapeRegExp } = require('~/server/utils');
 
 /**
  * Create a pipeline for the aggregation to get prompt groups
@@ -91,7 +98,7 @@ const createAllGroupsPipeline = (
 
 /**
  * Get all prompt groups with filters
- * @param {Object} req
+ * @param {ServerRequest} req
  * @param {TPromptGroupsWithFilterRequest} filter
  * @returns {Promise<PromptGroupListResponse>}
  */
@@ -99,14 +106,10 @@ const getAllPromptGroups = async (req, filter) => {
   try {
     const { name, ...query } = filter;
 
-    if (!query.author) {
-      throw new Error('Author is required');
-    }
-
     let searchShared = true;
     let searchSharedOnly = false;
     if (name) {
-      query.name = new RegExp(name, 'i');
+      query.name = new RegExp(escapeRegExp(name), 'i');
     }
     if (!query.category) {
       delete query.category;
@@ -123,8 +126,8 @@ const getAllPromptGroups = async (req, filter) => {
     let combinedQuery = query;
 
     if (searchShared) {
-      const project = await getProjectByName('instance', 'promptGroupIds');
-      if (project && project.promptGroupIds.length > 0) {
+      const project = await getProjectByName(Constants.GLOBAL_PROJECT_NAME, 'promptGroupIds');
+      if (project && project.promptGroupIds && project.promptGroupIds.length > 0) {
         const projectQuery = { _id: { $in: project.promptGroupIds }, ...query };
         delete projectQuery.author;
         combinedQuery = searchSharedOnly ? projectQuery : { $or: [projectQuery, query] };
@@ -141,7 +144,7 @@ const getAllPromptGroups = async (req, filter) => {
 
 /**
  * Get prompt groups with filters
- * @param {Object} req
+ * @param {ServerRequest} req
  * @param {TPromptGroupsWithFilterRequest} filter
  * @returns {Promise<PromptGroupListResponse>}
  */
@@ -152,14 +155,10 @@ const getPromptGroups = async (req, filter) => {
     const validatedPageNumber = Math.max(parseInt(pageNumber, 10), 1);
     const validatedPageSize = Math.max(parseInt(pageSize, 10), 1);
 
-    if (!query.author) {
-      throw new Error('Author is required');
-    }
-
     let searchShared = true;
     let searchSharedOnly = false;
     if (name) {
-      query.name = new RegExp(name, 'i');
+      query.name = new RegExp(escapeRegExp(name), 'i');
     }
     if (!query.category) {
       delete query.category;
@@ -177,8 +176,8 @@ const getPromptGroups = async (req, filter) => {
 
     if (searchShared) {
       // const projects = req.user.projects || []; // TODO: handle multiple projects
-      const project = await getProjectByName('instance', 'promptGroupIds');
-      if (project && project.promptGroupIds.length > 0) {
+      const project = await getProjectByName(Constants.GLOBAL_PROJECT_NAME, 'promptGroupIds');
+      if (project && project.promptGroupIds && project.promptGroupIds.length > 0) {
         const projectQuery = { _id: { $in: project.promptGroupIds }, ...query };
         delete projectQuery.author;
         combinedQuery = searchSharedOnly ? projectQuery : { $or: [projectQuery, query] };
@@ -212,9 +211,166 @@ const getPromptGroups = async (req, filter) => {
   }
 };
 
+/**
+ * @param {Object} fields
+ * @param {string} fields._id
+ * @param {string} fields.author
+ * @param {string} fields.role
+ * @returns {Promise<TDeletePromptGroupResponse>}
+ */
+const deletePromptGroup = async ({ _id, author, role }) => {
+  // Build query - with ACL, author is optional
+  const query = { _id };
+  const groupQuery = { groupId: new ObjectId(_id) };
+
+  // Legacy: Add author filter if provided (backward compatibility)
+  if (author && role !== SystemRoles.ADMIN) {
+    query.author = author;
+    groupQuery.author = author;
+  }
+
+  const response = await PromptGroup.deleteOne(query);
+
+  if (!response || response.deletedCount === 0) {
+    throw new Error('Prompt group not found');
+  }
+
+  await Prompt.deleteMany(groupQuery);
+  await removeGroupFromAllProjects(_id);
+
+  try {
+    await removeAllPermissions({ resourceType: ResourceType.PROMPTGROUP, resourceId: _id });
+  } catch (error) {
+    logger.error('Error removing promptGroup permissions:', error);
+  }
+
+  return { message: 'Prompt group deleted successfully' };
+};
+
+/**
+ * Get prompt groups by accessible IDs with optional cursor-based pagination.
+ * @param {Object} params - The parameters for getting accessible prompt groups.
+ * @param {Array} [params.accessibleIds] - Array of prompt group ObjectIds the user has ACL access to.
+ * @param {Object} [params.otherParams] - Additional query parameters (including author filter).
+ * @param {number} [params.limit] - Number of prompt groups to return (max 100). If not provided, returns all prompt groups.
+ * @param {string} [params.after] - Cursor for pagination - get prompt groups after this cursor. // base64 encoded JSON string with updatedAt and _id.
+ * @returns {Promise<Object>} A promise that resolves to an object containing the prompt groups data and pagination info.
+ */
+async function getListPromptGroupsByAccess({
+  accessibleIds = [],
+  otherParams = {},
+  limit = null,
+  after = null,
+}) {
+  const isPaginated = limit !== null && limit !== undefined;
+  const normalizedLimit = isPaginated ? Math.min(Math.max(1, parseInt(limit) || 20), 100) : null;
+
+  // Build base query combining ACL accessible prompt groups with other filters
+  const baseQuery = { ...otherParams, _id: { $in: accessibleIds } };
+
+  // Add cursor condition
+  if (after && typeof after === 'string' && after !== 'undefined' && after !== 'null') {
+    try {
+      const cursor = JSON.parse(Buffer.from(after, 'base64').toString('utf8'));
+      const { updatedAt, _id } = cursor;
+
+      const cursorCondition = {
+        $or: [
+          { updatedAt: { $lt: new Date(updatedAt) } },
+          { updatedAt: new Date(updatedAt), _id: { $gt: new ObjectId(_id) } },
+        ],
+      };
+
+      // Merge cursor condition with base query
+      if (Object.keys(baseQuery).length > 0) {
+        baseQuery.$and = [{ ...baseQuery }, cursorCondition];
+        // Remove the original conditions from baseQuery to avoid duplication
+        Object.keys(baseQuery).forEach((key) => {
+          if (key !== '$and') delete baseQuery[key];
+        });
+      } else {
+        Object.assign(baseQuery, cursorCondition);
+      }
+    } catch (error) {
+      logger.warn('Invalid cursor:', error.message);
+    }
+  }
+
+  // Build aggregation pipeline
+  const pipeline = [{ $match: baseQuery }, { $sort: { updatedAt: -1, _id: 1 } }];
+
+  // Only apply limit if pagination is requested
+  if (isPaginated) {
+    pipeline.push({ $limit: normalizedLimit + 1 });
+  }
+
+  // Add lookup for production prompt
+  pipeline.push(
+    {
+      $lookup: {
+        from: 'prompts',
+        localField: 'productionId',
+        foreignField: '_id',
+        as: 'productionPrompt',
+      },
+    },
+    { $unwind: { path: '$productionPrompt', preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        name: 1,
+        numberOfGenerations: 1,
+        oneliner: 1,
+        category: 1,
+        projectIds: 1,
+        productionId: 1,
+        author: 1,
+        authorName: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        'productionPrompt.prompt': 1,
+      },
+    },
+  );
+
+  const promptGroups = await PromptGroup.aggregate(pipeline).exec();
+
+  const hasMore = isPaginated ? promptGroups.length > normalizedLimit : false;
+  const data = (isPaginated ? promptGroups.slice(0, normalizedLimit) : promptGroups).map(
+    (group) => {
+      if (group.author) {
+        group.author = group.author.toString();
+      }
+      return group;
+    },
+  );
+
+  // Generate next cursor only if paginated
+  let nextCursor = null;
+  if (isPaginated && hasMore && data.length > 0) {
+    const lastGroup = promptGroups[normalizedLimit - 1];
+    nextCursor = Buffer.from(
+      JSON.stringify({
+        updatedAt: lastGroup.updatedAt.toISOString(),
+        _id: lastGroup._id.toString(),
+      }),
+    ).toString('base64');
+  }
+
+  return {
+    object: 'list',
+    data,
+    first_id: data.length > 0 ? data[0]._id.toString() : null,
+    last_id: data.length > 0 ? data[data.length - 1]._id.toString() : null,
+    has_more: hasMore,
+    after: nextCursor,
+  };
+}
+
 module.exports = {
   getPromptGroups,
+  deletePromptGroup,
   getAllPromptGroups,
+  getListPromptGroupsByAccess,
   /**
    * Create a prompt and its respective group
    * @param {TCreatePromptRecord} saveData
@@ -403,6 +559,16 @@ module.exports = {
       .lean();
 
     if (remainingPrompts.length === 0) {
+      // Remove all ACL entries for the promptGroup when deleting the last prompt
+      try {
+        await removeAllPermissions({
+          resourceType: ResourceType.PROMPTGROUP,
+          resourceId: groupId,
+        });
+      } catch (error) {
+        logger.error('Error removing promptGroup permissions:', error);
+      }
+
       await PromptGroup.deleteOne({ _id: groupId });
       await removeGroupFromAllProjects(groupId);
 
@@ -423,6 +589,36 @@ module.exports = {
       }
 
       return { prompt: 'Prompt deleted successfully' };
+    }
+  },
+  /**
+   * Delete all prompts and prompt groups created by a specific user.
+   * @param {ServerRequest} req - The server request object.
+   * @param {string} userId - The ID of the user whose prompts and prompt groups are to be deleted.
+   */
+  deleteUserPrompts: async (req, userId) => {
+    try {
+      const promptGroups = await getAllPromptGroups(req, { author: new ObjectId(userId) });
+
+      if (promptGroups.length === 0) {
+        return;
+      }
+
+      const groupIds = promptGroups.map((group) => group._id);
+
+      for (const groupId of groupIds) {
+        await removeGroupFromAllProjects(groupId);
+      }
+
+      await AclEntry.deleteMany({
+        resourceType: ResourceType.PROMPTGROUP,
+        resourceId: { $in: groupIds },
+      });
+
+      await PromptGroup.deleteMany({ author: new ObjectId(userId) });
+      await Prompt.deleteMany({ author: new ObjectId(userId) });
+    } catch (error) {
+      logger.error('[deleteUserPrompts] General error:', error);
     }
   },
   /**
@@ -507,22 +703,6 @@ module.exports = {
     } catch (error) {
       logger.error('Error updating prompt labels', error);
       return { message: 'Error updating prompt labels' };
-    }
-  },
-  deletePromptGroup: async (_id) => {
-    try {
-      const response = await PromptGroup.deleteOne({ _id });
-
-      if (response.deletedCount === 0) {
-        return { promptGroup: 'Prompt group not found' };
-      }
-
-      await Prompt.deleteMany({ groupId: new ObjectId(_id) });
-      await removeGroupFromAllProjects(_id);
-      return { promptGroup: 'Prompt group deleted successfully' };
-    } catch (error) {
-      logger.error('Error deleting prompt group', error);
-      return { message: 'Error deleting prompt group' };
     }
   },
 };

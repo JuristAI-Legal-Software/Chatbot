@@ -1,7 +1,7 @@
-import type { TFile } from 'librechat-data-provider';
+/* eslint-disable i18next/no-literal-string */
 import React from 'react';
-import { TrashIcon } from '~/components/svg';
-import { Button } from '~/components/ui';
+import { Button, TrashIcon } from '@librechat/client';
+import type { TFile } from 'librechat-data-provider';
 
 type FileListItemProps = {
   file: TFile;

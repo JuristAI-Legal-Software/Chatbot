@@ -1,5 +1,6 @@
+const { isUserProvided } = require('@librechat/api');
 const { EModelEndpoint } = require('librechat-data-provider');
-const { isUserProvided, generateConfig } = require('~/server/utils');
+const { generateConfig } = require('~/server/utils/handleText');
 
 const {
   OPENAI_API_KEY: openAIApiKey,
@@ -8,7 +9,6 @@ const {
   AZURE_API_KEY: azureOpenAIApiKey,
   ANTHROPIC_API_KEY: anthropicApiKey,
   CHATGPT_TOKEN: chatGPTToken,
-  BINGAI_TOKEN: bingToken,
   PLUGINS_USE_AZURE,
   GOOGLE_KEY: googleKey,
   OPENAI_REVERSE_PROXY,
@@ -30,7 +30,6 @@ module.exports = {
     useAzurePlugins,
     userProvidedOpenAI,
     googleKey,
-    [EModelEndpoint.bingAI]: generateConfig(bingToken),
     [EModelEndpoint.anthropic]: generateConfig(anthropicApiKey),
     [EModelEndpoint.chatGPTBrowser]: generateConfig(chatGPTToken),
     [EModelEndpoint.openAI]: generateConfig(openAIApiKey, OPENAI_REVERSE_PROXY),
@@ -45,5 +44,10 @@ module.exports = {
       AZURE_ASSISTANTS_BASE_URL,
       EModelEndpoint.azureAssistants,
     ),
+    [EModelEndpoint.bedrock]: generateConfig(
+      process.env.BEDROCK_AWS_SECRET_ACCESS_KEY ?? process.env.BEDROCK_AWS_DEFAULT_REGION,
+    ),
+    /* key will be part of separate config */
+    [EModelEndpoint.agents]: generateConfig('true', undefined, EModelEndpoint.agents),
   },
 };

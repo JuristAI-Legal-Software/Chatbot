@@ -1,8 +1,9 @@
 const { v4: uuidv4 } = require('uuid');
+const { logger } = require('@librechat/data-schemas');
 const { EModelEndpoint, Constants, openAISettings, CacheKeys } = require('librechat-data-provider');
 const { createImportBatchBuilder } = require('./importBatchBuilder');
+const { cloneMessagesWithTimestamps } = require('./fork');
 const getLogStores = require('~/cache/getLogStores');
-const logger = require('~/config/winston');
 
 /**
  * Returns the appropriate importer function based on the provided JSON data.
@@ -107,65 +108,47 @@ async function importLibreChatConvo(
 
     if (jsonData.recursive) {
       /**
-       * Recursively traverse the messages tree and save each message to the database.
+       * Flatten the recursive message tree into a flat array
        * @param {TMessage[]} messages
        * @param {string} parentMessageId
+       * @param {TMessage[]} flatMessages
        */
-      const traverseMessages = async (messages, parentMessageId = null) => {
+      const flattenMessages = (
+        messages,
+        parentMessageId = Constants.NO_PARENT,
+        flatMessages = [],
+      ) => {
         for (const message of messages) {
-          if (!message.text) {
+          if (!message.text && !message.content) {
             continue;
           }
 
-          let savedMessage;
-          if (message.sender?.toLowerCase() === 'user' || message.isCreatedByUser) {
-            savedMessage = await importBatchBuilder.saveMessage({
-              text: message.text,
-              sender: 'user',
-              isCreatedByUser: true,
-              parentMessageId: parentMessageId,
-            });
-          } else {
-            savedMessage = await importBatchBuilder.saveMessage({
-              text: message.text,
-              sender: message.sender,
-              isCreatedByUser: false,
-              model: options.model,
-              parentMessageId: parentMessageId,
-            });
-          }
+          const flatMessage = {
+            ...message,
+            parentMessageId: parentMessageId,
+            children: undefined, // Remove children from flat structure
+          };
+          flatMessages.push(flatMessage);
 
           if (!firstMessageDate && message.createdAt) {
             firstMessageDate = new Date(message.createdAt);
           }
 
           if (message.children && message.children.length > 0) {
-            await traverseMessages(message.children, savedMessage.messageId);
+            flattenMessages(message.children, message.messageId, flatMessages);
           }
         }
+        return flatMessages;
       };
 
-      await traverseMessages(messagesToImport);
+      const flatMessages = flattenMessages(messagesToImport);
+      cloneMessagesWithTimestamps(flatMessages, importBatchBuilder);
     } else if (messagesToImport) {
-      const idMapping = new Map();
-
+      cloneMessagesWithTimestamps(messagesToImport, importBatchBuilder);
       for (const message of messagesToImport) {
         if (!firstMessageDate && message.createdAt) {
           firstMessageDate = new Date(message.createdAt);
         }
-        const newMessageId = uuidv4();
-        idMapping.set(message.messageId, newMessageId);
-
-        const clonedMessage = {
-          ...message,
-          messageId: newMessageId,
-          parentMessageId:
-            message.parentMessageId && message.parentMessageId !== Constants.NO_PARENT
-              ? idMapping.get(message.parentMessageId) || Constants.NO_PARENT
-              : Constants.NO_PARENT,
-        };
-
-        importBatchBuilder.saveMessage(clonedMessage);
       }
     } else {
       throw new Error('Invalid LibreChat file format');
@@ -229,6 +212,29 @@ function processConversation(conv, importBatchBuilder, requestUserId) {
     }
   }
 
+  /**
+   * Helper function to find the nearest non-system parent
+   * @param {string} parentId - The ID of the parent message.
+   * @returns {string} The ID of the nearest non-system parent message.
+   */
+  const findNonSystemParent = (parentId) => {
+    if (!parentId || !messageMap.has(parentId)) {
+      return Constants.NO_PARENT;
+    }
+
+    const parentMapping = conv.mapping[parentId];
+    if (!parentMapping?.message) {
+      return Constants.NO_PARENT;
+    }
+
+    /* If parent is a system message, traverse up to find the nearest non-system parent */
+    if (parentMapping.message.author?.role === 'system') {
+      return findNonSystemParent(parentMapping.parent);
+    }
+
+    return messageMap.get(parentId);
+  };
+
   // Create and save messages using the mapped IDs
   const messages = [];
   for (const [id, mapping] of Object.entries(conv.mapping)) {
@@ -237,23 +243,27 @@ function processConversation(conv, importBatchBuilder, requestUserId) {
       messageMap.delete(id);
       continue;
     } else if (role === 'system') {
-      messageMap.delete(id);
+      // Skip system messages but keep their ID in messageMap for parent references
       continue;
     }
 
     const newMessageId = messageMap.get(id);
-    const parentMessageId =
-      mapping.parent && messageMap.has(mapping.parent)
-        ? messageMap.get(mapping.parent)
-        : Constants.NO_PARENT;
+    const parentMessageId = findNonSystemParent(mapping.parent);
 
     const messageText = formatMessageText(mapping.message);
 
     const isCreatedByUser = role === 'user';
-    let sender = isCreatedByUser ? 'user' : 'GPT-3.5';
+    let sender = isCreatedByUser ? 'user' : 'assistant';
     const model = mapping.message.metadata.model_slug || openAISettings.model.default;
-    if (model.includes('gpt-4')) {
-      sender = 'GPT-4';
+
+    if (!isCreatedByUser) {
+      /** Extracted model name from model slug */
+      const gptMatch = model.match(/gpt-(.+)/i);
+      if (gptMatch) {
+        sender = `GPT-${gptMatch[1]}`;
+      } else {
+        sender = model || 'assistant';
+      }
     }
 
     messages.push({
@@ -277,34 +287,39 @@ function processConversation(conv, importBatchBuilder, requestUserId) {
 
 /**
  * Processes text content of messages authored by an assistant, inserting citation links as required.
- * Applies citation metadata to construct regex patterns and replacements for inserting links into the text.
+ * Uses citation start and end indices to place links at the correct positions.
  *
  * @param {ChatGPTMessage} messageData - The message data containing metadata about citations.
  * @param {string} messageText - The original text of the message which may be altered by inserting citation links.
  * @returns {string} - The updated message text after processing for citations.
  */
 function processAssistantMessage(messageData, messageText) {
-  const citations = messageData.metadata.citations ?? [];
+  if (!messageText) {
+    return messageText;
+  }
 
-  for (const citation of citations) {
+  const citations = messageData.metadata?.citations ?? [];
+
+  const sortedCitations = [...citations].sort((a, b) => b.start_ix - a.start_ix);
+
+  let result = messageText;
+  for (const citation of sortedCitations) {
     if (
-      !citation.metadata ||
-      !citation.metadata.extra ||
-      !citation.metadata.extra.cited_message_idx ||
-      (citation.metadata.type && citation.metadata.type !== 'webpage')
+      !citation.metadata?.type ||
+      citation.metadata.type !== 'webpage' ||
+      typeof citation.start_ix !== 'number' ||
+      typeof citation.end_ix !== 'number' ||
+      citation.start_ix >= citation.end_ix
     ) {
       continue;
     }
 
-    const pattern = new RegExp(
-      `\\u3010${citation.metadata.extra.cited_message_idx}\\u2020.+?\\u3011`,
-      'g',
-    );
     const replacement = ` ([${citation.metadata.title}](${citation.metadata.url}))`;
-    messageText = messageText.replace(pattern, replacement);
+
+    result = result.slice(0, citation.start_ix) + replacement + result.slice(citation.end_ix);
   }
 
-  return messageText;
+  return result;
 }
 
 /**
@@ -342,4 +357,4 @@ function formatMessageText(messageData) {
   return messageText;
 }
 
-module.exports = { getImporter };
+module.exports = { getImporter, processAssistantMessage };

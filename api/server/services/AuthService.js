@@ -1,22 +1,28 @@
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { webcrypto } = require('node:crypto');
-const { SystemRoles, errorsToString } = require('librechat-data-provider');
+const { logger } = require('@librechat/data-schemas');
+const { isEnabled, checkEmailConfig, isEmailDomainAllowed } = require('@librechat/api');
+const { ErrorTypes, SystemRoles, errorsToString } = require('librechat-data-provider');
 const {
   findUser,
-  countUsers,
+  findToken,
   createUser,
   updateUser,
+  countUsers,
   getUserById,
+  findSession,
+  createToken,
+  deleteTokens,
+  deleteSession,
+  createSession,
   generateToken,
   deleteUserById,
-} = require('~/models/userMethods');
-const { sendEmail, checkEmailConfig } = require('~/server/utils');
+  generateRefreshToken,
+} = require('~/models');
 const { registerSchema } = require('~/strategies/validators');
-const { hashToken } = require('~/server/utils/crypto');
-const isDomainAllowed = require('./isDomainAllowed');
-const Token = require('~/models/schema/tokenSchema');
-const Session = require('~/models/Session');
-const { logger } = require('~/config');
+const { getAppConfig } = require('~/server/services/Config');
+const { sendEmail } = require('~/server/utils');
 
 const domains = {
   client: process.env.DOMAIN_CLIENT,
@@ -29,23 +35,28 @@ const genericVerificationMessage = 'Please check your email to verify your email
 /**
  * Logout user
  *
- * @param {String} userId
- * @param {*} refreshToken
+ * @param {ServerRequest} req
+ * @param {string} refreshToken
  * @returns
  */
-const logoutUser = async (userId, refreshToken) => {
+const logoutUser = async (req, refreshToken) => {
   try {
-    const hash = await hashToken(refreshToken);
+    const userId = req.user._id;
+    const session = await findSession({ userId: userId, refreshToken });
 
-    // Find the session with the matching user and refreshTokenHash
-    const session = await Session.findOne({ user: userId, refreshTokenHash: hash });
     if (session) {
       try {
-        await Session.deleteOne({ _id: session._id });
+        await deleteSession({ sessionId: session._id });
       } catch (deleteErr) {
         logger.error('[logoutUser] Failed to delete session.', deleteErr);
         return { status: 500, message: 'Failed to delete session.' };
       }
+    }
+
+    try {
+      req.session.destroy();
+    } catch (destroyErr) {
+      logger.debug('[logoutUser] Failed to destroy session.', destroyErr);
     }
 
     return { status: 200, message: 'Logout successful' };
@@ -66,7 +77,7 @@ const createTokenHash = () => {
 
 /**
  * Send Verification Email
- * @param {Partial<MongoUser> & { _id: ObjectId, email: string, name: string}} user
+ * @param {Partial<IUser>} user
  * @returns {Promise<void>}
  */
 const sendVerificationEmail = async (user) => {
@@ -80,59 +91,77 @@ const sendVerificationEmail = async (user) => {
     subject: 'Verify your email',
     payload: {
       appName: process.env.APP_TITLE || 'LibreChat',
-      name: user.name,
+      name: user.name || user.username || user.email,
       verificationLink: verificationLink,
       year: new Date().getFullYear(),
     },
     template: 'verifyEmail.handlebars',
   });
 
-  await new Token({
+  await createToken({
     userId: user._id,
     email: user.email,
     token: hash,
     createdAt: Date.now(),
-  }).save();
+    expiresIn: 900,
+  });
 
   logger.info(`[sendVerificationEmail] Verification link issued. [Email: ${user.email}]`);
 };
 
 /**
  * Verify Email
- * @param {Express.Request} req
+ * @param {ServerRequest} req
  */
 const verifyEmail = async (req) => {
   const { email, token } = req.body;
-  let emailVerificationData = await Token.findOne({ email: decodeURIComponent(email) });
+  const decodedEmail = decodeURIComponent(email);
+
+  const user = await findUser({ email: decodedEmail }, 'email _id emailVerified');
+
+  if (!user) {
+    logger.warn(`[verifyEmail] [User not found] [Email: ${decodedEmail}]`);
+    return new Error('User not found');
+  }
+
+  if (user.emailVerified) {
+    logger.info(`[verifyEmail] Email already verified [Email: ${decodedEmail}]`);
+    return { message: 'Email already verified', status: 'success' };
+  }
+
+  let emailVerificationData = await findToken({ email: decodedEmail }, { sort: { createdAt: -1 } });
 
   if (!emailVerificationData) {
-    logger.warn(`[verifyEmail] [No email verification data found] [Email: ${email}]`);
+    logger.warn(`[verifyEmail] [No email verification data found] [Email: ${decodedEmail}]`);
     return new Error('Invalid or expired password reset token');
   }
 
   const isValid = bcrypt.compareSync(token, emailVerificationData.token);
 
   if (!isValid) {
-    logger.warn(`[verifyEmail] [Invalid or expired email verification token] [Email: ${email}]`);
+    logger.warn(
+      `[verifyEmail] [Invalid or expired email verification token] [Email: ${decodedEmail}]`,
+    );
     return new Error('Invalid or expired email verification token');
   }
 
   const updatedUser = await updateUser(emailVerificationData.userId, { emailVerified: true });
+
   if (!updatedUser) {
-    logger.warn(`[verifyEmail] [User not found] [Email: ${email}]`);
-    return new Error('User not found');
+    logger.warn(`[verifyEmail] [User update failed] [Email: ${decodedEmail}]`);
+    return new Error('Failed to update user verification status');
   }
 
-  await emailVerificationData.deleteOne();
-  logger.info(`[verifyEmail] Email verification successful. [Email: ${email}]`);
-  return { message: 'Email verification was successful' };
+  await deleteTokens({ token: emailVerificationData.token });
+  logger.info(`[verifyEmail] Email verification successful [Email: ${decodedEmail}]`);
+  return { message: 'Email verification was successful', status: 'success' };
 };
 
 /**
  * Register a new user.
- * @param {MongoUser} user <email, password, name, username>
- * @param {Partial<MongoUser>} [additionalData={}]
- * @returns {Promise<{status: number, message: string, user?: MongoUser}>}
+ * @param {IUser} user <email, password, name, username>
+ * @param {Partial<IUser>} [additionalData={}]
+ * @returns {Promise<{status: number, message: string, user?: IUser}>}
  */
 const registerUser = async (user, additionalData = {}) => {
   const { error } = registerSchema.safeParse(user);
@@ -147,10 +176,18 @@ const registerUser = async (user, additionalData = {}) => {
     return { status: 404, message: errorMessage };
   }
 
-  const { email, password, name, username } = user;
+  const { email, password, name, username, provider } = user;
 
   let newUserId;
   try {
+    const appConfig = await getAppConfig();
+    if (!isEmailDomainAllowed(email, appConfig?.registration?.allowedDomains)) {
+      const errorMessage =
+        'The email address provided cannot be used. Please use a different email address.';
+      logger.error(`[registerUser] [Registration not allowed] [Email: ${user.email}]`);
+      return { status: 403, message: errorMessage };
+    }
+
     const existingUser = await findUser({ email }, 'email _id');
 
     if (existingUser) {
@@ -165,19 +202,12 @@ const registerUser = async (user, additionalData = {}) => {
       return { status: 200, message: genericVerificationMessage };
     }
 
-    if (!(await isDomainAllowed(email))) {
-      const errorMessage =
-        'The email address provided cannot be used. Please use a different email address.';
-      logger.error(`[registerUser] [Registration not allowed] [Email: ${user.email}]`);
-      return { status: 403, message: errorMessage };
-    }
-
     //determine if this is the first registered user (not counting anonymous_user)
     const isFirstRegisteredUser = (await countUsers()) === 0;
 
     const salt = bcrypt.genSaltSync(10);
     const newUserData = {
-      provider: 'local',
+      provider: provider ?? 'local',
       email,
       username,
       name,
@@ -188,7 +218,9 @@ const registerUser = async (user, additionalData = {}) => {
     };
 
     const emailEnabled = checkEmailConfig();
-    const newUser = await createUser(newUserData, false, true);
+    const disableTTL = isEnabled(process.env.ALLOW_UNVERIFIED_EMAIL_LOGIN);
+
+    const newUser = await createUser(newUserData, appConfig.balance, disableTTL, true);
     newUserId = newUser._id;
     if (emailEnabled && !newUser.emailVerified) {
       await sendVerificationEmail({
@@ -215,10 +247,17 @@ const registerUser = async (user, additionalData = {}) => {
 
 /**
  * Request password reset
- * @param {Express.Request} req
+ * @param {ServerRequest} req
  */
 const requestPasswordReset = async (req) => {
   const { email } = req.body;
+  const appConfig = await getAppConfig();
+  if (!isEmailDomainAllowed(email, appConfig?.registration?.allowedDomains)) {
+    const error = new Error(ErrorTypes.AUTH_FAILED);
+    error.code = ErrorTypes.AUTH_FAILED;
+    error.message = 'Email domain not allowed';
+    return error;
+  }
   const user = await findUser({ email }, 'email _id');
   const emailEnabled = checkEmailConfig();
 
@@ -231,18 +270,16 @@ const requestPasswordReset = async (req) => {
     };
   }
 
-  let token = await Token.findOne({ userId: user._id });
-  if (token) {
-    await token.deleteOne();
-  }
+  await deleteTokens({ userId: user._id });
 
   const [resetToken, hash] = createTokenHash();
 
-  await new Token({
+  await createToken({
     userId: user._id,
     token: hash,
     createdAt: Date.now(),
-  }).save();
+    expiresIn: 900,
+  });
 
   const link = `${domains.client}/reset-password?token=${resetToken}&userId=${user._id}`;
 
@@ -252,7 +289,7 @@ const requestPasswordReset = async (req) => {
       subject: 'Password Reset Request',
       payload: {
         appName: process.env.APP_TITLE || 'LibreChat',
-        name: user.name,
+        name: user.name || user.username || user.email,
         link: link,
         year: new Date().getFullYear(),
       },
@@ -282,7 +319,12 @@ const requestPasswordReset = async (req) => {
  * @returns
  */
 const resetPassword = async (userId, token, password) => {
-  let passwordResetToken = await Token.findOne({ userId });
+  let passwordResetToken = await findToken(
+    {
+      userId,
+    },
+    { sort: { createdAt: -1 } },
+  );
 
   if (!passwordResetToken) {
     return new Error('Invalid or expired password reset token');
@@ -303,44 +345,43 @@ const resetPassword = async (userId, token, password) => {
       subject: 'Password Reset Successfully',
       payload: {
         appName: process.env.APP_TITLE || 'LibreChat',
-        name: user.name,
+        name: user.name || user.username || user.email,
         year: new Date().getFullYear(),
       },
       template: 'passwordReset.handlebars',
     });
   }
 
-  await passwordResetToken.deleteOne();
+  await deleteTokens({ token: passwordResetToken.token });
   logger.info(`[resetPassword] Password reset successful. [Email: ${user.email}]`);
   return { message: 'Password reset was successful' };
 };
 
 /**
  * Set Auth Tokens
- *
  * @param {String | ObjectId} userId
- * @param {Object} res
- * @param {String} sessionId
+ * @param {ServerResponse} res
+ * @param {ISession | null} [session=null]
  * @returns
  */
-const setAuthTokens = async (userId, res, sessionId = null) => {
+const setAuthTokens = async (userId, res, _session = null) => {
   try {
-    const user = await getUserById(userId);
-    const token = await generateToken(user);
-
-    let session;
+    let session = _session;
+    let refreshToken;
     let refreshTokenExpires;
-    if (sessionId) {
-      session = await Session.findById(sessionId);
+
+    if (session && session._id && session.expiration != null) {
       refreshTokenExpires = session.expiration.getTime();
+      refreshToken = await generateRefreshToken(session);
     } else {
-      session = new Session({ user: userId });
-      const { REFRESH_TOKEN_EXPIRY } = process.env ?? {};
-      const expires = eval(REFRESH_TOKEN_EXPIRY) ?? 1000 * 60 * 60 * 24 * 7;
-      refreshTokenExpires = Date.now() + expires;
+      const result = await createSession(userId);
+      session = result.session;
+      refreshToken = result.refreshToken;
+      refreshTokenExpires = session.expiration.getTime();
     }
 
-    const refreshToken = await session.generateRefreshToken();
+    const user = await getUserById(userId);
+    const token = await generateToken(user);
 
     res.cookie('refreshToken', refreshToken, {
       expires: new Date(refreshTokenExpires),
@@ -348,10 +389,89 @@ const setAuthTokens = async (userId, res, sessionId = null) => {
       secure: isProduction,
       sameSite: 'strict',
     });
-
+    res.cookie('token_provider', 'librechat', {
+      expires: new Date(refreshTokenExpires),
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'strict',
+    });
     return token;
   } catch (error) {
     logger.error('[setAuthTokens] Error in setting authentication tokens:', error);
+    throw error;
+  }
+};
+
+/**
+ * @function setOpenIDAuthTokens
+ * Set OpenID Authentication Tokens
+ * //type tokenset from openid-client
+ * @param {import('openid-client').TokenEndpointResponse & import('openid-client').TokenEndpointResponseHelpers} tokenset
+ * - The tokenset object containing access and refresh tokens
+ * @param {Object} res - response object
+ * @param {string} [userId] - Optional MongoDB user ID for image path validation
+ * @returns {String} - access token
+ */
+const setOpenIDAuthTokens = (tokenset, res, userId, existingRefreshToken) => {
+  try {
+    if (!tokenset) {
+      logger.error('[setOpenIDAuthTokens] No tokenset found in request');
+      return;
+    }
+    const { REFRESH_TOKEN_EXPIRY } = process.env ?? {};
+    const expiryInMilliseconds = REFRESH_TOKEN_EXPIRY
+      ? eval(REFRESH_TOKEN_EXPIRY)
+      : 1000 * 60 * 60 * 24 * 7; // 7 days default
+    const expirationDate = new Date(Date.now() + expiryInMilliseconds);
+    if (tokenset == null) {
+      logger.error('[setOpenIDAuthTokens] No tokenset found in request');
+      return;
+    }
+    if (!tokenset.access_token) {
+      logger.error('[setOpenIDAuthTokens] No access token found in tokenset');
+      return;
+    }
+
+    const refreshToken = tokenset.refresh_token || existingRefreshToken;
+
+    if (!refreshToken) {
+      logger.error('[setOpenIDAuthTokens] No refresh token available');
+      return;
+    }
+
+    res.cookie('refreshToken', refreshToken, {
+      expires: expirationDate,
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'strict',
+    });
+    res.cookie('openid_access_token', tokenset.access_token, {
+      expires: expirationDate,
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'strict',
+    });
+    res.cookie('token_provider', 'openid', {
+      expires: expirationDate,
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'strict',
+    });
+    if (userId && isEnabled(process.env.OPENID_REUSE_TOKENS)) {
+      /** JWT-signed user ID cookie for image path validation when OPENID_REUSE_TOKENS is enabled */
+      const signedUserId = jwt.sign({ id: userId }, process.env.JWT_REFRESH_SECRET, {
+        expiresIn: expiryInMilliseconds / 1000,
+      });
+      res.cookie('openid_user_id', signedUserId, {
+        expires: expirationDate,
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: 'strict',
+      });
+    }
+    return tokenset.access_token;
+  } catch (error) {
+    logger.error('[setOpenIDAuthTokens] Error in setting authentication tokens:', error);
     throw error;
   }
 };
@@ -366,7 +486,7 @@ const setAuthTokens = async (userId, res, sessionId = null) => {
 const resendVerificationEmail = async (req) => {
   try {
     const { email } = req.body;
-    await Token.deleteMany({ email });
+    await deleteTokens({ email });
     const user = await findUser({ email }, 'email _id name');
 
     if (!user) {
@@ -385,19 +505,20 @@ const resendVerificationEmail = async (req) => {
       subject: 'Verify your email',
       payload: {
         appName: process.env.APP_TITLE || 'LibreChat',
-        name: user.name,
+        name: user.name || user.username || user.email,
         verificationLink: verificationLink,
         year: new Date().getFullYear(),
       },
       template: 'verifyEmail.handlebars',
     });
 
-    await new Token({
+    await createToken({
       userId: user._id,
       email: user.email,
       token: hash,
       createdAt: Date.now(),
-    }).save();
+      expiresIn: 900,
+    });
 
     logger.info(`[resendVerificationEmail] Verification link issued. [Email: ${user.email}]`);
 
@@ -420,7 +541,7 @@ module.exports = {
   registerUser,
   setAuthTokens,
   resetPassword,
-  isDomainAllowed,
+  setOpenIDAuthTokens,
   requestPasswordReset,
   resendVerificationEmail,
 };

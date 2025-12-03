@@ -1,11 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
 import type { TConversationTag } from 'librechat-data-provider';
+import { TableRow, TableCell, useToastContext } from '@librechat/client';
 import { DeleteBookmarkButton, EditBookmarkButton } from '~/components/Bookmarks';
 import { useConversationTagMutation } from '~/data-provider';
-import { TableRow, TableCell } from '~/components/ui';
 import { NotificationSeverity } from '~/common';
-import { useToastContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
 
 interface BookmarkTableRowProps {
@@ -21,42 +20,40 @@ interface DragItem {
 }
 
 const BookmarkTableRow: React.FC<BookmarkTableRowProps> = ({ row, moveRow, position }) => {
-  const [isHovered, setIsHovered] = useState(false);
   const ref = useRef<HTMLTableRowElement>(null);
-
-  const mutation = useConversationTagMutation(row.tag);
+  const mutation = useConversationTagMutation({ context: 'BookmarkTableRow', tag: row.tag });
   const localize = useLocalize();
   const { showToast } = useToastContext();
 
   const handleDrop = (item: DragItem) => {
-    const data = {
-      ...row,
-      position: item.index,
-    };
-    mutation.mutate(data, {
-      onError: () => {
-        showToast({
-          message: localize('com_ui_bookmarks_update_error'),
-          severity: NotificationSeverity.ERROR,
-        });
+    mutation.mutate(
+      { ...row, position: item.index },
+      {
+        onSuccess: () => {
+          showToast({
+            message: localize('com_ui_bookmarks_update_success'),
+            severity: NotificationSeverity.SUCCESS,
+          });
+        },
+        onError: () => {
+          showToast({
+            message: localize('com_ui_bookmarks_update_error'),
+            severity: NotificationSeverity.ERROR,
+          });
+        },
       },
-    });
+    );
   };
 
   const [, drop] = useDrop({
     accept: 'bookmark',
-    drop: (item: DragItem) => handleDrop(item),
+    drop: handleDrop,
     hover(item: DragItem) {
-      if (!ref.current) {
+      if (!ref.current || item.index === position) {
         return;
       }
-      const dragIndex = item.index;
-      const hoverIndex = position;
-      if (dragIndex === hoverIndex) {
-        return;
-      }
-      moveRow(dragIndex, hoverIndex);
-      item.index = hoverIndex;
+      moveRow(item.index, position);
+      item.index = position;
     },
   });
 
@@ -75,37 +72,15 @@ const BookmarkTableRow: React.FC<BookmarkTableRowProps> = ({ row, moveRow, posit
       ref={ref}
       className="cursor-move hover:bg-surface-secondary"
       style={{ opacity: isDragging ? 0.5 : 1 }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
-      <TableCell className="w-full px-3 py-3.5 pl-6">
-        <div className="truncate">{row.tag}</div>
+      <TableCell className="w-[70%] px-4 py-4">
+        <div className="overflow-hidden text-ellipsis whitespace-nowrap">{row.tag}</div>
       </TableCell>
-      <TableCell className="w-full px-3 py-3.5 sm:pl-6">
-        <div className="flex items-center justify-between py-1">
-          <div>{row.count}</div>
-          <div
-            className="flex items-center gap-2"
-            style={{
-              opacity: isHovered ? 1 : 0,
-              transition: 'opacity 0.1s ease-in-out',
-            }}
-            onFocus={() => setIsHovered(true)}
-            onBlur={() => setIsHovered(false)}
-          >
-            <EditBookmarkButton
-              bookmark={row}
-              tabIndex={0}
-              onFocus={() => setIsHovered(true)}
-              onBlur={() => setIsHovered(false)}
-            />
-            <DeleteBookmarkButton
-              bookmark={row.tag}
-              tabIndex={0}
-              onFocus={() => setIsHovered(true)}
-              onBlur={() => setIsHovered(false)}
-            />
-          </div>
+      <TableCell className="w-[10%] px-12 py-4">{row.count}</TableCell>
+      <TableCell className="w-[20%] px-4 py-4">
+        <div className="flex gap-2">
+          <EditBookmarkButton bookmark={row} tabIndex={0} />
+          <DeleteBookmarkButton bookmark={row.tag} tabIndex={0} />
         </div>
       </TableCell>
     </TableRow>

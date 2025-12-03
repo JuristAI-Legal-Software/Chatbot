@@ -32,12 +32,14 @@ const MenuItem: FC<MenuItemProps> = ({
 }) => {
   return (
     <div
-      role="menuitem"
-      aria-label={`menu item for ${title} ${description}`}
+      id={selected ? 'selected-endpoint' : undefined}
+      role="option"
+      aria-selected={selected}
+      aria-label={title}
       data-testid="chat-menu-item"
       className={cn(
         'group m-1.5 flex cursor-pointer gap-2 rounded px-5 py-2.5 !pr-3 text-sm !opacity-100 hover:bg-black/5 focus:ring-0 radix-disabled:pointer-events-none radix-disabled:opacity-50 dark:hover:bg-gray-600 md:min-w-[240px]',
-        className || '',
+        className,
       )}
       tabIndex={0} // Change to 0 to make it focusable
       onClick={onClick}
@@ -53,7 +55,7 @@ const MenuItem: FC<MenuItemProps> = ({
     >
       <div className="flex grow items-center justify-between gap-2">
         <div>
-          <div className={cn('flex items-center gap-1 ')}>
+          <div className={cn('flex items-center gap-1')}>
             {icon != null ? icon : null}
             <div className={cn('truncate', textClassName)}>
               {title}
@@ -70,7 +72,7 @@ const MenuItem: FC<MenuItemProps> = ({
               viewBox="0 0 24 24"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
-              className="icon-md block "
+              className="icon-md block"
             >
               <path
                 fillRule="evenodd"

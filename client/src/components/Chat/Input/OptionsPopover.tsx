@@ -1,11 +1,10 @@
 import { useRef } from 'react';
 import { Save } from 'lucide-react';
 import { Portal, Content } from '@radix-ui/react-popover';
+import { Button, CrossIcon, useOnClickOutside } from '@librechat/client';
 import type { ReactNode } from 'react';
-import { useLocalize, useOnClickOutside } from '~/hooks';
 import { cn, removeFocusOutlines } from '~/utils';
-import { CrossIcon } from '~/components/svg';
-import { Button } from '~/components/ui';
+import { useLocalize } from '~/hooks';
 
 type TOptionsPopoverProps = {
   children: ReactNode;
@@ -33,12 +32,12 @@ export default function OptionsPopover({
     (_target) => {
       const target = _target as Element;
       if (
-        target?.id === 'presets-button' ||
-        (target?.parentNode instanceof Element && target.parentNode.id === 'presets-button')
+        target.id === 'presets-button' ||
+        (target.parentNode instanceof Element && target.parentNode.id === 'presets-button')
       ) {
         return false;
       }
-      const tagName = target?.tagName;
+      const tagName = target.tagName;
       return tagName === 'path' || tagName === 'svg' || tagName === 'circle';
     },
   );
@@ -66,7 +65,7 @@ export default function OptionsPopover({
               {presetsDisabled ? null : (
                 <Button
                   type="button"
-                  className="h-auto w-[150px] justify-start rounded-md border border-gray-300/50 bg-transparent px-2 py-1 text-xs font-normal text-black hover:bg-gray-100 hover:text-black focus:ring-1 focus:ring-ring-primary dark:border-gray-500/50 dark:bg-transparent dark:text-white dark:hover:bg-gray-600 dark:focus:ring-white"
+                  className="h-auto w-[150px] justify-start rounded-md border border-gray-300/50 bg-transparent px-2 py-1 text-xs font-normal text-black hover:bg-gray-100 hover:text-black focus-visible:ring-1 focus-visible:ring-ring-primary dark:border-gray-600 dark:bg-transparent dark:text-white dark:hover:bg-gray-600 dark:focus-visible:ring-white"
                   onClick={saveAsPreset}
                 >
                   <Save className="mr-1 w-[14px]" />

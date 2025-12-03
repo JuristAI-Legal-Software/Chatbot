@@ -1,7 +1,8 @@
+const { logger } = require('@librechat/data-schemas');
+const { encrypt, decrypt } = require('@librechat/api');
 const { ErrorTypes } = require('librechat-data-provider');
-const { encrypt, decrypt } = require('~/server/utils');
-const { updateUser, Key } = require('~/models');
-const { logger } = require('~/config');
+const { updateUser } = require('~/models');
+const { Key } = require('~/db/models');
 
 /**
  * Updates the plugins for a user based on the action specified (install/uninstall).
@@ -69,6 +70,7 @@ const getUserKeyValues = async ({ userId, name }) => {
   try {
     userValues = JSON.parse(userValues);
   } catch (e) {
+    logger.error('[getUserKeyValues]', e);
     throw new Error(
       JSON.stringify({
         type: ErrorTypes.INVALID_USER_KEY,
@@ -103,10 +105,10 @@ const getUserKeyExpiry = async ({ userId, name }) => {
  * @param {string} params.userId - The unique identifier for the user.
  * @param {string} params.name - The name associated with the key.
  * @param {string} params.value - The value to be encrypted and stored as the key's value.
- * @param {Date} params.expiresAt - The expiry date for the key.
+ * @param {Date} params.expiresAt - The expiry date for the key [optional]
  * @returns {Promise<Object>} The updated or newly inserted key document.
  * @description This function either updates an existing user key or inserts a new one into the database,
- *              after encrypting the provided value. It sets the provided expiry date for the key.
+ *              after encrypting the provided value. It sets the provided expiry date for the key (or unsets for no expiry).
  */
 const updateUserKey = async ({ userId, name, value, expiresAt = null }) => {
   const encryptedValue = await encrypt(value);
@@ -115,13 +117,15 @@ const updateUserKey = async ({ userId, name, value, expiresAt = null }) => {
     name,
     value: encryptedValue,
   };
-
-  // Only add expiresAt to the update object if it's not null
+  const updateQuery = { $set: updateObject };
+  // add expiresAt to the update object if it's not null
   if (expiresAt) {
     updateObject.expiresAt = new Date(expiresAt);
+  } else {
+    // make sure to remove if already present
+    updateQuery.$unset = { expiresAt };
   }
-
-  return await Key.findOneAndUpdate({ userId, name }, updateObject, {
+  return await Key.findOneAndUpdate({ userId, name }, updateQuery, {
     upsert: true,
     new: true,
   }).lean();

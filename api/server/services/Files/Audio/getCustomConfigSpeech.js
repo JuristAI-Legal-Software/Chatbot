@@ -1,4 +1,5 @@
-const getCustomConfig = require('~/server/services/Config/getCustomConfig');
+const { logger } = require('@librechat/data-schemas');
+const { getAppConfig } = require('~/server/services/Config');
 
 /**
  * This function retrieves the speechTab settings from the custom configuration
@@ -14,43 +15,60 @@ const getCustomConfig = require('~/server/services/Config/getCustomConfig');
  */
 async function getCustomConfigSpeech(req, res) {
   try {
-    const customConfig = await getCustomConfig();
-    const sttExternal = !!customConfig.speech?.stt;
-    const ttsExternal = !!customConfig.speech?.tts;
+    const appConfig = await getAppConfig({
+      role: req.user?.role,
+    });
+
+    if (!appConfig) {
+      return res.status(200).send({
+        message: 'not_found',
+      });
+    }
+
+    const sttExternal = !!appConfig.speech?.stt;
+    const ttsExternal = !!appConfig.speech?.tts;
     let settings = {
       sttExternal,
       ttsExternal,
     };
 
-    if (!customConfig || !customConfig.speech?.speechTab) {
+    if (!appConfig.speech?.speechTab) {
       return res.status(200).send(settings);
     }
 
-    const speechTab = customConfig.speech.speechTab;
+    const speechTab = appConfig.speech.speechTab;
 
     if (speechTab.advancedMode !== undefined) {
       settings.advancedMode = speechTab.advancedMode;
     }
 
-    if (speechTab.speechToText) {
-      for (const key in speechTab.speechToText) {
-        if (speechTab.speechToText[key] !== undefined) {
-          settings[key] = speechTab.speechToText[key];
+    if (speechTab.speechToText !== undefined) {
+      if (typeof speechTab.speechToText === 'boolean') {
+        settings.speechToText = speechTab.speechToText;
+      } else {
+        for (const key in speechTab.speechToText) {
+          if (speechTab.speechToText[key] !== undefined) {
+            settings[key] = speechTab.speechToText[key];
+          }
         }
       }
     }
 
-    if (speechTab.textToSpeech) {
-      for (const key in speechTab.textToSpeech) {
-        if (speechTab.textToSpeech[key] !== undefined) {
-          settings[key] = speechTab.textToSpeech[key];
+    if (speechTab.textToSpeech !== undefined) {
+      if (typeof speechTab.textToSpeech === 'boolean') {
+        settings.textToSpeech = speechTab.textToSpeech;
+      } else {
+        for (const key in speechTab.textToSpeech) {
+          if (speechTab.textToSpeech[key] !== undefined) {
+            settings[key] = speechTab.textToSpeech[key];
+          }
         }
       }
     }
 
     return res.status(200).send(settings);
   } catch (error) {
-    console.error('Failed to get custom config speech settings:', error);
+    logger.error('Failed to get custom config speech settings:', error);
     res.status(500).send('Internal Server Error');
   }
 }
