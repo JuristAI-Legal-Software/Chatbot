@@ -1,78 +1,60 @@
 import filenamify from 'filenamify';
-import { useEffect, useState, useMemo, useCallback } from 'react';
-import {
-  OGDialogTemplate,
-  OGDialog,
-  Button,
-  Input,
-  Label,
-  Checkbox,
-  Dropdown,
-} from '@librechat/client';
+import { useEffect, useState } from 'react';
 import type { TConversation } from 'librechat-data-provider';
+import { Dialog, DialogButton, Input, Label, Checkbox, Dropdown } from '~/components/ui';
 import { useLocalize, useExportConversation } from '~/hooks';
-
-const TYPE_OPTIONS = [
-  { value: 'screenshot', label: 'screenshot (.png)' },
-  { value: 'text', label: 'text (.txt)' },
-  { value: 'markdown', label: 'markdown (.md)' },
-  { value: 'json', label: 'json (.json)' },
-  { value: 'csv', label: 'csv (.csv)' },
-];
+import DialogTemplate from '~/components/ui/DialogTemplate';
+import { cn, defaultTextProps } from '~/utils';
 
 export default function ExportModal({
   open,
   onOpenChange,
   conversation,
-  triggerRef,
-  children,
 }: {
   open: boolean;
+  onOpenChange: (open: boolean) => void;
   conversation: TConversation | null;
-  onOpenChange: React.Dispatch<React.SetStateAction<boolean>>;
-  triggerRef?: React.RefObject<HTMLButtonElement>;
-  children?: React.ReactNode;
 }) {
   const localize = useLocalize();
 
   const [filename, setFileName] = useState('');
-  const [type, setType] = useState<string>('screenshot');
+  const [type, setType] = useState('Select a file type');
 
   const [includeOptions, setIncludeOptions] = useState<boolean | 'indeterminate'>(true);
   const [exportBranches, setExportBranches] = useState<boolean | 'indeterminate'>(false);
   const [recursive, setRecursive] = useState<boolean | 'indeterminate'>(true);
 
-  useEffect(() => {
-    if (!open && triggerRef && triggerRef.current) {
-      triggerRef.current.focus();
-    }
-  }, [open, triggerRef]);
+  const typeOptions = [
+    { value: 'screenshot', label: 'screenshot (.png)' },
+    { value: 'text', label: 'text (.txt)' },
+    { value: 'markdown', label: 'markdown (.md)' },
+    { value: 'json', label: 'json (.json)' },
+    { value: 'csv', label: 'csv (.csv)' },
+  ];
 
   useEffect(() => {
-    setFileName(filenamify(String(conversation?.title ?? 'file')));
+    setFileName(filenamify(String(conversation?.title || 'file')));
     setType('screenshot');
     setIncludeOptions(true);
     setExportBranches(false);
     setRecursive(true);
   }, [conversation?.title, open]);
 
-  const handleTypeChange = useCallback((newType: string) => {
-    const branches = newType === 'json' || newType === 'csv' || newType === 'webpage';
-    const options = newType !== 'csv' && newType !== 'screenshot';
-    setExportBranches(branches);
-    setIncludeOptions(options);
-    setType(newType);
-  }, []);
+  const _setType = (newType: string) => {
+    const exportBranchesSupport = newType === 'json' || newType === 'csv' || newType === 'webpage';
+    const exportOptionsSupport = newType !== 'csv' && newType !== 'screenshot';
 
-  const exportBranchesSupport = useMemo(
-    () => type === 'json' || type === 'csv' || type === 'webpage',
-    [type],
-  );
-  const exportOptionsSupport = useMemo(() => type !== 'csv' && type !== 'screenshot', [type]);
+    setExportBranches(exportBranchesSupport);
+    setIncludeOptions(exportOptionsSupport);
+    setType(newType);
+  };
+
+  const exportBranchesSupport = type === 'json' || type === 'csv' || type === 'webpage';
+  const exportOptionsSupport = type !== 'csv' && type !== 'screenshot';
 
   const { exportConversation } = useExportConversation({
     conversation,
-    filename: filenamify(filename),
+    filename,
     type,
     includeOptions,
     exportBranches,
@@ -80,9 +62,8 @@ export default function ExportModal({
   });
 
   return (
-    <OGDialog open={open} onOpenChange={onOpenChange} triggerRef={triggerRef}>
-      {children}
-      <OGDialogTemplate
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTemplate
         title={localize('com_nav_export_conversation')}
         className="max-w-full sm:max-w-2xl"
         main={
@@ -95,21 +76,19 @@ export default function ExportModal({
                 <Input
                   id="filename"
                   value={filename}
-                  onChange={(e) => setFileName(e.target.value || '')}
+                  onChange={(e) => setFileName(filenamify(e.target.value || ''))}
                   placeholder={localize('com_nav_export_filename_placeholder')}
+                  className={cn(
+                    defaultTextProps,
+                    'flex h-10 max-h-10 w-full resize-none px-3 py-2',
+                  )}
                 />
               </div>
               <div className="col-span-1 flex w-full flex-col items-start justify-start gap-2">
                 <Label htmlFor="type" className="text-left text-sm font-medium">
                   {localize('com_nav_export_type')}
                 </Label>
-                <Dropdown
-                  value={type}
-                  onChange={handleTypeChange}
-                  options={TYPE_OPTIONS}
-                  className="z-50"
-                  portal={false}
-                />
+                <Dropdown value={type} onChange={_setType} options={typeOptions} />
               </div>
             </div>
             <div className="grid w-full gap-6 sm:grid-cols-2">
@@ -123,16 +102,15 @@ export default function ExportModal({
                       id="includeOptions"
                       disabled={!exportOptionsSupport}
                       checked={includeOptions}
+                      className="focus:ring-opacity-20 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-50 dark:focus:ring-gray-600 dark:focus:ring-opacity-50 dark:focus:ring-offset-0"
                       onCheckedChange={setIncludeOptions}
-                      aria-labelledby="includeOptions-label"
                     />
                     <label
-                      id="includeOptions-label"
                       htmlFor="includeOptions"
                       className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 dark:text-gray-50"
                     >
                       {exportOptionsSupport
-                        ? localize('com_nav_export_include_endpoint_options')
+                        ? localize('com_nav_enabled')
                         : localize('com_nav_not_supported')}
                     </label>
                   </div>
@@ -147,16 +125,15 @@ export default function ExportModal({
                     id="exportBranches"
                     disabled={!exportBranchesSupport}
                     checked={exportBranches}
+                    className="focus:ring-opacity-20 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-50 dark:focus:ring-gray-600 dark:focus:ring-opacity-50 dark:focus:ring-offset-0"
                     onCheckedChange={setExportBranches}
-                    aria-labelledby="exportBranches-label"
                   />
                   <label
-                    id="exportBranches-label"
                     htmlFor="exportBranches"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 dark:text-gray-50"
                   >
                     {exportBranchesSupport
-                      ? localize('com_nav_export_all_message_branches')
+                      ? localize('com_nav_enabled')
                       : localize('com_nav_not_supported')}
                   </label>
                 </div>
@@ -170,11 +147,10 @@ export default function ExportModal({
                     <Checkbox
                       id="recursive"
                       checked={recursive}
+                      className="focus:ring-opacity-20 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-50 dark:focus:ring-gray-600 dark:focus:ring-opacity-50 dark:focus:ring-offset-0"
                       onCheckedChange={setRecursive}
-                      aria-labelledby="recursive-label"
                     />
                     <label
-                      id="recursive-label"
                       htmlFor="recursive"
                       className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 dark:text-gray-50"
                     >
@@ -188,13 +164,16 @@ export default function ExportModal({
         }
         buttons={
           <>
-            <Button onClick={exportConversation} variant="submit">
+            <DialogButton
+              onClick={exportConversation}
+              className="dark:hover:gray-400 border-gray-700 bg-green-500 text-white hover:bg-green-600 dark:hover:bg-green-600"
+            >
               {localize('com_endpoint_export')}
-            </Button>
+            </DialogButton>
           </>
         }
         selection={undefined}
       />
-    </OGDialog>
+    </Dialog>
   );
 }

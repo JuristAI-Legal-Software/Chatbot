@@ -1,10 +1,10 @@
-/* eslint-disable i18next/no-literal-string */
 import React from 'react';
 import FileList from './FileList';
-import { Button, Input } from '@librechat/client';
 import { TFile } from 'librechat-data-provider/dist/types';
-import UploadFileButton from './UploadFileButton';
+import FilesSectionSelector from '../FilesSectionSelector';
+import { Button, Input } from '~/components/ui';
 import { ListFilter } from 'lucide-react';
+import UploadFileButton from './UploadFileButton';
 import { useLocalize } from '~/hooks';
 
 const fakeFiles = [
@@ -164,7 +164,7 @@ export default function FileSidePanel() {
             onChange={() => {
               console.log('changed');
             }}
-            className="max-w-sm border-border-light placeholder:text-text-secondary"
+            className="max-w-sm dark:border-gray-500"
           />
         </div>
         <div className="w-1/3">

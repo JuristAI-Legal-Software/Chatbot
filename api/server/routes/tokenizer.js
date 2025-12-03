@@ -1,9 +1,8 @@
 const express = require('express');
-const { logger } = require('@librechat/data-schemas');
+const router = express.Router();
 const requireJwtAuth = require('~/server/middleware/requireJwtAuth');
 const { countTokens } = require('~/server/utils');
-
-const router = express.Router();
+const { logger } = require('~/config');
 
 router.post('/', requireJwtAuth, async (req, res) => {
   try {

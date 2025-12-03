@@ -1,10 +1,9 @@
-import throttle from 'lodash/throttle';
 import { useEffect, useRef, useCallback, useMemo } from 'react';
-import { Constants, isAssistantsEndpoint, isAgentsEndpoint } from 'librechat-data-provider';
+import { Constants, isAssistantsEndpoint } from 'librechat-data-provider';
 import type { TMessageProps } from '~/common';
-import { useMessagesViewContext, useAssistantsMapContext, useAgentsMapContext } from '~/Providers';
-import { getTextKey, TEXT_KEY_DIVIDER, logger } from '~/utils';
+import { useChatContext, useAssistantsMapContext } from '~/Providers';
 import useCopyToClipboard from './useCopyToClipboard';
+import { getTextKey, logger } from '~/utils';
 
 export default function useMessageHelpers(props: TMessageProps) {
   const latestText = useRef<string | number>('');
@@ -20,8 +19,7 @@ export default function useMessageHelpers(props: TMessageProps) {
     setAbortScroll,
     handleContinue,
     setLatestMessage,
-  } = useMessagesViewContext();
-  const agentsMap = useAgentsMapContext();
+  } = useChatContext();
   const assistantMap = useAssistantsMapContext();
 
   const { text, content, children, messageId = null, isCreatedByUser } = message ?? {};
@@ -49,27 +47,15 @@ export default function useMessageHelpers(props: TMessageProps) {
       messageId: message.messageId,
       convoId,
     };
-
-    /* Extracted convoId from previous textKey (format: messageId|||length|||lastChars|||convoId) */
-    let previousConvoId: string | null = null;
-    if (
-      latestText.current &&
-      typeof latestText.current === 'string' &&
-      latestText.current.length > 0
-    ) {
-      const parts = latestText.current.split(TEXT_KEY_DIVIDER);
-      previousConvoId = parts[parts.length - 1] || null;
-    }
-
     if (
       textKey !== latestText.current ||
-      (convoId != null && previousConvoId != null && convoId !== previousConvoId)
+      (latestText.current && convoId !== latestText.current.split(Constants.COMMON_DIVIDER)[2])
     ) {
-      logger.log('latest_message', '[useMessageHelpers] Setting latest message: ', logInfo);
+      logger.log('[useMessageHelpers] Setting latest message: ', logInfo);
       latestText.current = textKey;
       setLatestMessage({ ...message });
     } else {
-      logger.log('latest_message', 'No change in latest message', logInfo);
+      logger.log('No change in latest message', logInfo);
     }
   }, [isLast, message, setLatestMessage, conversation?.conversationId]);
 
@@ -78,23 +64,13 @@ export default function useMessageHelpers(props: TMessageProps) {
     [messageId, setCurrentEditId],
   );
 
-  const handleScroll = useCallback(
-    (event: unknown) => {
-      throttle(() => {
-        logger.log(
-          'message_scrolling',
-          `useMessageHelpers: setting abort scroll to ${isSubmitting}, handleScroll event`,
-          event,
-        );
-        if (isSubmitting) {
-          setAbortScroll(true);
-        } else {
-          setAbortScroll(false);
-        }
-      }, 500)();
-    },
-    [isSubmitting, setAbortScroll],
-  );
+  const handleScroll = useCallback(() => {
+    if (isSubmitting) {
+      setAbortScroll(true);
+    } else {
+      setAbortScroll(false);
+    }
+  }, [isSubmitting, setAbortScroll]);
 
   const assistant = useMemo(() => {
     if (!isAssistantsEndpoint(conversation?.endpoint)) {
@@ -106,16 +82,6 @@ export default function useMessageHelpers(props: TMessageProps) {
 
     return assistantMap?.[endpointKey] ? assistantMap[endpointKey][modelKey] : undefined;
   }, [conversation?.endpoint, message?.model, assistantMap]);
-
-  const agent = useMemo(() => {
-    if (!isAgentsEndpoint(conversation?.endpoint)) {
-      return undefined;
-    }
-
-    const modelKey = message?.model ?? '';
-
-    return agentsMap ? agentsMap[modelKey] : undefined;
-  }, [agentsMap, conversation?.endpoint, message?.model]);
 
   const regenerateMessage = () => {
     if ((isSubmitting && isCreatedByUser === true) || !message) {
@@ -130,7 +96,6 @@ export default function useMessageHelpers(props: TMessageProps) {
   return {
     ask,
     edit,
-    agent,
     index,
     isLast,
     assistant,

@@ -1,6 +1,11 @@
-import { EModelEndpoint, getEndpointField } from 'librechat-data-provider';
+import { EModelEndpoint } from 'librechat-data-provider';
 import type { TEndpointsConfig, TConfig } from 'librechat-data-provider';
-import { getAvailableEndpoints, getEndpointsFilter, mapEndpoints } from './endpoints';
+import {
+  getEndpointField,
+  getAvailableEndpoints,
+  getEndpointsFilter,
+  mapEndpoints,
+} from './endpoints';
 
 const mockEndpointsConfig: TEndpointsConfig = {
   [EModelEndpoint.openAI]: { type: undefined, iconURL: 'openAI_icon.png', order: 0 },
@@ -19,6 +24,10 @@ describe('getEndpointField', () => {
 
   it('returns undefined if endpoint is undefined', () => {
     expect(getEndpointField(mockEndpointsConfig, undefined, 'type')).toBeUndefined();
+  });
+
+  it('returns undefined if the endpoint does not exist in endpointsConfig', () => {
+    expect(getEndpointField(mockEndpointsConfig, EModelEndpoint.bingAI, 'type')).toBeUndefined();
   });
 
   it('returns the correct value for a valid endpoint and property', () => {

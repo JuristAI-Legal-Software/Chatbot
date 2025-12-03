@@ -11,7 +11,7 @@ export default function InProgressCall({
   progress: number;
   children: React.ReactNode;
 }) {
-  if ((!isSubmitting && progress < 1) || error === true) {
+  if ((!isSubmitting && progress < 1) || error) {
     return <CancelledIcon />;
   }
 

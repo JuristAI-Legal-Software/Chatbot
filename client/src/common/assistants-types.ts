@@ -1,8 +1,6 @@
-import { Capabilities, EModelEndpoint } from 'librechat-data-provider';
-import type { Assistant, AssistantsEndpoint } from 'librechat-data-provider';
+import { Capabilities } from 'librechat-data-provider';
+import type { Assistant } from 'librechat-data-provider';
 import type { Option, ExtendedFile } from './types';
-
-export type ActionsEndpoint = AssistantsEndpoint | EModelEndpoint.agents;
 
 export type TAssistantOption =
   | string
@@ -24,8 +22,6 @@ export type AssistantForm = {
   name: string | null;
   description: string | null;
   instructions: string | null;
-  conversation_starters: string[];
   model: string;
   functions: string[];
-  append_current_datetime: boolean;
 } & Actions;

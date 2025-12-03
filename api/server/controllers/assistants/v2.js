@@ -1,11 +1,9 @@
-const { logger } = require('@librechat/data-schemas');
 const { ToolCallTypes } = require('librechat-data-provider');
 const validateAuthor = require('~/server/middleware/assistants/validateAuthor');
 const { validateAndUpdateTool } = require('~/server/services/ActionService');
-const { getCachedTools } = require('~/server/services/Config');
 const { updateAssistantDoc } = require('~/models/Assistant');
-const { manifestToolMap } = require('~/app/clients/tools');
 const { getOpenAIClient } = require('./helpers');
+const { logger } = require('~/config');
 
 /**
  * Create an assistant.
@@ -18,36 +16,16 @@ const createAssistant = async (req, res) => {
     /** @type {{ openai: OpenAIClient }} */
     const { openai } = await getOpenAIClient({ req, res });
 
-    const {
-      tools = [],
-      endpoint,
-      conversation_starters,
-      append_current_datetime,
-      ...assistantData
-    } = req.body;
-    delete assistantData.conversation_starters;
-    delete assistantData.append_current_datetime;
-
-    const toolDefinitions = await getCachedTools();
-
+    const { tools = [], endpoint, ...assistantData } = req.body;
     assistantData.tools = tools
       .map((tool) => {
         if (typeof tool !== 'string') {
           return tool;
         }
 
-        const toolDef = toolDefinitions[tool];
-        if (!toolDef && manifestToolMap[tool] && manifestToolMap[tool].toolkit === true) {
-          return Object.entries(toolDefinitions)
-            .filter(([key]) => key.startsWith(`${tool}_`))
-
-            .map(([_, val]) => val);
-        }
-
-        return toolDef;
+        return req.app.locals.availableTools[tool];
       })
-      .filter((tool) => tool)
-      .flat();
+      .filter((tool) => tool);
 
     let azureModelIdentifier = null;
     if (openai.locals?.azureOptions) {
@@ -61,28 +39,11 @@ const createAssistant = async (req, res) => {
     };
 
     const assistant = await openai.beta.assistants.create(assistantData);
-
-    const createData = { user: req.user.id };
-    if (conversation_starters) {
-      createData.conversation_starters = conversation_starters;
-    }
-    if (append_current_datetime !== undefined) {
-      createData.append_current_datetime = append_current_datetime;
-    }
-
-    const document = await updateAssistantDoc({ assistant_id: assistant.id }, createData);
-
+    const promise = updateAssistantDoc({ assistant_id: assistant.id }, { user: req.user.id });
     if (azureModelIdentifier) {
       assistant.model = azureModelIdentifier;
     }
-
-    if (document.conversation_starters) {
-      assistant.conversation_starters = document.conversation_starters;
-    }
-    if (append_current_datetime !== undefined) {
-      assistant.append_current_datetime = append_current_datetime;
-    }
-
+    await promise;
     logger.debug('/assistants/', assistant);
     res.status(201).json(assistant);
   } catch (error) {
@@ -94,7 +55,7 @@ const createAssistant = async (req, res) => {
 /**
  * Modifies an assistant.
  * @param {object} params
- * @param {ServerRequest} params.req
+ * @param {Express.Request} params.req
  * @param {OpenAIClient} params.openai
  * @param {string} params.assistant_id
  * @param {AssistantUpdateParams} params.updateData
@@ -103,52 +64,12 @@ const createAssistant = async (req, res) => {
 const updateAssistant = async ({ req, openai, assistant_id, updateData }) => {
   await validateAuthor({ req, openai });
   const tools = [];
-  let conversation_starters = null;
-
-  if (updateData?.conversation_starters) {
-    const conversationStartersUpdate = await updateAssistantDoc(
-      { assistant_id: assistant_id },
-      { conversation_starters: updateData.conversation_starters },
-    );
-    conversation_starters = conversationStartersUpdate.conversation_starters;
-
-    delete updateData.conversation_starters;
-  }
-
-  if (updateData?.append_current_datetime !== undefined) {
-    await updateAssistantDoc(
-      { assistant_id: assistant_id },
-      { append_current_datetime: updateData.append_current_datetime },
-    );
-    delete updateData.append_current_datetime;
-  }
 
   let hasFileSearch = false;
   for (const tool of updateData.tools ?? []) {
-    const toolDefinitions = await getCachedTools();
-    let actualTool = typeof tool === 'string' ? toolDefinitions[tool] : tool;
+    let actualTool = typeof tool === 'string' ? req.app.locals.availableTools[tool] : tool;
 
-    if (!actualTool && manifestToolMap[tool] && manifestToolMap[tool].toolkit === true) {
-      actualTool = Object.entries(toolDefinitions)
-        .filter(([key]) => key.startsWith(`${tool}_`))
-
-        .map(([_, val]) => val);
-    } else if (!actualTool) {
-      continue;
-    }
-
-    if (Array.isArray(actualTool)) {
-      for (const subTool of actualTool) {
-        if (!subTool.function) {
-          tools.push(subTool);
-          continue;
-        }
-
-        const updatedTool = await validateAndUpdateTool({ req, tool: subTool, assistant_id });
-        if (updatedTool) {
-          tools.push(updatedTool);
-        }
-      }
+    if (!actualTool) {
       continue;
     }
 
@@ -187,23 +108,18 @@ const updateAssistant = async ({ req, openai, assistant_id, updateData }) => {
     updateData.model = openai.locals.azureOptions.azureOpenAIApiDeploymentName;
   }
 
-  const assistant = await openai.beta.assistants.update(assistant_id, updateData);
-
-  if (conversation_starters) {
-    assistant.conversation_starters = conversation_starters;
-  }
-
-  return assistant;
+  return await openai.beta.assistants.update(assistant_id, updateData);
 };
 
 /**
  * Modifies an assistant with the resource file id.
  * @param {object} params
- * @param {ServerRequest} params.req
+ * @param {Express.Request} params.req
  * @param {OpenAIClient} params.openai
  * @param {string} params.assistant_id
  * @param {string} params.tool_resource
  * @param {string} params.file_id
+ * @param {AssistantUpdateParams} params.updateData
  * @returns {Promise<Assistant>} The updated assistant.
  */
 const addResourceFileId = async ({ req, openai, assistant_id, tool_resource, file_id }) => {
@@ -227,7 +143,7 @@ const addResourceFileId = async ({ req, openai, assistant_id, tool_resource, fil
 /**
  * Deletes a file ID from an assistant's resource.
  * @param {object} params
- * @param {ServerRequest} params.req
+ * @param {Express.Request} params.req
  * @param {OpenAIClient} params.openai
  * @param {string} params.assistant_id
  * @param {string} [params.tool_resource]

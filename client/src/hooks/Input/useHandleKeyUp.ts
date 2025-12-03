@@ -46,15 +46,10 @@ const useHandleKeyUp = ({
   setShowPlusPopover: SetterOrUpdater<boolean>;
   setShowMentionPopover: SetterOrUpdater<boolean>;
 }) => {
-  const hasPromptsAccess = useHasAccess({
+  const hasAccess = useHasAccess({
     permissionType: PermissionTypes.PROMPTS,
     permission: Permissions.USE,
   });
-  const hasMultiConvoAccess = useHasAccess({
-    permissionType: PermissionTypes.MULTI_CONVO,
-    permission: Permissions.USE,
-  });
-  const latestMessage = useRecoilValue(store.latestMessageFamily(index));
   const setShowPromptsPopover = useSetRecoilState(store.showPromptsPopoverFamily(index));
 
   // Get the current state of command toggles
@@ -69,22 +64,19 @@ const useHandleKeyUp = ({
   }, [textAreaRef, setShowMentionPopover, atCommandEnabled]);
 
   const handlePlusCommand = useCallback(() => {
-    if (!hasMultiConvoAccess || !plusCommandEnabled) {
-      return;
-    }
-    if (shouldTriggerCommand(textAreaRef, '+')) {
+    if (plusCommandEnabled && shouldTriggerCommand(textAreaRef, '+')) {
       setShowPlusPopover(true);
     }
-  }, [textAreaRef, setShowPlusPopover, plusCommandEnabled, hasMultiConvoAccess]);
+  }, [textAreaRef, setShowPlusPopover, plusCommandEnabled]);
 
   const handlePromptsCommand = useCallback(() => {
-    if (!hasPromptsAccess || !slashCommandEnabled) {
+    if (!hasAccess || !slashCommandEnabled) {
       return;
     }
     if (shouldTriggerCommand(textAreaRef, '/')) {
       setShowPromptsPopover(true);
     }
-  }, [textAreaRef, hasPromptsAccess, setShowPromptsPopover, slashCommandEnabled]);
+  }, [textAreaRef, hasAccess, setShowPromptsPopover, slashCommandEnabled]);
 
   const commandHandlers = useMemo(
     () => ({
@@ -95,32 +87,12 @@ const useHandleKeyUp = ({
     [handleAtCommand, handlePlusCommand, handlePromptsCommand],
   );
 
-  const handleUpArrow = useCallback(
-    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (!latestMessage) {
-        return;
-      }
-
-      const element = document.getElementById(`edit-${latestMessage.parentMessageId}`);
-      if (!element) {
-        return;
-      }
-      event.preventDefault();
-      element.click();
-    },
-    [latestMessage],
-  );
-
   /**
    * Main key up handler.
    */
   const handleKeyUp = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
       const text = textAreaRef.current?.value;
-      if (event.key === 'ArrowUp' && text?.length === 0) {
-        handleUpArrow(event);
-        return;
-      }
       if (typeof text !== 'string' || text.length === 0) {
         return;
       }
@@ -136,7 +108,7 @@ const useHandleKeyUp = ({
         handler();
       }
     },
-    [textAreaRef, commandHandlers, handleUpArrow],
+    [textAreaRef, commandHandlers],
   );
 
   return handleKeyUp;

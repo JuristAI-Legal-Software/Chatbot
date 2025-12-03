@@ -1,5 +1,4 @@
 const rateLimit = require('express-rate-limit');
-const { limiterCache } = require('@librechat/api');
 const { ViolationTypes } = require('librechat-data-provider');
 const { removePorts } = require('~/server/utils');
 const { logViolation } = require('~/cache');
@@ -26,14 +25,11 @@ const handler = async (req, res) => {
   return res.status(429).json({ message });
 };
 
-const limiterOptions = {
+const verifyEmailLimiter = rateLimit({
   windowMs,
   max,
   handler,
   keyGenerator: removePorts,
-  store: limiterCache('verify_email_limiter'),
-};
-
-const verifyEmailLimiter = rateLimit(limiterOptions);
+});
 
 module.exports = verifyEmailLimiter;

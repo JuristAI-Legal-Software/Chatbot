@@ -1,83 +1,29 @@
-import React, { useRef, Dispatch, SetStateAction } from 'react';
-import { TConversationTag } from 'librechat-data-provider';
-import { OGDialogTemplate, OGDialog, Button, Spinner, useToastContext } from '@librechat/client';
-import { useConversationTagMutation } from '~/data-provider';
-import { NotificationSeverity } from '~/common';
+import React, { useRef, useState } from 'react';
+import { TConversationTag, TConversation } from 'librechat-data-provider';
+import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
+import { OGDialog, OGDialogTrigger, OGDialogClose } from '~/components/ui/';
 import BookmarkForm from './BookmarkForm';
 import { useLocalize } from '~/hooks';
-import { logger } from '~/utils';
+import { Spinner } from '../svg';
 
 type BookmarkEditDialogProps = {
-  open: boolean;
-  setOpen: Dispatch<SetStateAction<boolean>>;
+  bookmark?: TConversationTag;
+  conversation?: TConversation;
   tags?: string[];
   setTags?: (tags: string[]) => void;
-  context: string;
-  bookmark?: TConversationTag;
-  conversationId?: string;
-  children?: React.ReactNode;
-  triggerRef?: React.RefObject<HTMLButtonElement>;
+  trigger: React.ReactNode;
 };
-
 const BookmarkEditDialog = ({
-  open,
-  setOpen,
+  bookmark,
+  conversation,
   tags,
   setTags,
-  context,
-  bookmark,
-  children,
-  triggerRef,
-  conversationId,
+  trigger,
 }: BookmarkEditDialogProps) => {
   const localize = useLocalize();
+  const [isLoading, setIsLoading] = useState(false);
+  const [open, setOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
-
-  const { showToast } = useToastContext();
-  const mutation = useConversationTagMutation({
-    context,
-    tag: bookmark?.tag,
-    options: {
-      onSuccess: (_data, vars) => {
-        showToast({
-          message: bookmark
-            ? localize('com_ui_bookmarks_update_success')
-            : localize('com_ui_bookmarks_create_success'),
-        });
-        setOpen(false);
-        logger.log('tag_mutation', 'tags before setting', tags);
-
-        if (setTags && vars.addToConversation === true) {
-          const newTags = [...(tags || []), vars.tag].filter(
-            (tag) => tag !== undefined,
-          ) as string[];
-          setTags(newTags);
-
-          logger.log('tag_mutation', 'tags after', newTags);
-          if (vars.tag == null || vars.tag === '') {
-            return;
-          }
-
-          setTimeout(() => {
-            const tagElement = document.getElementById(vars.tag ?? '');
-            console.log('tagElement', tagElement);
-            if (!tagElement) {
-              return;
-            }
-            tagElement.focus();
-          }, 5);
-        }
-      },
-      onError: () => {
-        showToast({
-          message: bookmark
-            ? localize('com_ui_bookmarks_update_error')
-            : localize('com_ui_bookmarks_create_error'),
-          severity: NotificationSeverity.ERROR,
-        });
-      },
-    },
-  });
 
   const handleSubmitForm = () => {
     if (formRef.current) {
@@ -86,32 +32,34 @@ const BookmarkEditDialog = ({
   };
 
   return (
-    <OGDialog open={open} onOpenChange={setOpen} triggerRef={triggerRef}>
-      {children}
+    <OGDialog open={open} onOpenChange={setOpen}>
+      <OGDialogTrigger asChild>{trigger}</OGDialogTrigger>
       <OGDialogTemplate
-        title={bookmark ? localize('com_ui_bookmarks_edit') : localize('com_ui_bookmarks_new')}
+        title="Bookmark"
+        className="w-11/12 sm:w-1/4"
         showCloseButton={false}
-        className="w-11/12 md:max-w-2xl"
         main={
           <BookmarkForm
-            tags={tags}
-            setOpen={setOpen}
-            mutation={mutation}
-            conversationId={conversationId}
+            conversation={conversation}
+            onOpenChange={setOpen}
+            setIsLoading={setIsLoading}
             bookmark={bookmark}
             formRef={formRef}
+            setTags={setTags}
+            tags={tags}
           />
         }
         buttons={
-          <Button
-            variant="submit"
-            type="submit"
-            disabled={mutation.isLoading}
-            onClick={handleSubmitForm}
-            className="text-white"
-          >
-            {mutation.isLoading ? <Spinner /> : localize('com_ui_save')}
-          </Button>
+          <OGDialogClose asChild>
+            <button
+              type="submit"
+              disabled={isLoading}
+              onClick={handleSubmitForm}
+              className="btn rounded bg-green-500 font-bold text-white transition-all hover:bg-green-600"
+            >
+              {isLoading ? <Spinner /> : localize('com_ui_save')}
+            </button>
+          </OGDialogClose>
         }
       />
     </OGDialog>

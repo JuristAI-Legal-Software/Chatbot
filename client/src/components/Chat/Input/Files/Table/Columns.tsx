@@ -1,22 +1,18 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 import { ArrowUpDown, Database } from 'lucide-react';
 import { FileSources, FileContext } from 'librechat-data-provider';
-import {
-  Button,
-  Checkbox,
-  OpenAIMinimalIcon,
-  AzureMinimalIcon,
-  useMediaQuery,
-} from '@librechat/client';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { TFile } from 'librechat-data-provider';
 import ImagePreview from '~/components/Chat/Input/Files/ImagePreview';
 import FilePreview from '~/components/Chat/Input/Files/FilePreview';
-import { TranslationKeys, useLocalize } from '~/hooks';
 import { SortFilterHeader } from './SortFilterHeader';
+import { OpenAIMinimalIcon } from '~/components/svg';
+import { AzureMinimalIcon } from '~/components/svg';
+import { Button, Checkbox } from '~/components/ui';
 import { formatDate, getFileType } from '~/utils';
+import useLocalize from '~/hooks/useLocalize';
 
-const contextMap: Record<any, TranslationKeys> = {
+const contextMap = {
   [FileContext.avatar]: 'com_ui_avatar',
   [FileContext.unknown]: 'com_ui_unknown',
   [FileContext.assistants]: 'com_ui_assistants',
@@ -64,7 +60,7 @@ export const columns: ColumnDef<TFile>[] = [
       return (
         <Button
           variant="ghost"
-          className="px-2 py-0 text-xs hover:bg-surface-hover sm:px-2 sm:py-2 sm:text-sm"
+          className="px-2 py-0 text-xs sm:px-2 sm:py-2 sm:text-sm"
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
         >
           {localize('com_ui_name')}
@@ -80,9 +76,9 @@ export const columns: ColumnDef<TFile>[] = [
             <ImagePreview
               url={file.filepath}
               className="relative h-10 w-10 shrink-0 overflow-hidden rounded-md"
-              source={file.source}
+              source={file?.source}
             />
-            <span className="self-center truncate">{file.filename}</span>
+            <span className="self-center truncate ">{file.filename}</span>
           </div>
         );
       }
@@ -104,17 +100,14 @@ export const columns: ColumnDef<TFile>[] = [
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          className="px-2 py-0 text-xs hover:bg-surface-hover sm:px-2 sm:py-2 sm:text-sm"
+          className="px-2 py-0 text-xs sm:px-2 sm:py-2 sm:text-sm"
         >
           {localize('com_ui_date')}
           <ArrowUpDown className="ml-2 h-3 w-4 sm:h-4 sm:w-4" />
         </Button>
       );
     },
-    cell: ({ row }) => {
-      const isSmallScreen = useMediaQuery('(max-width: 768px)');
-      return formatDate(row.original.updatedAt?.toString() ?? '', isSmallScreen);
-    },
+    cell: ({ row }) => formatDate(row.original.updatedAt),
   },
   {
     accessorKey: 'filterSource',
@@ -133,8 +126,8 @@ export const columns: ColumnDef<TFile>[] = [
             ),
           }}
           valueMap={{
-            [FileSources.azure]: 'com_ui_azure',
-            [FileSources.openai]: 'com_ui_openai',
+            [FileSources.azure]: 'Azure',
+            [FileSources.openai]: 'OpenAI',
             [FileSources.local]: 'com_ui_host',
           }}
         />
@@ -188,7 +181,7 @@ export const columns: ColumnDef<TFile>[] = [
       const localize = useLocalize();
       return (
         <div className="flex flex-wrap items-center gap-2">
-          {localize(contextMap[context ?? FileContext.unknown])}
+          {localize(contextMap[context ?? FileContext.unknown] ?? 'com_ui_unknown')}
         </div>
       );
     },
@@ -200,7 +193,7 @@ export const columns: ColumnDef<TFile>[] = [
       return (
         <Button
           variant="ghost"
-          className="px-2 py-0 text-xs hover:bg-surface-hover sm:px-2 sm:py-2 sm:text-sm"
+          className="px-2 py-0 text-xs sm:px-2 sm:py-2 sm:text-sm"
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
         >
           {localize('com_ui_size')}

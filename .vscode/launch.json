@@ -4,11 +4,14 @@
     {
       "type": "node",
       "request": "launch",
+      "name": "Launch LibreChat Backend",
       "program": "${workspaceFolder}/api/server/index.js",
       "env": {
         "NODE_ENV": "production",
+        "HOST": "0.0.0.0"
       },
       "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
     }
   ]
 }

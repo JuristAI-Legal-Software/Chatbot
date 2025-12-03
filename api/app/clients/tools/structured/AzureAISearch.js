@@ -1,9 +1,9 @@
 const { z } = require('zod');
-const { Tool } = require('@langchain/core/tools');
-const { logger } = require('@librechat/data-schemas');
+const { StructuredTool } = require('langchain/tools');
 const { SearchClient, AzureKeyCredential } = require('@azure/search-documents');
+const { logger } = require('~/config');
 
-class AzureAISearch extends Tool {
+class AzureAISearch extends StructuredTool {
   // Constants for default values
   static DEFAULT_API_VERSION = '2023-11-01';
   static DEFAULT_QUERY_TYPE = 'simple';
@@ -18,7 +18,7 @@ class AzureAISearch extends Tool {
     super();
     this.name = 'azure-ai-search';
     this.description =
-      "Use the 'azure-ai-search' tool to retrieve search results relevant to your input";
+      'Use the \'azure-ai-search\' tool to retrieve search results relevant to your input';
     /* Used to initialize the Tool without necessary variables. */
     this.override = fields.override ?? false;
 
@@ -83,7 +83,7 @@ class AzureAISearch extends Tool {
     try {
       const searchOption = {
         queryType: this.queryType,
-        top: typeof this.top === 'string' ? Number(this.top) : this.top,
+        top: this.top,
       };
       if (this.select) {
         searchOption.select = this.select.split(',');

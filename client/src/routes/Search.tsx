@@ -1,102 +1,40 @@
-import { useEffect, useMemo } from 'react';
-import { useRecoilValue } from 'recoil';
-import { Spinner, useToastContext } from '@librechat/client';
+import { useMemo } from 'react';
 import MinimalMessagesWrapper from '~/components/Chat/Messages/MinimalMessages';
-import { useNavScrolling, useLocalize, useAuthContext } from '~/hooks';
 import SearchMessage from '~/components/Chat/Messages/SearchMessage';
-import { useMessagesInfiniteQuery } from '~/data-provider';
-import { useFileMapContext } from '~/Providers';
-import store from '~/store';
+import { useSearchContext, useFileMapContext } from '~/Providers';
+import { useNavScrolling, useLocalize } from '~/hooks';
+import { buildTree } from '~/utils';
 
 export default function Search() {
   const localize = useLocalize();
   const fileMap = useFileMapContext();
-  const { showToast } = useToastContext();
-  const { isAuthenticated } = useAuthContext();
-  const search = useRecoilValue(store.search);
-  const searchQuery = search.debouncedQuery;
-
-  const {
-    data: searchMessages,
-    isLoading,
-    isError,
-    fetchNextPage,
-    isFetchingNextPage,
-    hasNextPage: _hasNextPage,
-  } = useMessagesInfiniteQuery(
-    {
-      search: searchQuery || undefined,
-    },
-    {
-      enabled: isAuthenticated && !!searchQuery,
-      staleTime: 30000,
-      cacheTime: 300000,
-    },
-  );
+  const { searchQuery, searchQueryRes } = useSearchContext();
 
   const { containerRef } = useNavScrolling({
-    nextCursor: searchMessages?.pages[searchMessages.pages.length - 1]?.nextCursor,
     setShowLoading: () => ({}),
-    fetchNextPage: fetchNextPage,
-    isFetchingNext: isFetchingNextPage,
+    hasNextPage: searchQueryRes?.hasNextPage,
+    fetchNextPage: searchQueryRes?.fetchNextPage,
+    isFetchingNextPage: searchQueryRes?.isFetchingNextPage,
   });
 
   const messages = useMemo(() => {
-    const msgs =
-      searchMessages?.pages.flatMap((page) =>
-        page.messages.map((message) => {
-          if (!message.files || !fileMap) {
-            return message;
-          }
-          return {
-            ...message,
-            files: message.files.map((file) => fileMap[file.file_id ?? ''] ?? file),
-          };
-        }),
-      ) || [];
+    const msgs = searchQueryRes?.data?.pages.flatMap((page) => page.messages) || [];
+    const dataTree = buildTree({ messages: msgs, fileMap });
+    return dataTree?.length === 0 ? null : dataTree ?? null;
+  }, [fileMap, searchQueryRes?.data?.pages]);
 
-    return msgs.length === 0 ? null : msgs;
-  }, [fileMap, searchMessages?.pages]);
-
-  useEffect(() => {
-    if (isError && searchQuery) {
-      showToast({ message: 'An error occurred during search', status: 'error' });
-    }
-  }, [isError, searchQuery, showToast]);
-
-  const isSearchLoading = search.isTyping || isLoading || isFetchingNextPage;
-
-  if (isSearchLoading) {
-    return (
-      <div className="absolute inset-0 flex items-center justify-center">
-        <Spinner className="text-text-primary" />
-      </div>
-    );
-  }
-
-  if (!searchQuery) {
+  if (!searchQuery || !searchQueryRes?.data) {
     return null;
   }
 
   return (
-    <MinimalMessagesWrapper ref={containerRef} className="relative flex h-full pt-4">
-      {(messages && messages.length === 0) || messages == null ? (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="rounded-lg bg-white p-6 text-lg text-gray-500 dark:border-gray-800/50 dark:bg-gray-800 dark:text-gray-300">
-            {localize('com_ui_nothing_found')}
-          </div>
+    <MinimalMessagesWrapper ref={containerRef} className="pt-4">
+      {(messages && messages?.length == 0) || messages === null ? (
+        <div className="my-auto flex h-full w-full items-center justify-center gap-1 bg-white p-3 text-lg text-gray-500 dark:border-gray-800/50 dark:bg-gray-800 dark:text-gray-300">
+          {localize('com_ui_nothing_found')}
         </div>
       ) : (
-        <>
-          {messages.map((msg) => (
-            <SearchMessage key={msg.messageId} message={msg} />
-          ))}
-          {isFetchingNextPage && (
-            <div className="flex justify-center py-4">
-              <Spinner className="text-text-primary" />
-            </div>
-          )}
-        </>
+        messages?.map((message) => <SearchMessage key={message.messageId} message={message} />)
       )}
       <div className="absolute bottom-0 left-0 right-0 h-[5%] bg-gradient-to-t from-gray-50 to-transparent dark:from-gray-800" />
     </MinimalMessagesWrapper>

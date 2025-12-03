@@ -1,18 +1,20 @@
-const { sleep } = require('@librechat/agents');
-const { sendEvent } = require('@librechat/api');
-const { logger } = require('@librechat/data-schemas');
+const throttle = require('lodash/throttle');
 const {
-  Constants,
+  Time,
+  CacheKeys,
   StepTypes,
   ContentTypes,
   ToolCallTypes,
   MessageContentTypes,
   AssistantStreamEvents,
+  Constants,
 } = require('librechat-data-provider');
 const { retrieveAndProcessFile } = require('~/server/services/Files/process');
 const { processRequiredActions } = require('~/server/services/ToolService');
+const { createOnProgress, sendMessage, sleep } = require('~/server/utils');
 const { processMessages } = require('~/server/services/Threads');
-const { createOnProgress } = require('~/server/utils');
+const { getLogStores } = require('~/cache');
+const { logger } = require('~/config');
 
 /**
  * Implements the StreamRunManager functionality for managing the streaming
@@ -36,7 +38,7 @@ class StreamRunManager {
     /** @type {Run | null} */
     this.run = null;
 
-    /** @type {ServerRequest} */
+    /** @type {Express.Request} */
     this.req = fields.req;
     /** @type {Express.Response} */
     this.res = fields.res;
@@ -128,7 +130,7 @@ class StreamRunManager {
       conversationId: this.finalMessage.conversationId,
     };
 
-    sendEvent(this.res, contentData);
+    sendMessage(this.res, contentData);
   }
 
   /* <------------------ Misc. Helpers ------------------> */
@@ -304,7 +306,7 @@ class StreamRunManager {
 
           for (const d of delta[key]) {
             if (typeof d === 'object' && !Object.prototype.hasOwnProperty.call(d, 'index')) {
-              logger.warn("Expected an object with an 'index' for array updates but got:", d);
+              logger.warn('Expected an object with an \'index\' for array updates but got:', d);
               continue;
             }
 
@@ -327,7 +329,7 @@ class StreamRunManager {
           }
         } else if (typeof delta[key] === 'string' && typeof data[key] === 'string') {
           // Concatenate strings
-          // data[key] += delta[key];
+          data[key] += delta[key];
         } else if (
           typeof delta[key] === 'object' &&
           delta[key] !== null &&
@@ -506,30 +508,12 @@ class StreamRunManager {
    * @param {RequiredAction[]} actions - The required actions.
    * @returns {ToolOutput[]} completeOutputs - The complete outputs.
    */
-  checkMissingOutputs(tool_outputs = [], actions = []) {
+  checkMissingOutputs(tool_outputs, actions) {
     const missingOutputs = [];
-    const MISSING_OUTPUT_MESSAGE =
-      'The tool failed to produce an output. The tool may not be currently available or experienced an unhandled error.';
-    const outputIds = new Set();
-    const validatedOutputs = tool_outputs.map((output) => {
-      if (!output) {
-        logger.warn('Tool output is undefined');
-        return;
-      }
-      outputIds.add(output.tool_call_id);
-      if (!output.output) {
-        logger.warn(`Tool output exists but has no output property (ID: ${output.tool_call_id})`);
-        return {
-          ...output,
-          output: MISSING_OUTPUT_MESSAGE,
-        };
-      }
-      return output;
-    });
 
     for (const item of actions) {
       const { tool, toolCallId, run_id, thread_id } = item;
-      const outputExists = outputIds.has(toolCallId);
+      const outputExists = tool_outputs.some((output) => output.tool_call_id === toolCallId);
 
       if (!outputExists) {
         logger.warn(
@@ -537,12 +521,13 @@ class StreamRunManager {
         );
         missingOutputs.push({
           tool_call_id: toolCallId,
-          output: MISSING_OUTPUT_MESSAGE,
+          output:
+            'The tool failed to produce an output. The tool may not be currently available or experienced an unhandled error.',
         });
       }
     }
 
-    return [...validatedOutputs, ...missingOutputs];
+    return [...tool_outputs, ...missingOutputs];
   }
 
   /* <------------------ Run Event handlers ------------------> */
@@ -573,9 +558,9 @@ class StreamRunManager {
     let toolRun;
     try {
       toolRun = this.openai.beta.threads.runs.submitToolOutputsStream(
+        run.thread_id,
         run.id,
         {
-          thread_id: run.thread_id,
           tool_outputs,
           stream: true,
         },
@@ -609,8 +594,20 @@ class StreamRunManager {
       const index = this.getStepIndex(stepKey);
       this.orderedRunSteps.set(index, message_creation);
 
-      const { onProgress: progressCallback } = createOnProgress();
+      const messageCache = getLogStores(CacheKeys.MESSAGES);
+      // Create the Factory Function to stream the message
+      const { onProgress: progressCallback } = createOnProgress({
+        onProgress: throttle(
+          () => {
+            messageCache.set(this.finalMessage.messageId, this.getText(), Time.FIVE_MINUTES);
+          },
+          3000,
+          { trailing: false },
+        ),
+      });
 
+      // This creates a function that attaches all of the parameters
+      // specified here to each SSE message generated by the TextStream
       const onProgress = progressCallback({
         index,
         res: this.res,

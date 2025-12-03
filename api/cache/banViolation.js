@@ -1,9 +1,8 @@
-const { logger } = require('@librechat/data-schemas');
-const { isEnabled, math } = require('@librechat/api');
 const { ViolationTypes } = require('librechat-data-provider');
-const { deleteAllUserSessions } = require('~/models');
-const { removePorts } = require('~/server/utils');
+const { isEnabled, math, removePorts } = require('~/server/utils');
 const getLogStores = require('./getLogStores');
+const Session = require('~/models/Session');
+const { logger } = require('~/config');
 
 const { BAN_VIOLATIONS, BAN_INTERVAL } = process.env ?? {};
 const interval = math(BAN_INTERVAL, 20);
@@ -33,6 +32,7 @@ const banViolation = async (req, res, errorMessage) => {
   if (!isEnabled(BAN_VIOLATIONS)) {
     return;
   }
+
   if (!errorMessage) {
     return;
   }
@@ -46,11 +46,12 @@ const banViolation = async (req, res, errorMessage) => {
     return;
   }
 
-  await deleteAllUserSessions({ userId: user_id });
+  await Session.deleteAllUserSessions(user_id);
   res.clearCookie('refreshToken');
 
   const banLogs = getLogStores(ViolationTypes.BAN);
   const duration = errorMessage.duration || banLogs.opts.ttl;
+
   if (duration <= 0) {
     return;
   }

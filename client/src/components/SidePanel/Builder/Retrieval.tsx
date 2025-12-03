@@ -8,13 +8,13 @@ import {
   HoverCardContent,
   HoverCardPortal,
   HoverCardTrigger,
-  CircleHelpIcon,
-} from '@librechat/client';
+} from '~/components/ui';
 import OptionHover from '~/components/SidePanel/Parameters/OptionHover';
+import { CircleHelpIcon } from '~/components/svg';
 import type { AssistantForm } from '~/common';
 import { useLocalize } from '~/hooks';
 import { ESide } from '~/common';
-import { cn } from '~/utils';
+import { cn } from '~/utils/';
 
 export default function Retrieval({
   version,
@@ -59,14 +59,12 @@ export default function Retrieval({
                 disabled={isDisabled}
                 onCheckedChange={field.onChange}
                 className="relative float-left mr-2 inline-flex h-4 w-4 cursor-pointer"
-                value={field.value.toString()}
-                aria-labelledby={Capabilities.retrieval}
+                value={field?.value?.toString()}
               />
             )}
           />
           <div className="flex items-center space-x-2">
             <label
-              id={Capabilities.retrieval}
               className={cn(
                 'form-check-label text-token-text-primary w-full select-none',
                 isDisabled ? 'cursor-no-drop opacity-50' : 'cursor-pointer',

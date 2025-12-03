@@ -1,22 +1,10 @@
-import {
-  TextPaths,
-  FilePaths,
-  CodePaths,
-  AudioPaths,
-  VideoPaths,
-  SheetPaths,
-} from '@librechat/client';
-import {
-  megabyte,
-  QueryKeys,
-  excelMimeTypes,
-  EToolResources,
-  codeTypeMapping,
-  fileConfig as defaultFileConfig,
-} from 'librechat-data-provider';
-import type { TFile, EndpointFileConfig, FileConfig } from 'librechat-data-provider';
+import { excelMimeTypes, QueryKeys } from 'librechat-data-provider';
 import type { QueryClient } from '@tanstack/react-query';
-import type { ExtendedFile } from '~/common';
+import type { TFile } from 'librechat-data-provider';
+import SheetPaths from '~/components/svg/Files/SheetPaths';
+import TextPaths from '~/components/svg/Files/TextPaths';
+import FilePaths from '~/components/svg/Files/FilePaths';
+import CodePaths from '~/components/svg/Files/CodePaths';
 
 export const partialTypes = ['text/x-'];
 
@@ -39,24 +27,6 @@ const codeFile = {
   title: 'Code',
 };
 
-const artifact = {
-  paths: CodePaths,
-  fill: '#2D305C',
-  title: 'Code',
-};
-
-const audioFile = {
-  paths: AudioPaths,
-  fill: '#FF6B35',
-  title: 'Audio',
-};
-
-const videoFile = {
-  paths: VideoPaths,
-  fill: '#8B5CF6',
-  title: 'Video',
-};
-
 export const fileTypes = {
   /* Category matches */
   file: {
@@ -65,17 +35,12 @@ export const fileTypes = {
     title: 'File',
   },
   text: textDocument,
-  txt: textDocument,
-  audio: audioFile,
-  video: videoFile,
   // application:,
 
   /* Partial matches */
   csv: spreadsheet,
-  'application/pdf': textDocument,
   pdf: textDocument,
   'text/x-': codeFile,
-  artifact: artifact,
 
   /* Exact matches */
   // 'application/json':,
@@ -142,21 +107,7 @@ export const getFileType = (
  * @example
  * formatDate('2020-01-01T00:00:00.000Z') // '1 Jan 2020'
  */
-export function formatDate(dateString: string, isSmallScreen = false) {
-  if (!dateString) {
-    return '';
-  }
-
-  const date = new Date(dateString);
-
-  if (isSmallScreen) {
-    return date.toLocaleDateString('en-US', {
-      month: 'numeric',
-      day: 'numeric',
-      year: '2-digit',
-    });
-  }
-
+export function formatDate(dateString: string) {
   const months = [
     'Jan',
     'Feb',
@@ -171,6 +122,7 @@ export function formatDate(dateString: string, isSmallScreen = false) {
     'Nov',
     'Dec',
   ];
+  const date = new Date(dateString);
 
   const day = date.getDate();
   const month = months[date.getMonth()];
@@ -217,111 +169,3 @@ export function formatBytes(bytes: number, decimals = 2) {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm));
 }
-
-const { checkType } = defaultFileConfig;
-
-export const validateFiles = ({
-  files,
-  fileList,
-  setError,
-  endpointFileConfig,
-  toolResource,
-  fileConfig,
-}: {
-  fileList: File[];
-  files: Map<string, ExtendedFile>;
-  setError: (error: string) => void;
-  endpointFileConfig: EndpointFileConfig;
-  toolResource?: string;
-  fileConfig: FileConfig | null;
-}) => {
-  const { fileLimit, fileSizeLimit, totalSizeLimit, supportedMimeTypes, disabled } =
-    endpointFileConfig;
-  /** Block all uploads if the endpoint is explicitly disabled */
-  if (disabled === true) {
-    setError('com_ui_attach_error_disabled');
-    return false;
-  }
-  const existingFiles = Array.from(files.values());
-  const incomingTotalSize = fileList.reduce((total, file) => total + file.size, 0);
-  if (incomingTotalSize === 0) {
-    setError('com_error_files_empty');
-    return false;
-  }
-  const currentTotalSize = existingFiles.reduce((total, file) => total + file.size, 0);
-
-  if (fileLimit && fileList.length + files.size > fileLimit) {
-    setError(`You can only upload up to ${fileLimit} files at a time.`);
-    return false;
-  }
-
-  for (let i = 0; i < fileList.length; i++) {
-    let originalFile = fileList[i];
-    let fileType = originalFile.type;
-    const extension = originalFile.name.split('.').pop() ?? '';
-    const knownCodeType = codeTypeMapping[extension];
-
-    // Infer MIME type for Known Code files when the type is empty or a mismatch
-    if (knownCodeType && (!fileType || fileType !== knownCodeType)) {
-      fileType = knownCodeType;
-    }
-
-    // Check if the file type is still empty after the extension check
-    if (!fileType) {
-      setError('Unable to determine file type for: ' + originalFile.name);
-      return false;
-    }
-
-    // Replace empty type with inferred type
-    if (originalFile.type !== fileType) {
-      const newFile = new File([originalFile], originalFile.name, { type: fileType });
-      originalFile = newFile;
-      fileList[i] = newFile;
-    }
-
-    let mimeTypesToCheck = supportedMimeTypes;
-    if (toolResource === EToolResources.context) {
-      mimeTypesToCheck = [
-        ...(fileConfig?.text?.supportedMimeTypes || []),
-        ...(fileConfig?.ocr?.supportedMimeTypes || []),
-        ...(fileConfig?.stt?.supportedMimeTypes || []),
-      ];
-    }
-
-    if (!checkType(originalFile.type, mimeTypesToCheck)) {
-      console.log(originalFile);
-      setError('Currently, unsupported file type: ' + originalFile.type);
-      return false;
-    }
-
-    if (fileSizeLimit && originalFile.size >= fileSizeLimit) {
-      setError(`File size exceeds ${fileSizeLimit / megabyte} MB.`);
-      return false;
-    }
-  }
-
-  if (totalSizeLimit && currentTotalSize + incomingTotalSize > totalSizeLimit) {
-    setError(`The total size of the files cannot exceed ${totalSizeLimit / megabyte} MB.`);
-    return false;
-  }
-
-  const combinedFilesInfo = [
-    ...existingFiles.map(
-      (file) =>
-        `${file.file?.name ?? file.filename}-${file.size}-${file.type?.split('/')[0] ?? 'file'}`,
-    ),
-    ...fileList.map(
-      (file: File | undefined) =>
-        `${file?.name}-${file?.size}-${file?.type.split('/')[0] ?? 'file'}`,
-    ),
-  ];
-
-  const uniqueFilesSet = new Set(combinedFilesInfo);
-
-  if (uniqueFilesSet.size !== combinedFilesInfo.length) {
-    setError('com_error_files_dupe');
-    return false;
-  }
-
-  return true;
-};

@@ -1,5 +1,5 @@
-import { OGDialogContent, OGDialog } from '@librechat/client';
 import type { TPromptGroup } from 'librechat-data-provider';
+import { OGDialogContent, OGDialog } from '~/components/ui';
 import PromptDetails from './PromptDetails';
 
 const PreviewPrompt = ({
@@ -13,8 +13,8 @@ const PreviewPrompt = ({
 }) => {
   return (
     <OGDialog open={open} onOpenChange={onOpenChange}>
-      <OGDialogContent className="max-h-[90vh] w-11/12 max-w-full overflow-y-auto md:max-w-[60vw]">
-        <div>
+      <OGDialogContent className="max-w-3xl bg-white dark:border-gray-700 dark:bg-gray-850 dark:text-gray-300">
+        <div className="p-2">
           <PromptDetails group={group} />
         </div>
       </OGDialogContent>

@@ -1,15 +1,12 @@
-const fs = require('fs').promises;
-const { logger } = require('@librechat/data-schemas');
 const { FileContext } = require('librechat-data-provider');
-const { uploadImageBuffer, filterFile } = require('~/server/services/Files/process');
 const validateAuthor = require('~/server/middleware/assistants/validateAuthor');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { deleteAssistantActions } = require('~/server/services/ActionService');
 const { updateAssistantDoc, getAssistants } = require('~/models/Assistant');
+const { uploadImageBuffer } = require('~/server/services/Files/process');
 const { getOpenAIClient, fetchAssistants } = require('./helpers');
-const { getCachedTools } = require('~/server/services/Config');
-const { manifestToolMap } = require('~/app/clients/tools');
 const { deleteFileByFilter } = require('~/models/File');
+const { logger } = require('~/config');
 
 /**
  * Create an assistant.
@@ -21,36 +18,16 @@ const createAssistant = async (req, res) => {
   try {
     const { openai } = await getOpenAIClient({ req, res });
 
-    const {
-      tools = [],
-      endpoint,
-      conversation_starters,
-      append_current_datetime,
-      ...assistantData
-    } = req.body;
-    delete assistantData.conversation_starters;
-    delete assistantData.append_current_datetime;
-
-    const toolDefinitions = await getCachedTools();
-
+    const { tools = [], endpoint, ...assistantData } = req.body;
     assistantData.tools = tools
       .map((tool) => {
         if (typeof tool !== 'string') {
           return tool;
         }
 
-        const toolDef = toolDefinitions[tool];
-        if (!toolDef && manifestToolMap[tool] && manifestToolMap[tool].toolkit === true) {
-          return Object.entries(toolDefinitions)
-            .filter(([key]) => key.startsWith(`${tool}_`))
-
-            .map(([_, val]) => val);
-        }
-
-        return toolDef;
+        return req.app.locals.availableTools[tool];
       })
-      .filter((tool) => tool)
-      .flat();
+      .filter((tool) => tool);
 
     let azureModelIdentifier = null;
     if (openai.locals?.azureOptions) {
@@ -64,29 +41,11 @@ const createAssistant = async (req, res) => {
     };
 
     const assistant = await openai.beta.assistants.create(assistantData);
-
-    const createData = { user: req.user.id };
-    if (conversation_starters) {
-      createData.conversation_starters = conversation_starters;
-    }
-    if (append_current_datetime !== undefined) {
-      createData.append_current_datetime = append_current_datetime;
-    }
-
-    const document = await updateAssistantDoc({ assistant_id: assistant.id }, createData);
-
+    const promise = updateAssistantDoc({ assistant_id: assistant.id }, { user: req.user.id });
     if (azureModelIdentifier) {
       assistant.model = azureModelIdentifier;
     }
-
-    if (document.conversation_starters) {
-      assistant.conversation_starters = document.conversation_starters;
-    }
-
-    if (append_current_datetime !== undefined) {
-      assistant.append_current_datetime = append_current_datetime;
-    }
-
+    await promise;
     logger.debug('/assistants/', assistant);
     res.status(201).json(assistant);
   } catch (error) {
@@ -129,53 +88,22 @@ const patchAssistant = async (req, res) => {
     await validateAuthor({ req, openai });
 
     const assistant_id = req.params.id;
-    const {
-      endpoint: _e,
-      conversation_starters,
-      append_current_datetime,
-      ...updateData
-    } = req.body;
-
-    const toolDefinitions = await getCachedTools();
-
+    const { endpoint: _e, ...updateData } = req.body;
     updateData.tools = (updateData.tools ?? [])
       .map((tool) => {
         if (typeof tool !== 'string') {
           return tool;
         }
 
-        const toolDef = toolDefinitions[tool];
-        if (!toolDef && manifestToolMap[tool] && manifestToolMap[tool].toolkit === true) {
-          return Object.entries(toolDefinitions)
-            .filter(([key]) => key.startsWith(`${tool}_`))
-
-            .map(([_, val]) => val);
-        }
-
-        return toolDef;
+        return req.app.locals.availableTools[tool];
       })
-      .filter((tool) => tool)
-      .flat();
+      .filter((tool) => tool);
 
     if (openai.locals?.azureOptions && updateData.model) {
       updateData.model = openai.locals.azureOptions.azureOpenAIApiDeploymentName;
     }
 
     const updatedAssistant = await openai.beta.assistants.update(assistant_id, updateData);
-
-    if (conversation_starters !== undefined) {
-      const conversationStartersUpdate = await updateAssistantDoc(
-        { assistant_id },
-        { conversation_starters },
-      );
-      updatedAssistant.conversation_starters = conversationStartersUpdate.conversation_starters;
-    }
-
-    if (append_current_datetime !== undefined) {
-      await updateAssistantDoc({ assistant_id }, { append_current_datetime });
-      updatedAssistant.append_current_datetime = append_current_datetime;
-    }
-
     res.json(updatedAssistant);
   } catch (error) {
     logger.error('[/assistants/:id] Error updating assistant', error);
@@ -197,7 +125,7 @@ const deleteAssistant = async (req, res) => {
     await validateAuthor({ req, openai });
 
     const assistant_id = req.params.id;
-    const deletionStatus = await openai.beta.assistants.delete(assistant_id);
+    const deletionStatus = await openai.beta.assistants.del(assistant_id);
     if (deletionStatus?.deleted) {
       await deleteAssistantActions({ req, assistant_id });
     }
@@ -226,59 +154,13 @@ const listAssistants = async (req, res) => {
 };
 
 /**
- * Filter assistants based on configuration.
- *
- * @param {object} params - The parameters object.
- * @param {string} params.userId -  The user ID to filter private assistants.
- * @param {AssistantDocument[]} params.assistants - The list of assistants to filter.
- * @param {Partial<TAssistantEndpoint>} [params.assistantsConfig] -  The assistant configuration.
- * @returns {AssistantDocument[]} - The filtered list of assistants.
- */
-function filterAssistantDocs({ documents, userId, assistantsConfig = {} }) {
-  const { supportedIds, excludedIds, privateAssistants } = assistantsConfig;
-  const removeUserId = (doc) => {
-    const { user: _u, ...document } = doc;
-    return document;
-  };
-
-  if (privateAssistants) {
-    return documents.filter((doc) => userId === doc.user.toString()).map(removeUserId);
-  } else if (supportedIds?.length) {
-    return documents.filter((doc) => supportedIds.includes(doc.assistant_id)).map(removeUserId);
-  } else if (excludedIds?.length) {
-    return documents.filter((doc) => !excludedIds.includes(doc.assistant_id)).map(removeUserId);
-  }
-  return documents.map(removeUserId);
-}
-
-/**
  * Returns a list of the user's assistant documents (metadata saved to database).
  * @route GET /assistants/documents
  * @returns {AssistantDocument[]} 200 - success response - application/json
  */
 const getAssistantDocuments = async (req, res) => {
   try {
-    const appConfig = req.config;
-    const endpoint = req.query;
-    const assistantsConfig = appConfig.endpoints?.[endpoint];
-    const documents = await getAssistants(
-      {},
-      {
-        user: 1,
-        assistant_id: 1,
-        conversation_starters: 1,
-        createdAt: 1,
-        updatedAt: 1,
-        append_current_datetime: 1,
-      },
-    );
-
-    const docs = filterAssistantDocs({
-      documents,
-      userId: req.user.id,
-      assistantsConfig,
-    });
-    res.json(docs);
+    res.json(await getAssistants({ user: req.user.id }));
   } catch (error) {
     logger.error('[/assistants/documents] Error listing assistant documents', error);
     res.status(500).json({ error: error.message });
@@ -287,42 +169,38 @@ const getAssistantDocuments = async (req, res) => {
 
 /**
  * Uploads and updates an avatar for a specific assistant.
- * @route POST /:assistant_id/avatar
+ * @route POST /avatar/:assistant_id
  * @param {object} req - Express Request
  * @param {object} req.params - Request params
  * @param {string} req.params.assistant_id - The ID of the assistant.
  * @param {Express.Multer.File} req.file - The avatar image file.
  * @param {object} req.body - Request body
+ * @param {string} [req.body.metadata] - Optional metadata for the assistant's avatar.
  * @returns {Object} 200 - success response - application/json
  */
 const uploadAssistantAvatar = async (req, res) => {
   try {
-    const appConfig = req.config;
-    filterFile({ req, file: req.file, image: true, isAvatar: true });
     const { assistant_id } = req.params;
     if (!assistant_id) {
       return res.status(400).json({ message: 'Assistant ID is required' });
     }
 
+    let { metadata: _metadata = '{}' } = req.body;
     const { openai } = await getOpenAIClient({ req, res });
     await validateAuthor({ req, openai });
 
-    const buffer = await fs.readFile(req.file.path);
     const image = await uploadImageBuffer({
       req,
       context: FileContext.avatar,
-      metadata: { buffer },
+      metadata: {
+        buffer: req.file.buffer,
+      },
     });
 
-    let _metadata;
-
     try {
-      const assistant = await openai.beta.assistants.retrieve(assistant_id);
-      if (assistant) {
-        _metadata = assistant.metadata;
-      }
+      _metadata = JSON.parse(_metadata);
     } catch (error) {
-      logger.error('[/:assistant_id/avatar] Error fetching assistant', error);
+      logger.error('[/avatar/:assistant_id] Error parsing metadata', error);
       _metadata = {};
     }
 
@@ -330,16 +208,16 @@ const uploadAssistantAvatar = async (req, res) => {
       const { deleteFile } = getStrategyFunctions(_metadata.avatar_source);
       try {
         await deleteFile(req, { filepath: _metadata.avatar });
-        await deleteFileByFilter({ user: req.user.id, filepath: _metadata.avatar });
+        await deleteFileByFilter({ filepath: _metadata.avatar });
       } catch (error) {
-        logger.error('[/:assistant_id/avatar] Error deleting old avatar', error);
+        logger.error('[/avatar/:assistant_id] Error deleting old avatar', error);
       }
     }
 
     const metadata = {
       ..._metadata,
       avatar: image.filepath,
-      avatar_source: appConfig.fileStrategy,
+      avatar_source: req.app.locals.fileStrategy,
     };
 
     const promises = [];
@@ -349,7 +227,7 @@ const uploadAssistantAvatar = async (req, res) => {
         {
           avatar: {
             filepath: image.filepath,
-            source: appConfig.fileStrategy,
+            source: req.app.locals.fileStrategy,
           },
           user: req.user.id,
         },
@@ -363,13 +241,6 @@ const uploadAssistantAvatar = async (req, res) => {
     const message = 'An error occurred while updating the Assistant Avatar';
     logger.error(message, error);
     res.status(500).json({ message });
-  } finally {
-    try {
-      await fs.unlink(req.file.path);
-      logger.debug('[/:agent_id/avatar] Temp. image upload file deleted');
-    } catch {
-      logger.debug('[/:agent_id/avatar] Temp. image upload file already deleted');
-    }
   }
 };
 

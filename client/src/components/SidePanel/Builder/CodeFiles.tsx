@@ -1,12 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
-import { EToolResources, mergeFileConfig, getEndpointFileConfig } from 'librechat-data-provider';
+import {
+  EToolResources,
+  mergeFileConfig,
+  fileConfig as defaultFileConfig,
+} from 'librechat-data-provider';
 import type { AssistantsEndpoint } from 'librechat-data-provider';
 import type { ExtendedFile } from '~/common';
 import FileRow from '~/components/Chat/Input/Files/FileRow';
 import { useGetFileConfig } from '~/data-provider';
 import { useFileHandling } from '~/hooks/Files';
+import useLocalize from '~/hooks/useLocalize';
 import { useChatContext } from '~/Providers';
-import { useLocalize } from '~/hooks';
 
 const tool_resource = EToolResources.code_interpreter;
 
@@ -24,10 +28,11 @@ export default function CodeFiles({
   const { setFilesLoading } = useChatContext();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<Map<string, ExtendedFile>>(new Map());
-  const { data: fileConfig = null } = useGetFileConfig({
+  const { data: fileConfig = defaultFileConfig } = useGetFileConfig({
     select: (data) => mergeFileConfig(data),
   });
   const { handleFileChange } = useFileHandling({
+    overrideEndpoint: endpoint,
     additionalMetadata: { assistant_id, tool_resource },
     fileSetter: setFiles,
   });
@@ -38,14 +43,9 @@ export default function CodeFiles({
     }
   }, [_files]);
 
-  const endpointFileConfig = getEndpointFileConfig({
-    fileConfig,
-    endpoint,
-    endpointType: endpoint,
-  });
-  const isUploadDisabled = endpointFileConfig?.disabled ?? false;
+  const endpointFileConfig = fileConfig.endpoints[endpoint];
 
-  if (isUploadDisabled) {
+  if (endpointFileConfig?.disabled) {
     return null;
   }
 
@@ -60,7 +60,7 @@ export default function CodeFiles({
   return (
     <div className="mb-2 w-full">
       <div className="flex flex-col gap-4">
-        <div className="rounded-lg text-xs text-text-secondary">
+        <div className="text-token-text-tertiary rounded-lg text-xs">
           {localize('com_assistants_code_interpreter_files')}
         </div>
         <FileRow
@@ -75,7 +75,7 @@ export default function CodeFiles({
           <button
             type="button"
             disabled={!assistant_id}
-            className="btn btn-neutral border-token-border-light relative h-9 w-full rounded-lg font-medium"
+            className="btn btn-neutral border-token-border-light relative h-8 w-full rounded-lg font-medium"
             onClick={handleButtonClick}
           >
             <div className="flex w-full items-center justify-center gap-2">

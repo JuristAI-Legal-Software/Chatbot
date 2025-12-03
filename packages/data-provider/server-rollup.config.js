@@ -10,7 +10,7 @@ const entryPath = path.resolve(rootPath, 'api/server/index.js');
 
 console.log('entryPath', entryPath);
 
-// Define custom aliases here
+// Define your custom aliases here
 const customAliases = {
   entries: [{ find: '~', replacement: rootServerPath }],
 };
@@ -18,8 +18,8 @@ const customAliases = {
 export default {
   input: entryPath,
   output: {
-    dir: 'test_bundle',
-    format: 'es',
+    file: 'test_bundle/bundle.js',
+    format: 'cjs',
   },
   plugins: [
     alias(customAliases),

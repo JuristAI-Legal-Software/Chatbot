@@ -3,13 +3,6 @@ const { createChunkProcessor, splitTextIntoChunks } = require('./streamAudio');
 jest.mock('keyv');
 
 const globalCache = {};
-jest.mock('~/models/Message', () => {
-  return {
-    getMessage: jest.fn().mockImplementation((messageId) => {
-      return globalCache[messageId] || null;
-    }),
-  };
-});
 jest.mock('~/cache/getLogStores', () => {
   return jest.fn().mockImplementation(() => {
     const EventEmitter = require('events');
@@ -63,10 +56,9 @@ describe('processChunks', () => {
     jest.resetAllMocks();
     mockMessageCache = {
       get: jest.fn(),
-      set: jest.fn(),
     };
     require('~/cache/getLogStores').mockReturnValue(mockMessageCache);
-    processChunks = createChunkProcessor('userId', 'message-id');
+    processChunks = createChunkProcessor('message-id');
   });
 
   it('should return an empty array when the message is not found', async () => {

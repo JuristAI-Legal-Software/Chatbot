@@ -2,15 +2,13 @@ const { z } = require('zod');
 const path = require('path');
 const OpenAI = require('openai');
 const { v4: uuidv4 } = require('uuid');
-const { ProxyAgent, fetch } = require('undici');
-const { Tool } = require('@langchain/core/tools');
-const { logger } = require('@librechat/data-schemas');
-const { getImageBasename } = require('@librechat/api');
-const { FileContext, ContentTypes } = require('librechat-data-provider');
+const { Tool } = require('langchain/tools');
+const { HttpsProxyAgent } = require('https-proxy-agent');
+const { FileContext } = require('librechat-data-provider');
+const { getImageBasename } = require('~/server/services/Files/images');
 const extractBaseURL = require('~/utils/extractBaseURL');
+const { logger } = require('~/config');
 
-const displayMessage =
-  "DALL-E displayed an image. All generated images are already plainly visible, so don't repeat the descriptions in detail. Do not list download links as they are available in the UI already. The user may download the images by clicking on them, but do not mention anything about downloading to the user.";
 class DALLE3 extends Tool {
   constructor(fields = {}) {
     super();
@@ -21,8 +19,6 @@ class DALLE3 extends Tool {
 
     this.userId = fields.userId;
     this.fileStrategy = fields.fileStrategy;
-    /** @type {boolean} */
-    this.isAgent = fields.isAgent;
     if (fields.processFileURL) {
       /** @type {processFileURL} Necessary for output to contain all image metadata. */
       this.processFileURL = fields.processFileURL.bind(this);
@@ -45,10 +41,7 @@ class DALLE3 extends Tool {
     }
 
     if (process.env.PROXY) {
-      const proxyAgent = new ProxyAgent(process.env.PROXY);
-      config.fetchOptions = {
-        dispatcher: proxyAgent,
-      };
+      config.httpAgent = new HttpsProxyAgent(process.env.PROXY);
     }
 
     /** @type {OpenAI} */
@@ -115,16 +108,6 @@ class DALLE3 extends Tool {
     return `![generated image](${imageUrl})`;
   }
 
-  returnValue(value) {
-    if (this.isAgent === true && typeof value === 'string') {
-      return [value, {}];
-    } else if (this.isAgent === true && typeof value === 'object') {
-      return [displayMessage, value];
-    }
-
-    return value;
-  }
-
   async _call(data) {
     const { prompt, quality = 'standard', size = '1024x1024', style = 'vivid' } = data;
     if (!prompt) {
@@ -143,50 +126,18 @@ class DALLE3 extends Tool {
       });
     } catch (error) {
       logger.error('[DALL-E-3] Problem generating the image:', error);
-      return this
-        .returnValue(`Something went wrong when trying to generate the image. The DALL-E API may be unavailable:
-Error Message: ${error.message}`);
+      return `Something went wrong when trying to generate the image. The DALL-E API may be unavailable:
+Error Message: ${error.message}`;
     }
 
     if (!resp) {
-      return this.returnValue(
-        'Something went wrong when trying to generate the image. The DALL-E API may be unavailable',
-      );
+      return 'Something went wrong when trying to generate the image. The DALL-E API may be unavailable';
     }
 
     const theImageUrl = resp.data[0].url;
 
     if (!theImageUrl) {
-      return this.returnValue(
-        'No image URL returned from OpenAI API. There may be a problem with the API or your configuration.',
-      );
-    }
-
-    if (this.isAgent) {
-      let fetchOptions = {};
-      if (process.env.PROXY) {
-        const proxyAgent = new ProxyAgent(process.env.PROXY);
-        fetchOptions.dispatcher = proxyAgent;
-      }
-      const imageResponse = await fetch(theImageUrl, fetchOptions);
-      const arrayBuffer = await imageResponse.arrayBuffer();
-      const base64 = Buffer.from(arrayBuffer).toString('base64');
-      const content = [
-        {
-          type: ContentTypes.IMAGE_URL,
-          image_url: {
-            url: `data:image/png;base64,${base64}`,
-          },
-        },
-      ];
-
-      const response = [
-        {
-          type: ContentTypes.TEXT,
-          text: displayMessage,
-        },
-      ];
-      return [response, { content }];
+      return 'No image URL returned from OpenAI API. There may be a problem with the API or your configuration.';
     }
 
     const imageBasename = getImageBasename(theImageUrl);
@@ -206,11 +157,11 @@ Error Message: ${error.message}`);
 
     try {
       const result = await this.processFileURL({
-        URL: theImageUrl,
-        basePath: 'images',
-        userId: this.userId,
-        fileName: imageName,
         fileStrategy: this.fileStrategy,
+        userId: this.userId,
+        URL: theImageUrl,
+        fileName: imageName,
+        basePath: 'images',
         context: FileContext.image_generation,
       });
 
@@ -224,7 +175,7 @@ Error Message: ${error.message}`);
       this.result = `Failed to save the image locally. ${error.message}`;
     }
 
-    return this.returnValue(this.result);
+    return this.result;
   }
 }
 

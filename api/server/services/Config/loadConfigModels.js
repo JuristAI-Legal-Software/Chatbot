@@ -1,43 +1,43 @@
-const { isUserProvided } = require('@librechat/api');
-const {
-  EModelEndpoint,
-  extractEnvVariable,
-  normalizeEndpointName,
-} = require('librechat-data-provider');
+const { EModelEndpoint, extractEnvVariable } = require('librechat-data-provider');
 const { fetchModels } = require('~/server/services/ModelService');
-const { getAppConfig } = require('./app');
+const { isUserProvided } = require('~/server/utils');
+const getCustomConfig = require('./getCustomConfig');
 
 /**
  * Load config endpoints from the cached configuration object
  * @function loadConfigModels
- * @param {ServerRequest} req - The Express request object.
+ * @param {Express.Request} req - The Express request object.
  */
 async function loadConfigModels(req) {
-  const appConfig = await getAppConfig({ role: req.user?.role });
-  if (!appConfig) {
+  const customConfig = await getCustomConfig();
+
+  if (!customConfig) {
     return {};
   }
+
+  const { endpoints = {} } = customConfig ?? {};
   const modelsConfig = {};
-  const azureConfig = appConfig.endpoints?.[EModelEndpoint.azureOpenAI];
+  const azureEndpoint = endpoints[EModelEndpoint.azureOpenAI];
+  const azureConfig = req.app.locals[EModelEndpoint.azureOpenAI];
   const { modelNames } = azureConfig ?? {};
 
-  if (modelNames && azureConfig) {
+  if (modelNames && azureEndpoint) {
     modelsConfig[EModelEndpoint.azureOpenAI] = modelNames;
   }
 
-  if (modelNames && azureConfig && azureConfig.plugins) {
+  if (modelNames && azureEndpoint && azureEndpoint.plugins) {
     modelsConfig[EModelEndpoint.gptPlugins] = modelNames;
   }
 
-  if (azureConfig?.assistants && azureConfig.assistantModels) {
+  if (azureEndpoint?.assistants && azureConfig.assistantModels) {
     modelsConfig[EModelEndpoint.azureAssistants] = azureConfig.assistantModels;
   }
 
-  if (!Array.isArray(appConfig.endpoints?.[EModelEndpoint.custom])) {
+  if (!Array.isArray(endpoints[EModelEndpoint.custom])) {
     return modelsConfig;
   }
 
-  const customEndpoints = appConfig.endpoints[EModelEndpoint.custom].filter(
+  const customEndpoints = endpoints[EModelEndpoint.custom].filter(
     (endpoint) =>
       endpoint.baseURL &&
       endpoint.apiKey &&
@@ -47,7 +47,7 @@ async function loadConfigModels(req) {
   );
 
   /**
-   * @type {Record<string, Promise<string[]>>}
+   * @type {Record<string, string[]>}
    * Map for promises keyed by unique combination of baseURL and apiKey */
   const fetchPromisesMap = {};
   /**
@@ -61,8 +61,7 @@ async function loadConfigModels(req) {
 
   for (let i = 0; i < customEndpoints.length; i++) {
     const endpoint = customEndpoints[i];
-    const { models, name: configName, baseURL, apiKey, headers: endpointHeaders } = endpoint;
-    const name = normalizeEndpointName(configName);
+    const { models, name, baseURL, apiKey } = endpoint;
     endpointsMap[name] = endpoint;
 
     const API_KEY = extractEnvVariable(apiKey);
@@ -76,13 +75,10 @@ async function loadConfigModels(req) {
       fetchPromisesMap[uniqueKey] =
         fetchPromisesMap[uniqueKey] ||
         fetchModels({
-          name,
-          apiKey: API_KEY,
-          baseURL: BASE_URL,
           user: req.user.id,
-          userObject: req.user,
-          headers: endpointHeaders,
-          direct: endpoint.directEndpoint,
+          baseURL: BASE_URL,
+          apiKey: API_KEY,
+          name,
           userIdQuery: models.userIdQuery,
         });
       uniqueKeyToEndpointsMap[uniqueKey] = uniqueKeyToEndpointsMap[uniqueKey] || [];
@@ -91,9 +87,7 @@ async function loadConfigModels(req) {
     }
 
     if (Array.isArray(models.default)) {
-      modelsConfig[name] = models.default.map((model) =>
-        typeof model === 'string' ? model : model.name,
-      );
+      modelsConfig[name] = models.default;
     }
   }
 
@@ -107,7 +101,7 @@ async function loadConfigModels(req) {
 
     for (const name of associatedNames) {
       const endpoint = endpointsMap[name];
-      modelsConfig[name] = !modelData?.length ? (endpoint.models.default ?? []) : modelData;
+      modelsConfig[name] = !modelData?.length ? endpoint.models.default ?? [] : modelData;
     }
   }
 

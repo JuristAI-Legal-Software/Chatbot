@@ -1,127 +1,102 @@
-import { useCallback, useRef } from 'react';
-import { useToastContext, TooltipAnchor, ListeningIcon, Spinner } from '@librechat/client';
-import { useLocalize, useSpeechToText, useGetAudioSettings } from '~/hooks';
+import { useEffect } from 'react';
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '~/components/ui';
+import { ListeningIcon, Spinner } from '~/components/svg';
+import { useLocalize, useSpeechToText } from '~/hooks';
 import { useChatFormContext } from '~/Providers';
 import { globalAudioId } from '~/common';
 import { cn } from '~/utils';
 
-const isExternalSTT = (speechToTextEndpoint: string) => speechToTextEndpoint === 'external';
 export default function AudioRecorder({
-  disabled,
-  ask,
-  methods,
   textAreaRef,
-  isSubmitting,
+  methods,
+  ask,
+  isRTL,
+  disabled,
 }: {
-  disabled: boolean;
-  ask: (data: { text: string }) => void;
-  methods: ReturnType<typeof useChatFormContext>;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
-  isSubmitting: boolean;
+  methods: ReturnType<typeof useChatFormContext>;
+  ask: (data: { text: string }) => void;
+  isRTL: boolean;
+  disabled: boolean;
 }) {
-  const { setValue, reset, getValues } = methods;
   const localize = useLocalize();
-  const { showToast } = useToastContext();
-  const { speechToTextEndpoint } = useGetAudioSettings();
 
-  const existingTextRef = useRef<string>('');
+  const handleTranscriptionComplete = (text: string) => {
+    if (text) {
+      const globalAudio = document.getElementById(globalAudioId) as HTMLAudioElement;
+      if (globalAudio) {
+        console.log('Unmuting global audio');
+        globalAudio.muted = false;
+      }
+      ask({ text });
+      methods.reset({ text: '' });
+      clearText();
+    }
+  };
 
-  const onTranscriptionComplete = useCallback(
-    (text: string) => {
-      if (isSubmitting) {
-        showToast({
-          message: localize('com_ui_speech_while_submitting'),
-          status: 'error',
-        });
-        return;
-      }
-      if (text) {
-        const globalAudio = document.getElementById(globalAudioId) as HTMLAudioElement | null;
-        if (globalAudio) {
-          console.log('Unmuting global audio');
-          globalAudio.muted = false;
-        }
-        /** For external STT, append existing text to the transcription */
-        const finalText =
-          isExternalSTT(speechToTextEndpoint) && existingTextRef.current
-            ? `${existingTextRef.current} ${text}`
-            : text;
-        ask({ text: finalText });
-        reset({ text: '' });
-        existingTextRef.current = '';
-      }
-    },
-    [ask, reset, showToast, localize, isSubmitting, speechToTextEndpoint],
-  );
+  const {
+    isListening,
+    isLoading,
+    startRecording,
+    stopRecording,
+    interimTranscript,
+    speechText,
+    clearText,
+  } = useSpeechToText(handleTranscriptionComplete);
 
-  const setText = useCallback(
-    (text: string) => {
-      let newText = text;
-      if (isExternalSTT(speechToTextEndpoint)) {
-        /** For external STT, the text comes as a complete transcription, so append to existing */
-        newText = existingTextRef.current ? `${existingTextRef.current} ${text}` : text;
-      } else {
-        /** For browser STT, the transcript is cumulative, so we only need to prepend the existing text once */
-        newText = existingTextRef.current ? `${existingTextRef.current} ${text}` : text;
-      }
-      setValue('text', newText, {
+  useEffect(() => {
+    if (isListening && textAreaRef.current) {
+      methods.setValue('text', interimTranscript, {
         shouldValidate: true,
       });
-    },
-    [setValue, speechToTextEndpoint],
-  );
-
-  const { isListening, isLoading, startRecording, stopRecording } = useSpeechToText(
-    setText,
-    onTranscriptionComplete,
-  );
-
-  if (!textAreaRef.current) {
-    return null;
-  }
+    } else if (textAreaRef.current) {
+      textAreaRef.current.value = speechText;
+      methods.setValue('text', speechText, { shouldValidate: true });
+    }
+  }, [interimTranscript, speechText, methods, textAreaRef]);
 
   const handleStartRecording = async () => {
-    existingTextRef.current = getValues('text') || '';
-    startRecording();
+    await startRecording();
   };
 
   const handleStopRecording = async () => {
-    stopRecording();
-    /** For browser STT, clear the reference since text was already being updated */
-    if (!isExternalSTT(speechToTextEndpoint)) {
-      existingTextRef.current = '';
-    }
+    await stopRecording();
   };
 
   const renderIcon = () => {
-    if (isListening === true) {
+    if (isListening) {
       return <ListeningIcon className="stroke-red-500" />;
     }
-    if (isLoading === true) {
-      return <Spinner className="stroke-text-secondary" />;
+    if (isLoading) {
+      return <Spinner className="stroke-gray-700 dark:stroke-gray-300" />;
     }
-    return <ListeningIcon className="stroke-text-secondary" />;
+    return <ListeningIcon className="stroke-gray-700 dark:stroke-gray-300" />;
   };
 
   return (
-    <TooltipAnchor
-      description={localize('com_ui_use_micrphone')}
-      render={
-        <button
-          id="audio-recorder"
-          type="button"
-          aria-label={localize('com_ui_use_micrphone')}
-          onClick={isListening === true ? handleStopRecording : handleStartRecording}
-          disabled={disabled}
-          className={cn(
-            'flex size-9 items-center justify-center rounded-full p-1 transition-colors hover:bg-surface-hover',
-          )}
-          title={localize('com_ui_use_micrphone')}
-          aria-pressed={isListening}
-        >
-          {renderIcon()}
-        </button>
-      }
-    />
+    <TooltipProvider delayDuration={250}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            id="audio-recorder"
+            aria-label={localize('com_ui_use_micrphone')}
+            onClick={isListening ? handleStopRecording : handleStartRecording}
+            disabled={disabled}
+            className={cn(
+              'absolute flex h-[30px] w-[30px] items-center justify-center rounded-lg p-0.5 transition-colors hover:bg-gray-200 dark:hover:bg-gray-700',
+              isRTL
+                ? 'bottom-1.5 left-4 md:bottom-3 md:left-12'
+                : 'bottom-1.5 right-12 md:bottom-3 md:right-12',
+            )}
+            type="button"
+          >
+            {renderIcon()}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" sideOffset={10}>
+          {localize('com_ui_use_micrphone')}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }

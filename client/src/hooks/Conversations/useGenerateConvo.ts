@@ -1,19 +1,17 @@
 import { useRecoilValue } from 'recoil';
 import { useCallback, useRef, useEffect } from 'react';
-import { useGetModelsQuery } from 'librechat-data-provider/react-query';
-import { getEndpointField, LocalStorageKeys, isAssistantsEndpoint } from 'librechat-data-provider';
+import { LocalStorageKeys, isAssistantsEndpoint } from 'librechat-data-provider';
+import { useGetModelsQuery, useGetEndpointsQuery } from 'librechat-data-provider/react-query';
 import type {
-  TEndpointsConfig,
-  EModelEndpoint,
+  TPreset,
   TModelsConfig,
   TConversation,
-  TPreset,
+  TEndpointsConfig,
 } from 'librechat-data-provider';
-import type { AssistantListItem } from '~/common';
 import type { SetterOrUpdater } from 'recoil';
+import type { AssistantListItem } from '~/common';
+import { getEndpointField, buildDefaultConvo, getDefaultEndpoint } from '~/utils';
 import useAssistantListMap from '~/hooks/Assistants/useAssistantListMap';
-import { buildDefaultConvo, getDefaultEndpoint, logger } from '~/utils';
-import { useGetEndpointsQuery } from '~/data-provider';
 import { mainTextareaId } from '~/common';
 import store from '~/store';
 
@@ -34,7 +32,7 @@ const useGenerateConvo = ({
   const rootConvo = useRecoilValue(store.conversationByKeySelector(rootIndex));
 
   useEffect(() => {
-    if (rootConvo?.conversationId != null && setConversation) {
+    if (rootConvo?.conversationId && setConversation) {
       setConversation((prevState) => {
         if (!prevState) {
           return prevState;
@@ -44,7 +42,6 @@ const useGenerateConvo = ({
           conversationId: rootConvo.conversationId,
         } as TConversation;
 
-        logger.log('conversation', 'Setting conversation from `useNewConvo`', update);
         return update;
       });
     }
@@ -88,11 +85,11 @@ const useGenerateConvo = ({
       }
 
       const isAssistantEndpoint = isAssistantsEndpoint(defaultEndpoint);
-      const assistants: AssistantListItem[] = assistantsListMap[defaultEndpoint ?? ''] ?? [];
+      const assistants: AssistantListItem[] = assistantsListMap[defaultEndpoint] ?? [];
 
       if (
         conversation.assistant_id &&
-        !assistantsListMap[defaultEndpoint ?? '']?.[conversation.assistant_id]
+        !assistantsListMap[defaultEndpoint]?.[conversation.assistant_id]
       ) {
         conversation.assistant_id = undefined;
       }
@@ -104,7 +101,7 @@ const useGenerateConvo = ({
       }
 
       if (
-        conversation.assistant_id != null &&
+        conversation.assistant_id &&
         isAssistantEndpoint &&
         conversation.conversationId === 'new'
       ) {
@@ -112,19 +109,19 @@ const useGenerateConvo = ({
         conversation.model = assistant?.model;
       }
 
-      if (conversation.assistant_id != null && !isAssistantEndpoint) {
+      if (conversation.assistant_id && !isAssistantEndpoint) {
         conversation.assistant_id = undefined;
       }
 
-      const models = modelsConfig?.[defaultEndpoint ?? ''] ?? [];
+      const models = modelsConfig?.[defaultEndpoint] ?? [];
       conversation = buildDefaultConvo({
         conversation,
         lastConversationSetup: preset as TConversation,
-        endpoint: defaultEndpoint ?? ('' as EModelEndpoint),
+        endpoint: defaultEndpoint,
         models,
       });
 
-      if (preset?.title != null && preset.title !== '') {
+      if (preset?.title) {
         conversation.title = preset.title;
       }
 

@@ -4,10 +4,9 @@ import { useRecoilState, useSetRecoilState } from 'recoil';
 import { LocalStorageKeys } from 'librechat-data-provider';
 import { useAvailablePluginsQuery } from 'librechat-data-provider/react-query';
 import type { TStartupConfig, TPlugin, TUser } from 'librechat-data-provider';
+import { data as modelSpecs } from '~/components/Chat/Menus/Models/fakeData';
 import { mapPlugins, selectPlugins, processPlugins } from '~/utils';
-import { cleanupTimestampedStorage } from '~/utils/timestamps';
-import useSpeechSettingsInit from './useSpeechSettingsInit';
-import { useMCPToolsQuery } from '~/data-provider';
+import useConfigOverride from './useConfigOverride';
 import store from '~/store';
 
 const pluginStore: TPlugin = {
@@ -27,6 +26,7 @@ export default function useAppStartup({
   startupConfig?: TStartupConfig;
   user?: TUser;
 }) {
+  useConfigOverride();
   const setAvailableTools = useSetRecoilState(store.availableTools);
   const [defaultPreset, setDefaultPreset] = useRecoilState(store.defaultPreset);
   const { data: allPlugins } = useAvailablePluginsQuery({
@@ -34,34 +34,19 @@ export default function useAppStartup({
     select: selectPlugins,
   });
 
-  useSpeechSettingsInit(!!user);
-
-  useMCPToolsQuery({
-    enabled: !!startupConfig?.mcpServers && !!user,
-  });
-
-  /** Clean up old localStorage entries on startup */
-  useEffect(() => {
-    cleanupTimestampedStorage();
-  }, []);
-
   /** Set the app title */
   useEffect(() => {
-    const appTitle = startupConfig?.appTitle ?? '';
-    if (!appTitle) {
-      return;
+    if (startupConfig?.appTitle) {
+      document.title = startupConfig.appTitle;
+      localStorage.setItem(LocalStorageKeys.APP_TITLE, startupConfig.appTitle);
     }
-    document.title = appTitle;
-    localStorage.setItem(LocalStorageKeys.APP_TITLE, appTitle);
   }, [startupConfig]);
 
   /** Set the default spec's preset as default */
   useEffect(() => {
-    if (defaultPreset && defaultPreset.spec != null) {
+    if (defaultPreset && defaultPreset.spec) {
       return;
     }
-
-    const modelSpecs = startupConfig?.modelSpecs?.list;
 
     if (!modelSpecs || !modelSpecs.length) {
       return;
@@ -78,7 +63,7 @@ export default function useAppStartup({
       iconURL: defaultSpec.iconURL,
       spec: defaultSpec.name,
     });
-  }, [defaultPreset, setDefaultPreset, startupConfig?.modelSpecs?.list]);
+  }, [defaultPreset, setDefaultPreset]);
 
   /** Set the available Plugins */
   useEffect(() => {
@@ -90,19 +75,17 @@ export default function useAppStartup({
       return;
     }
 
-    const userPlugins = user.plugins ?? [];
-
-    if (userPlugins.length === 0) {
+    if (!user.plugins || user.plugins.length === 0) {
       setAvailableTools({ pluginStore });
       return;
     }
 
-    const tools = [...userPlugins]
+    const tools = [...user.plugins]
       .map((el) => allPlugins.map[el])
-      .filter((el: TPlugin | undefined): el is TPlugin => el !== undefined);
+      .filter((el): el is TPlugin => el !== undefined);
 
     /* Filter Last Selected Tools */
-    const localStorageItem = localStorage.getItem(LocalStorageKeys.LAST_TOOLS) ?? '';
+    const localStorageItem = localStorage.getItem(LocalStorageKeys.LAST_TOOLS);
     if (!localStorageItem) {
       return setAvailableTools({ pluginStore, ...mapPlugins(tools) });
     }
@@ -111,18 +94,16 @@ export default function useAppStartup({
       .filter((tool: TPlugin) =>
         tools.some((existingTool) => existingTool.pluginKey === tool.pluginKey),
       )
-      .filter((tool: TPlugin | undefined) => !!tool);
+      .filter((tool: TPlugin) => !!tool);
     localStorage.setItem(LocalStorageKeys.LAST_TOOLS, JSON.stringify(filteredTools));
 
     setAvailableTools({ pluginStore, ...mapPlugins(tools) });
   }, [allPlugins, user, setAvailableTools]);
 
-  useEffect(() => {
-    if (startupConfig?.analyticsGtmId != null && typeof window.google_tag_manager === 'undefined') {
-      const tagManagerArgs = {
-        gtmId: startupConfig.analyticsGtmId,
-      };
-      TagManager.initialize(tagManagerArgs);
-    }
-  }, [startupConfig?.analyticsGtmId]);
+  if (startupConfig?.analyticsGtmId) {
+    const tagManagerArgs = {
+      gtmId: startupConfig?.analyticsGtmId,
+    };
+    TagManager.initialize(tagManagerArgs);
+  }
 }

@@ -16,7 +16,7 @@ function useTimeout({ callback, delay = 400 }: TUseTimeoutParams) {
     }
 
     // Set new timeout
-    if (value != null && value) {
+    if (value) {
       console.log(value);
       timeout.current = setTimeout(() => {
         callback(value);

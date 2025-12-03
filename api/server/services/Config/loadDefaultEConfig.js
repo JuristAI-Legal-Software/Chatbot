@@ -4,26 +4,26 @@ const { config } = require('./EndpointService');
 
 /**
  * Load async endpoints and return a configuration object
- * @param {AppConfig} appConfig - The app configuration object
+ * @param {Express.Request} req - The request object
  * @returns {Promise<Object.<string, EndpointWithOrder>>} An object whose keys are endpoint names and values are objects that contain the endpoint configuration and an order.
  */
-async function loadDefaultEndpointsConfig(appConfig) {
-  const { google, gptPlugins } = await loadAsyncEndpoints(appConfig);
-  const { assistants, azureAssistants, azureOpenAI, chatGPTBrowser } = config;
+async function loadDefaultEndpointsConfig(req) {
+  const { google, gptPlugins } = await loadAsyncEndpoints(req);
+  const { openAI, assistants, azureAssistants, bingAI, anthropic, azureOpenAI, chatGPTBrowser } =
+    config;
 
   const enabledEndpoints = getEnabledEndpoints();
 
   const endpointConfig = {
-    [EModelEndpoint.openAI]: config[EModelEndpoint.openAI],
-    [EModelEndpoint.agents]: config[EModelEndpoint.agents],
+    [EModelEndpoint.openAI]: openAI,
     [EModelEndpoint.assistants]: assistants,
     [EModelEndpoint.azureAssistants]: azureAssistants,
     [EModelEndpoint.azureOpenAI]: azureOpenAI,
     [EModelEndpoint.google]: google,
+    [EModelEndpoint.bingAI]: bingAI,
     [EModelEndpoint.chatGPTBrowser]: chatGPTBrowser,
     [EModelEndpoint.gptPlugins]: gptPlugins,
-    [EModelEndpoint.anthropic]: config[EModelEndpoint.anthropic],
-    [EModelEndpoint.bedrock]: config[EModelEndpoint.bedrock],
+    [EModelEndpoint.anthropic]: anthropic,
   };
 
   const orderedAndFilteredEndpoints = enabledEndpoints.reduce((config, key, index) => {

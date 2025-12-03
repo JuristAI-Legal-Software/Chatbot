@@ -10,9 +10,6 @@ export function getClient() {
   /** @type {Anthropic.default.RequestOptions} */
   const options = {
     apiKey: process.env.ANTHROPIC_API_KEY,
-    defaultHeaders: {
-      'anthropic-beta': 'prompt-caching-2024-07-31',
-    },
   };
 
   return new Anthropic(options);
@@ -32,12 +29,12 @@ export function getClient() {
  */
 export async function translateKeyPhrase({ key, baselineTranslation, translationPrompt, context }) {
   let translation: string | undefined;
-  const model = 'claude-3-5-sonnet-20241022';
+  const model = 'claude-3-sonnet-20240229';
   const prompt = genTranslationPrompt(translationPrompt);
   const system = prompt;
 
   const translateCompletion = async () => {
-    const text = `Current key: \`${key}\`
+    const content = `Current key: \`${key}\`
 
     Baseline translation: ${baselineTranslation}
     
@@ -49,17 +46,7 @@ export async function translateKeyPhrase({ key, baselineTranslation, translation
     
     <invoke>\n<tool_name>submit_translation</tool_name>\n<parameters>\n<translation>Your Translation Here</translation>\n</parameters>\n</invoke>`;
 
-    const message: a.Anthropic.MessageParam = {
-      role: 'user',
-      content: [
-        {
-          type: 'text',
-          text,
-          /* @ts-ignore */
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-    };
+    const message: a.Anthropic.MessageParam = { role: 'user', content };
     const requestOptions: a.Anthropic.MessageCreateParamsNonStreaming = {
       model,
       temperature: 0.3,

@@ -2,7 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const { resizeImageBuffer } = require('../images/resize');
-const { updateUser, updateFile } = require('~/models');
+const { updateUser } = require('~/models/userMethods');
+const { updateFile } = require('~/models/File');
 
 /**
  * Converts an image file to the target format. The function first resizes the image based on the specified
@@ -13,7 +14,8 @@ const { updateUser, updateFile } = require('~/models');
  *
  * The original image is deleted after conversion.
  * @param {Object} params - The params object.
- * @param {Object} params.req - The request object from Express. It should have a `user` property with an `id` representing the user
+ * @param {Object} params.req - The request object from Express. It should have a `user` property with an `id`
+ *                       representing the user, and an `app.locals.paths` object with an `imageOutput` path.
  * @param {Express.Multer.File} params.file - The file object, which is part of the request. The file object should
  *                                     have a `path` property that points to the location of the uploaded file.
  * @param {string} params.file_id - The file ID.
@@ -28,7 +30,6 @@ const { updateUser, updateFile } = require('~/models');
  *            - height: The height of the converted image.
  */
 async function uploadLocalImage({ req, file, file_id, endpoint, resolution = 'high' }) {
-  const appConfig = req.config;
   const inputFilePath = file.path;
   const inputBuffer = await fs.promises.readFile(inputFilePath);
   const {
@@ -38,7 +39,7 @@ async function uploadLocalImage({ req, file, file_id, endpoint, resolution = 'hi
   } = await resizeImageBuffer(inputBuffer, resolution, endpoint);
   const extension = path.extname(inputFilePath);
 
-  const { imageOutput } = appConfig.paths;
+  const { imageOutput } = req.app.locals.paths;
   const userPath = path.join(imageOutput, req.user.id);
 
   if (!fs.existsSync(userPath)) {
@@ -47,7 +48,7 @@ async function uploadLocalImage({ req, file, file_id, endpoint, resolution = 'hi
 
   const fileName = `${file_id}__${path.basename(inputFilePath)}`;
   const newPath = path.join(userPath, fileName);
-  const targetExtension = `.${appConfig.imageOutputType}`;
+  const targetExtension = `.${req.app.locals.imageOutputType}`;
 
   if (extension.toLowerCase() === targetExtension) {
     const bytes = Buffer.byteLength(resizedBuffer);
@@ -57,7 +58,7 @@ async function uploadLocalImage({ req, file, file_id, endpoint, resolution = 'hi
   }
 
   const outputFilePath = newPath.replace(extension, targetExtension);
-  const data = await sharp(resizedBuffer).toFormat(appConfig.imageOutputType).toBuffer();
+  const data = await sharp(resizedBuffer).toFormat(req.app.locals.imageOutputType).toBuffer();
   await fs.promises.writeFile(outputFilePath, data);
   const bytes = Buffer.byteLength(data);
   const filepath = path.posix.join('/', 'images', req.user.id, path.basename(outputFilePath));
@@ -90,8 +91,7 @@ function encodeImage(imagePath) {
  * @returns {Promise<[MongoFile, string]>} - A promise that resolves to an array of results from updateFile and encodeImage.
  */
 async function prepareImagesLocal(req, file) {
-  const appConfig = req.config;
-  const { publicPath, imageOutput } = appConfig.paths;
+  const { publicPath, imageOutput } = req.app.locals.paths;
   const userPath = path.join(imageOutput, req.user.id);
 
   if (!fs.existsSync(userPath)) {
@@ -113,11 +113,10 @@ async function prepareImagesLocal(req, file) {
  * @param {Buffer} params.buffer - The Buffer containing the avatar image.
  * @param {string} params.userId - The user ID.
  * @param {string} params.manual - A string flag indicating whether the update is manual ('true' or 'false').
- * @param {string} [params.agentId] - Optional agent ID if this is an agent avatar.
  * @returns {Promise<string>} - A promise that resolves with the URL of the uploaded avatar.
  * @throws {Error} - Throws an error if Firebase is not initialized or if there is an error in uploading.
  */
-async function processLocalAvatar({ buffer, userId, manual, agentId }) {
+async function processLocalAvatar({ buffer, userId, manual }) {
   const userDir = path.resolve(
     __dirname,
     '..',
@@ -131,14 +130,7 @@ async function processLocalAvatar({ buffer, userId, manual, agentId }) {
     userId,
   );
 
-  const metadata = await sharp(buffer).metadata();
-  const extension = metadata.format === 'gif' ? 'gif' : 'png';
-
-  const timestamp = new Date().getTime();
-  /** Unique filename with timestamp and optional agent ID */
-  const fileName = agentId
-    ? `agent-${agentId}-avatar-${timestamp}.${extension}`
-    : `avatar-${timestamp}.${extension}`;
+  const fileName = `avatar-${new Date().getTime()}.png`;
   const urlRoute = `/images/${userId}/${fileName}`;
   const avatarPath = path.join(userDir, fileName);
 
@@ -148,8 +140,7 @@ async function processLocalAvatar({ buffer, userId, manual, agentId }) {
   const isManual = manual === 'true';
   let url = `${urlRoute}?manual=${isManual}`;
 
-  // Only update user record if this is a user avatar (manual === 'true')
-  if (isManual && !agentId) {
+  if (isManual) {
     await updateUser(userId, { avatar: url });
   }
 

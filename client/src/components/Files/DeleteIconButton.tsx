@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, TrashIcon } from '@librechat/client';
+import { CrossIcon, TrashIcon } from '~/components/svg';
+import { Button } from '~/components/ui';
 
 type DeleteIconButtonProps = {
   onClick: () => void;

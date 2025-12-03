@@ -1,56 +1,21 @@
+const Redis = require('ioredis');
 const passport = require('passport');
 const session = require('express-session');
-const { isEnabled } = require('@librechat/api');
-const { logger } = require('@librechat/data-schemas');
-const { CacheKeys } = require('librechat-data-provider');
+const RedisStore = require('connect-redis').default;
 const {
-  openIdJwtLogin,
-  facebookLogin,
-  discordLogin,
   setupOpenId,
   googleLogin,
   githubLogin,
-  appleLogin,
-  setupSaml,
+  discordLogin,
+  facebookLogin,
 } = require('~/strategies');
-const { getLogStores } = require('~/cache');
-
-/**
- * Configures OpenID Connect for the application.
- * @param {Express.Application} app - The Express application instance.
- * @returns {Promise<void>}
- */
-async function configureOpenId(app) {
-  logger.info('Configuring OpenID Connect...');
-  const sessionOptions = {
-    secret: process.env.OPENID_SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
-    store: getLogStores(CacheKeys.OPENID_SESSION),
-  };
-  app.use(session(sessionOptions));
-  app.use(passport.session());
-
-  const config = await setupOpenId();
-  if (!config) {
-    logger.error('OpenID Connect configuration failed - strategy not registered.');
-    return;
-  }
-
-  if (isEnabled(process.env.OPENID_REUSE_TOKENS)) {
-    logger.info('OpenID token reuse is enabled.');
-    passport.use('openidJwt', openIdJwtLogin(config));
-  }
-  logger.info('OpenID Connect configured successfully.');
-}
+const { logger } = require('~/config');
 
 /**
  *
  * @param {Express.Application} app
  */
-const configureSocialLogins = async (app) => {
-  logger.info('Configuring social logins...');
-
+const configureSocialLogins = (app) => {
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     passport.use(googleLogin());
   }
@@ -63,9 +28,6 @@ const configureSocialLogins = async (app) => {
   if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) {
     passport.use(discordLogin());
   }
-  if (process.env.APPLE_CLIENT_ID && process.env.APPLE_PRIVATE_KEY_PATH) {
-    passport.use(appleLogin());
-  }
   if (
     process.env.OPENID_CLIENT_ID &&
     process.env.OPENID_CLIENT_SECRET &&
@@ -73,26 +35,22 @@ const configureSocialLogins = async (app) => {
     process.env.OPENID_SCOPE &&
     process.env.OPENID_SESSION_SECRET
   ) {
-    await configureOpenId(app);
-  }
-  if (
-    process.env.SAML_ENTRY_POINT &&
-    process.env.SAML_ISSUER &&
-    process.env.SAML_CERT &&
-    process.env.SAML_SESSION_SECRET
-  ) {
-    logger.info('Configuring SAML Connect...');
     const sessionOptions = {
-      secret: process.env.SAML_SESSION_SECRET,
+      secret: process.env.OPENID_SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
-      store: getLogStores(CacheKeys.SAML_SESSION),
     };
+    if (process.env.USE_REDIS) {
+      const client = new Redis(process.env.REDIS_URI);
+      client
+        .on('error', (err) => logger.error('ioredis error:', err))
+        .on('ready', () => logger.info('ioredis successfully initialized.'))
+        .on('reconnecting', () => logger.info('ioredis reconnecting...'));
+      sessionOptions.store = new RedisStore({ client, prefix: 'librechat' });
+    }
     app.use(session(sessionOptions));
     app.use(passport.session());
-    setupSaml();
-
-    logger.info('SAML Connect configured.');
+    setupOpenId();
   }
 };
 

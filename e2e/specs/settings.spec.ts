@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Settings suite', () => {
-  test('Last OpenAI settings', async ({ page }) => {
+  test('Last Bing settings', async ({ page }) => {
     await page.goto('http://localhost:3080/', { timeout: 5000 });
     await page.evaluate(() =>
       window.localStorage.setItem(
@@ -9,9 +9,17 @@ test.describe('Settings suite', () => {
         JSON.stringify({
           conversationId: 'new',
           title: 'New Chat',
-          endpoint: 'openAI',
+          endpoint: 'bingAI',
           createdAt: '',
           updatedAt: '',
+          jailbreak: false,
+          context: null,
+          systemMessage: null,
+          toneStyle: 'creative',
+          jailbreakConversationId: null,
+          conversationSignature: null,
+          clientId: null,
+          invocationId: 1,
         }),
       ),
     );
@@ -19,13 +27,13 @@ test.describe('Settings suite', () => {
 
     const initialLocalStorage = await page.evaluate(() => window.localStorage);
     const lastConvoSetup = JSON.parse(initialLocalStorage.lastConversationSetup);
-    expect(lastConvoSetup.endpoint).toEqual('openAI');
+    expect(lastConvoSetup.endpoint).toEqual('bingAI');
 
     const newTopicButton = page.getByTestId('new-conversation-menu');
     await newTopicButton.click();
 
     // includes the icon + endpoint names in obj property
-    const endpointItem = page.getByTestId('endpoint-item-openAI');
+    const endpointItem = page.getByTestId('endpoint-item-bingAI');
     await endpointItem.click();
 
     await page.getByTestId('text-input').click();
@@ -57,6 +65,10 @@ test.describe('Settings suite', () => {
 
     // Check if the settings persisted
     const localStorage = await page.evaluate(() => window.localStorage);
+    const lastBingSettings = JSON.parse(localStorage.lastBingSettings);
+    const { jailbreak, toneStyle } = lastBingSettings;
+    expect(jailbreak).toBeTruthy();
+    expect(toneStyle).toEqual('balanced');
     const button = page.getByRole('button', { name: 'Mode: Sydney' });
     expect(button.count()).toBeTruthy();
   });

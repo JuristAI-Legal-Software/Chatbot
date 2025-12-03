@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { ListFilter } from 'lucide-react';
-import { useSetRecoilState } from 'recoil';
 import {
   flexRender,
   getCoreRowModel,
@@ -16,29 +15,27 @@ import type {
   ColumnFiltersState,
 } from '@tanstack/react-table';
 import { FileContext } from 'librechat-data-provider';
+import type { AugmentedColumnDef } from '~/common';
+import type { TFile } from 'librechat-data-provider';
 import {
+  Button,
   Input,
   Table,
-  Button,
-  Spinner,
-  TableRow,
   TableBody,
   TableCell,
   TableHead,
-  TrashIcon,
   TableHeader,
+  TableRow,
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuTrigger,
-  DropdownMenuCheckboxItem,
-} from '@librechat/client';
-import type { TFile } from 'librechat-data-provider';
-import type { AugmentedColumnDef } from '~/common';
-import ActionButton from '~/components/Files/ActionButton';
+} from '~/components/ui';
 import { useDeleteFilesFromTable } from '~/hooks/Files';
+import { TrashIcon, Spinner } from '~/components/svg';
+import useLocalize from '~/hooks/useLocalize';
+import ActionButton from '../ActionButton';
 import UploadFileButton from './UploadFileButton';
-import { useLocalize } from '~/hooks';
-import store from '~/store';
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -48,7 +45,7 @@ interface DataTableProps<TData, TValue> {
 const contextMap = {
   [FileContext.filename]: 'com_ui_name',
   [FileContext.updatedAt]: 'com_ui_date',
-  [FileContext.filterSource]: 'com_ui_storage',
+  [FileContext.source]: 'com_ui_storage',
   [FileContext.context]: 'com_ui_context',
   [FileContext.bytes]: 'com_ui_size',
 };
@@ -60,14 +57,12 @@ export default function DataTableFile<TData, TValue>({
   data,
 }: DataTableProps<TData, TValue>) {
   const localize = useLocalize();
-  const setFiles = useSetRecoilState(store.filesByIndex(0));
   const [isDeleting, setIsDeleting] = React.useState(false);
-  const { deleteFiles } = useDeleteFilesFromTable(() => setIsDeleting(false));
-
   const [rowSelection, setRowSelection] = React.useState({});
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const { deleteFiles } = useDeleteFilesFromTable(() => setIsDeleting(false));
 
   const table = useReactTable({
     data,
@@ -92,7 +87,7 @@ export default function DataTableFile<TData, TValue>({
     <>
       <div className="mt-2 flex flex-col items-start">
         <h2 className="text-lg">
-          <strong>{localize('com_ui_files')}</strong>
+          <strong>Files</strong>
         </h2>
         <div className="mt-3 flex w-full flex-col-reverse justify-between md:flex-row">
           <div className="mt-3 flex w-full flex-row justify-center gap-x-3 md:m-0 md:justify-start">
@@ -108,7 +103,7 @@ export default function DataTableFile<TData, TValue>({
                 const filesToDelete = table
                   .getFilteredSelectedRowModel()
                   .rows.map((row) => row.original);
-                deleteFiles({ files: filesToDelete as TFile[], setFiles });
+                deleteFiles({ files: filesToDelete as TFile[] });
                 setRowSelection({});
               }}
               className="ml-1 gap-2 dark:hover:bg-gray-850/25 sm:ml-0"
@@ -126,7 +121,7 @@ export default function DataTableFile<TData, TValue>({
             {' '}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="ml-auto border border-border-medium">
+                <Button variant="ghost" className="ml-auto">
                   <ListFilter className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -143,7 +138,7 @@ export default function DataTableFile<TData, TValue>({
                         key={column.id}
                         className="cursor-pointer capitalize dark:text-white dark:hover:bg-gray-800"
                         checked={column.getIsVisible()}
-                        onCheckedChange={(value) => column.toggleVisibility(Boolean(value))}
+                        onCheckedChange={(value) => column.toggleVisibility(!!value)}
                       >
                         {localize(contextMap[column.id])}
                       </DropdownMenuCheckboxItem>
@@ -153,11 +148,15 @@ export default function DataTableFile<TData, TValue>({
             </DropdownMenu>
             <Input
               placeholder={localize('com_files_filter')}
-              value={(table.getColumn('filename')?.getFilterValue() as string | undefined) ?? ''}
+              value={(table.getColumn('filename')?.getFilterValue() as string) ?? ''}
               onChange={(event) => table.getColumn('filename')?.setFilterValue(event.target.value)}
-              className="max-w-sm border-border-medium placeholder:text-text-secondary"
+              className="max-w-sm dark:border-gray-500"
             />
-            <UploadFileButton onClick={() => console.log('click')} />
+            <UploadFileButton
+              onClick={() => {
+                console.log('click');
+              }}
+            />
           </div>
         </div>
       </div>
@@ -205,7 +204,7 @@ export default function DataTableFile<TData, TValue>({
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows.length ? (
+            {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
@@ -214,7 +213,7 @@ export default function DataTableFile<TData, TValue>({
                 >
                   {row.getVisibleCells().map((cell, index) => {
                     const maxWidth =
-                      (cell.column.columnDef as AugmentedColumnDef<TData, TValue>).meta?.size ??
+                      (cell.column.columnDef as AugmentedColumnDef<TData, TValue>)?.meta?.size ??
                       'auto';
 
                     const style: Style = {};
@@ -247,11 +246,12 @@ export default function DataTableFile<TData, TValue>({
         </Table>
       </div>
       <div className="ml-4 mr-4 mt-4 flex h-auto items-center justify-end space-x-2 py-4 sm:ml-0 sm:mr-0 sm:h-0">
-        <div className="ml-2 flex-1 text-sm text-muted-foreground">
-          {localize('com_files_number_selected', {
-            0: `${table.getFilteredSelectedRowModel().rows.length}`,
-            1: `${table.getFilteredRowModel().rows.length}`,
-          })}
+        <div className="text-muted-foreground ml-2 flex-1 text-sm">
+          {localize(
+            'com_files_number_selected',
+            `${table.getFilteredSelectedRowModel().rows.length}`,
+            `${table.getFilteredRowModel().rows.length}`,
+          )}
         </div>
         <Button
           className="dark:border-gray-500 dark:hover:bg-gray-600"

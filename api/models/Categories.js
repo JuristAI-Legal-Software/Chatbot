@@ -1,40 +1,44 @@
-const { logger } = require('@librechat/data-schemas');
-
+const { logger } = require('~/config');
+// const { Categories } = require('./schema/categories');
 const options = [
   {
-    label: 'com_ui_idea',
+    label: '',
+    value: '',
+  },
+  {
+    label: 'idea',
     value: 'idea',
   },
   {
-    label: 'com_ui_travel',
+    label: 'travel',
     value: 'travel',
   },
   {
-    label: 'com_ui_teach_or_explain',
+    label: 'teach_or_explain',
     value: 'teach_or_explain',
   },
   {
-    label: 'com_ui_write',
+    label: 'write',
     value: 'write',
   },
   {
-    label: 'com_ui_shop',
+    label: 'shop',
     value: 'shop',
   },
   {
-    label: 'com_ui_code',
+    label: 'code',
     value: 'code',
   },
   {
-    label: 'com_ui_misc',
+    label: 'misc',
     value: 'misc',
   },
   {
-    label: 'com_ui_roleplay',
+    label: 'roleplay',
     value: 'roleplay',
   },
   {
-    label: 'com_ui_finance',
+    label: 'finance',
     value: 'finance',
   },
 ];

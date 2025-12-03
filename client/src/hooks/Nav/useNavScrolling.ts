@@ -3,15 +3,15 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import type { FetchNextPageOptions, InfiniteQueryObserverResult } from '@tanstack/react-query';
 
 export default function useNavScrolling<TData>({
-  nextCursor,
-  isFetchingNext,
+  hasNextPage,
+  isFetchingNextPage,
   setShowLoading,
   fetchNextPage,
 }: {
-  nextCursor?: string | null;
-  isFetchingNext: boolean;
+  hasNextPage?: boolean;
+  isFetchingNextPage: boolean;
   setShowLoading: React.Dispatch<React.SetStateAction<boolean>>;
-  fetchNextPage?: (
+  fetchNextPage: (
     options?: FetchNextPageOptions | undefined,
   ) => Promise<InfiniteQueryObserverResult<TData, unknown>>;
 }) {
@@ -20,16 +20,7 @@ export default function useNavScrolling<TData>({
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetchNext = useCallback(
-    throttle(
-      () => {
-        if (fetchNextPage) {
-          return fetchNextPage();
-        }
-        return Promise.resolve();
-      },
-      750,
-      { leading: true },
-    ),
+    throttle(() => fetchNextPage(), 750, { leading: true }),
     [fetchNextPage],
   );
 
@@ -38,14 +29,14 @@ export default function useNavScrolling<TData>({
       const { scrollTop, clientHeight, scrollHeight } = containerRef.current;
       const nearBottomOfList = scrollTop + clientHeight >= scrollHeight * 0.97;
 
-      if (nearBottomOfList && nextCursor != null && !isFetchingNext) {
+      if (nearBottomOfList && hasNextPage && !isFetchingNextPage) {
         setShowLoading(true);
         fetchNext();
       } else {
         setShowLoading(false);
       }
     }
-  }, [nextCursor, isFetchingNext, fetchNext, setShowLoading]);
+  }, [hasNextPage, isFetchingNextPage, fetchNext, setShowLoading]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -54,18 +45,16 @@ export default function useNavScrolling<TData>({
     }
 
     return () => {
-      if (container) {
-        container.removeEventListener('scroll', handleScroll);
-      }
+      container?.removeEventListener('scroll', handleScroll);
     };
-  }, [handleScroll]);
+  }, [handleScroll, fetchNext]);
 
   const moveToTop = useCallback(() => {
     const container = containerRef.current;
     if (container) {
       scrollPositionRef.current = container.scrollTop;
     }
-  }, []);
+  }, [containerRef, scrollPositionRef]);
 
   return {
     containerRef,

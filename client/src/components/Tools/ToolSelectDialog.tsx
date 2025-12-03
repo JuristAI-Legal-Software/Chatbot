@@ -1,34 +1,23 @@
 import { useEffect } from 'react';
 import { Search, X } from 'lucide-react';
-import { useFormContext } from 'react-hook-form';
-import { isAgentsEndpoint } from 'librechat-data-provider';
 import { Dialog, DialogPanel, DialogTitle, Description } from '@headlessui/react';
+import { useFormContext } from 'react-hook-form';
 import { useUpdateUserPluginsMutation } from 'librechat-data-provider/react-query';
-import type {
-  AssistantsEndpoint,
-  EModelEndpoint,
-  TPluginAction,
-  TPlugin,
-  TError,
-} from 'librechat-data-provider';
-import type { AgentForm, TPluginStoreDialogProps } from '~/common';
+import type { AssistantsEndpoint, TError, TPluginAction } from 'librechat-data-provider';
+import type { TPluginStoreDialogProps } from '~/common/types';
 import { PluginPagination, PluginAuthForm } from '~/components/Plugins/Store';
-import { useAgentPanelContext } from '~/Providers/AgentPanelContext';
 import { useLocalize, usePluginDialogHelpers } from '~/hooks';
+import { useAvailableToolsQuery } from '~/data-provider';
 import ToolItem from './ToolItem';
 
 function ToolSelectDialog({
   isOpen,
-  endpoint,
   setIsOpen,
-}: TPluginStoreDialogProps & {
-  endpoint: AssistantsEndpoint | EModelEndpoint.agents;
-}) {
+  endpoint,
+}: TPluginStoreDialogProps & { assistant_id?: string; endpoint: AssistantsEndpoint }) {
   const localize = useLocalize();
-  const isAgentTools = isAgentsEndpoint(endpoint);
-  const { getValues, setValue } = useFormContext<AgentForm>();
-  // Only use regular tools, not MCP tools
-  const { regularTools } = useAgentPanelContext();
+  const { getValues, setValue } = useFormContext();
+  const { data: tools = [] } = useAvailableToolsQuery(endpoint);
 
   const {
     maxPage,
@@ -56,9 +45,8 @@ function ToolSelectDialog({
   const updateUserPlugins = useUpdateUserPluginsMutation();
   const handleInstallError = (error: TError) => {
     setError(true);
-    const errorMessage = error.response?.data?.message ?? '';
-    if (errorMessage) {
-      setErrorMessage(errorMessage);
+    if (error.response?.data?.message) {
+      setErrorMessage(error.response?.data?.message);
     }
     setTimeout(() => {
       setError(false);
@@ -68,9 +56,9 @@ function ToolSelectDialog({
 
   const handleInstall = (pluginAction: TPluginAction) => {
     const addFunction = () => {
-      const installedToolIds: string[] = getValues('tools') || [];
-      installedToolIds.push(pluginAction.pluginKey);
-      setValue('tools', Array.from(new Set(installedToolIds)));
+      const fns = getValues('functions').slice();
+      fns.push(pluginAction.pluginKey);
+      setValue('functions', fns);
     };
 
     if (!pluginAction.auth) {
@@ -87,14 +75,17 @@ function ToolSelectDialog({
     setShowPluginAuthForm(false);
   };
 
-  const onRemoveTool = (toolId: string) => {
+  const onRemoveTool = (tool: string) => {
+    setShowPluginAuthForm(false);
     updateUserPlugins.mutate(
-      { pluginKey: toolId, action: 'uninstall', auth: {}, isEntityTool: true },
+      { pluginKey: tool, action: 'uninstall', auth: null, isAssistantTool: true },
       {
-        onError: (error: unknown) => handleInstallError(error as TError),
+        onError: (error: unknown) => {
+          handleInstallError(error as TError);
+        },
         onSuccess: () => {
-          const remainingToolIds = getValues('tools')?.filter((id) => id !== toolId) || [];
-          setValue('tools', remainingToolIds);
+          const fns = getValues('functions').filter((fn) => fn !== tool);
+          setValue('functions', fns);
         },
       },
     );
@@ -102,25 +93,21 @@ function ToolSelectDialog({
 
   const onAddTool = (pluginKey: string) => {
     setShowPluginAuthForm(false);
-    // Find the tool in regularTools
-    const availablePluginFromKey = regularTools?.find((p) => p.pluginKey === pluginKey);
-    setSelectedPlugin(availablePluginFromKey);
+    const getAvailablePluginFromKey = tools?.find((p) => p.pluginKey === pluginKey);
+    setSelectedPlugin(getAvailablePluginFromKey);
 
-    const { authConfig, authenticated = false } = availablePluginFromKey ?? {};
+    const { authConfig, authenticated } = getAvailablePluginFromKey ?? {};
+
     if (authConfig && authConfig.length > 0 && !authenticated) {
       setShowPluginAuthForm(true);
     } else {
-      handleInstall({
-        pluginKey,
-        action: 'install',
-        auth: {},
-      });
+      handleInstall({ pluginKey, action: 'install', auth: null });
     }
   };
 
-  const filteredTools = (regularTools || []).filter((tool: TPlugin) => {
-    return tool.name?.toLowerCase().includes(searchValue.toLowerCase());
-  });
+  const filteredTools = tools?.filter((tool) =>
+    tool.name.toLowerCase().includes(searchValue.toLowerCase()),
+  );
 
   useEffect(() => {
     if (filteredTools) {
@@ -131,8 +118,9 @@ function ToolSelectDialog({
       }
     }
   }, [
-    searchValue,
+    tools,
     itemsPerPage,
+    searchValue,
     filteredTools,
     searchChanged,
     setMaxPage,
@@ -151,22 +139,20 @@ function ToolSelectDialog({
       className="relative z-[102]"
     >
       {/* The backdrop, rendered as a fixed sibling to the panel container */}
-      <div className="fixed inset-0 bg-surface-primary opacity-60 transition-opacity dark:opacity-80" />
+      <div className="fixed inset-0 bg-gray-600/65 transition-opacity dark:bg-black/80" />
       {/* Full-screen container to center the panel */}
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <DialogPanel
-          className="relative max-h-[90vh] w-full transform overflow-hidden overflow-y-auto rounded-lg bg-surface-secondary text-left shadow-xl transition-all max-sm:h-full sm:mx-7 sm:my-8 sm:max-w-2xl lg:max-w-5xl xl:max-w-7xl"
+          className="relative w-full transform overflow-hidden overflow-y-auto rounded-lg bg-white text-left shadow-xl transition-all dark:bg-gray-800 max-sm:h-full sm:mx-7 sm:my-8 sm:max-w-2xl lg:max-w-5xl xl:max-w-7xl"
           style={{ minHeight: '610px' }}
         >
-          <div className="flex items-center justify-between border-b-[1px] border-border-medium px-4 pb-4 pt-5 sm:p-6">
+          <div className="flex items-center justify-between border-b-[1px] border-black/10 px-4 pb-4 pt-5 dark:border-white/10 sm:p-6">
             <div className="flex items-center">
               <div className="text-center sm:text-left">
-                <DialogTitle className="text-lg font-medium leading-6 text-text-primary">
-                  {isAgentTools
-                    ? localize('com_nav_tool_dialog_agents')
-                    : localize('com_nav_tool_dialog')}
+                <DialogTitle className="text-lg font-medium leading-6 text-gray-900 dark:text-gray-200">
+                  {localize('com_nav_tool_dialog')}
                 </DialogTitle>
-                <Description className="text-sm text-text-secondary">
+                <Description className="text-sm text-gray-500 dark:text-gray-300">
                   {localize('com_nav_tool_dialog_description')}
                 </Description>
               </div>
@@ -178,11 +164,10 @@ function ToolSelectDialog({
                     setIsOpen(false);
                     setCurrentPage(1);
                   }}
-                  className="inline-block rounded-full text-text-secondary transition-colors hover:text-text-primary"
-                  aria-label="Close dialog"
-                  type="button"
+                  className="inline-block text-gray-500 hover:text-gray-200"
+                  tabIndex={0}
                 >
-                  <X aria-hidden="true" />
+                  <X />
                 </button>
               </div>
             </div>
@@ -200,20 +185,20 @@ function ToolSelectDialog({
               <PluginAuthForm
                 plugin={selectedPlugin}
                 onSubmit={(installActionData: TPluginAction) => handleInstall(installActionData)}
-                isEntityTool={true}
+                isAssistantTool={true}
               />
             </div>
           )}
           <div className="p-4 sm:p-6 sm:pt-4">
             <div className="mt-4 flex flex-col gap-4">
               <div className="flex items-center justify-center space-x-4">
-                <Search className="h-6 w-6 text-text-tertiary" />
+                <Search className="h-6 w-6 text-gray-500" />
                 <input
                   type="text"
                   value={searchValue}
                   onChange={handleSearch}
-                  placeholder={localize('com_nav_tool_search')}
-                  className="w-64 rounded border border-border-medium bg-transparent px-2 py-1 text-text-primary focus:outline-none"
+                  placeholder={localize('com_nav_plugin_search')}
+                  className="w-64 rounded border border-gray-300 px-2 py-1 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
                 />
               </div>
               <div
@@ -227,11 +212,8 @@ function ToolSelectDialog({
                     .map((tool, index) => (
                       <ToolItem
                         key={index}
-                        tool={{
-                          tool_id: tool.pluginKey,
-                          metadata: tool,
-                        }}
-                        isInstalled={getValues('tools')?.includes(tool.pluginKey) || false}
+                        tool={tool}
+                        isInstalled={getValues('functions').includes(tool.pluginKey)}
                         onAddTool={() => onAddTool(tool.pluginKey)}
                         onRemoveTool={() => onRemoveTool(tool.pluginKey)}
                       />

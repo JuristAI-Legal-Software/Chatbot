@@ -1,26 +1,22 @@
 import type {
-  TPreset,
   TConversation,
-  EModelEndpoint,
+  TPreset,
   TEndpointsConfig,
+  EModelEndpoint,
 } from 'librechat-data-provider';
-import { getLocalStorageItems } from './localStorage';
+import getLocalStorageItems from './getLocalStorageItems';
 import { mapEndpoints } from './endpoints';
 
 type TConvoSetup = Partial<TPreset> | Partial<TConversation>;
 
 type TDefaultEndpoint = { convoSetup: TConvoSetup; endpointsConfig: TEndpointsConfig };
 
-const getEndpointFromSetup = (
-  convoSetup: TConvoSetup | null,
-  endpointsConfig: TEndpointsConfig,
-): EModelEndpoint | null => {
-  let { endpoint: targetEndpoint = '' } = convoSetup || {};
-  targetEndpoint = targetEndpoint ?? '';
-  if (targetEndpoint && endpointsConfig?.[targetEndpoint]) {
-    return targetEndpoint as EModelEndpoint;
+const getEndpointFromSetup = (convoSetup: TConvoSetup, endpointsConfig: TEndpointsConfig) => {
+  const { endpoint: targetEndpoint } = convoSetup || {};
+  if (targetEndpoint && endpointsConfig?.[targetEndpoint ?? '']) {
+    return targetEndpoint;
   } else if (targetEndpoint) {
-    console.warn(`Illegal target endpoint ${targetEndpoint}`, endpointsConfig);
+    console.warn(`Illegal target endpoint ${targetEndpoint} ${endpointsConfig}`);
   }
   return null;
 };
@@ -28,8 +24,8 @@ const getEndpointFromSetup = (
 const getEndpointFromLocalStorage = (endpointsConfig: TEndpointsConfig) => {
   try {
     const { lastConversationSetup } = getLocalStorageItems();
-    const { endpoint } = lastConversationSetup ?? { endpoint: null };
-    const isDefaultConfig = Object.values(endpointsConfig ?? {}).every((value) => !value);
+    const { endpoint } = lastConversationSetup;
+    const isDefaultConfig = Object.values(endpointsConfig ?? {})?.every((value) => !value);
 
     if (isDefaultConfig && endpoint) {
       return endpoint;
@@ -39,7 +35,7 @@ const getEndpointFromLocalStorage = (endpointsConfig: TEndpointsConfig) => {
       return endpoint;
     }
 
-    return endpoint && endpointsConfig?.[endpoint] != null ? endpoint : null;
+    return endpoint && endpointsConfig?.[endpoint ?? ''] ? endpoint : null;
   } catch (error) {
     console.error(error);
     return null;
@@ -51,10 +47,7 @@ const getDefinedEndpoint = (endpointsConfig: TEndpointsConfig) => {
   return endpoints.find((e) => Object.hasOwn(endpointsConfig ?? {}, e));
 };
 
-const getDefaultEndpoint = ({
-  convoSetup,
-  endpointsConfig,
-}: TDefaultEndpoint): EModelEndpoint | undefined => {
+const getDefaultEndpoint = ({ convoSetup, endpointsConfig }: TDefaultEndpoint): EModelEndpoint => {
   return (
     getEndpointFromSetup(convoSetup, endpointsConfig) ||
     getEndpointFromLocalStorage(endpointsConfig) ||

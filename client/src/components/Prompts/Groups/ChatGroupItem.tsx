@@ -1,21 +1,21 @@
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo } from 'react';
 import { Menu as MenuIcon, Edit as EditIcon, EarthIcon, TextSearch } from 'lucide-react';
+import type { TPromptGroup } from 'librechat-data-provider';
 import {
+  Button,
   DropdownMenu,
   DropdownMenuItem,
   DropdownMenuGroup,
   DropdownMenuContent,
   DropdownMenuTrigger,
-} from '@librechat/client';
-import { PermissionBits } from 'librechat-data-provider';
-import type { TPromptGroup } from 'librechat-data-provider';
-import { useLocalize, useSubmitMessage, useCustomLink, useResourcePermissions } from '~/hooks';
+} from '~/components/ui';
+import { useLocalize, useSubmitMessage, useCustomLink, useAuthContext } from '~/hooks';
 import VariableDialog from '~/components/Prompts/Groups/VariableDialog';
 import PreviewPrompt from '~/components/Prompts/PreviewPrompt';
 import ListCard from '~/components/Prompts/Groups/ListCard';
 import { detectVariables } from '~/utils';
 
-function ChatGroupItem({
+export default function ChatGroupItem({
   group,
   instanceProjectId,
 }: {
@@ -23,29 +23,25 @@ function ChatGroupItem({
   instanceProjectId?: string;
 }) {
   const localize = useLocalize();
+  const { user } = useAuthContext();
   const { submitPrompt } = useSubmitMessage();
   const [isPreviewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [isVariableDialogOpen, setVariableDialogOpen] = useState(false);
   const onEditClick = useCustomLink<HTMLDivElement>(`/d/prompts/${group._id}`);
-
   const groupIsGlobal = useMemo(
-    () => instanceProjectId != null && group.projectIds?.includes(instanceProjectId),
+    () => instanceProjectId && group.projectIds?.includes(instanceProjectId),
     [group, instanceProjectId],
   );
+  const isOwner = useMemo(() => user?.id === group.author, [user, group]);
 
-  // Check permissions for the promptGroup
-  const { hasPermission } = useResourcePermissions('promptGroup', group._id || '');
-  const canEdit = hasPermission(PermissionBits.EDIT);
-
-  const onCardClick: React.MouseEventHandler<HTMLButtonElement> = () => {
-    const text = group.productionPrompt?.prompt;
-    if (!text?.trim()) {
+  const onCardClick = () => {
+    const text = group.productionPrompt?.prompt ?? '';
+    if (!text) {
       return;
     }
-
-    if (detectVariables(text)) {
-      setVariableDialogOpen(true);
-      return;
+    const hasVariables = detectVariables(text);
+    if (hasVariables) {
+      return setVariableDialogOpen(true);
     }
 
     submitPrompt(text);
@@ -57,73 +53,50 @@ function ChatGroupItem({
         name={group.name}
         category={group.category ?? ''}
         onClick={onCardClick}
-        snippet={
-          typeof group.oneliner === 'string' && group.oneliner.length > 0
-            ? group.oneliner
-            : (group.productionPrompt?.prompt ?? '')
-        }
+        snippet={group.oneliner ? group.oneliner : group.productionPrompt?.prompt ?? ''}
       >
         <div className="flex flex-row items-center gap-2">
-          {groupIsGlobal === true && (
-            <EarthIcon className="icon-md text-green-400" aria-label="Global prompt group" />
-          )}
+          {groupIsGlobal && <EarthIcon className="icon-md text-green-400" />}
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
-              <button
-                id={`prompt-actions-${group._id}`}
-                type="button"
-                aria-label={
-                  localize('com_ui_sr_actions_menu', { 0: group.name }) +
-                  ' ' +
-                  localize('com_ui_prompt')
-                }
+              <Button
+                id="promtps-menu-trigger"
+                aria-label="promtps-menu-trigger"
+                variant="outline"
                 onClick={(e) => {
                   e.stopPropagation();
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.stopPropagation();
-                  }
-                }}
-                className="z-50 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border-medium bg-transparent p-0 text-sm font-medium transition-all duration-300 ease-in-out hover:border-border-heavy hover:bg-surface-hover focus:border-border-heavy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+                className="z-50 h-7 w-7 p-0 transition-all duration-300 ease-in-out hover:border-white dark:bg-gray-800 dark:hover:border-gray-400 dark:focus:border-gray-500"
               >
-                <MenuIcon className="icon-md text-text-secondary" aria-hidden="true" />
-              </button>
+                <MenuIcon className="icon-md dark:text-gray-300" />
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
-              id={`prompt-menu-${group._id}`}
-              aria-label={`Available actions for ${group.name}`}
-              className="z-50 w-fit rounded-xl"
+              className="z-50 mt-2 w-36 rounded-lg"
               collisionPadding={2}
-              align="start"
+              align="end"
             >
               <DropdownMenuItem
                 onClick={(e) => {
                   e.stopPropagation();
                   setPreviewDialogOpen(true);
                 }}
-                onKeyDown={(e) => {
-                  e.stopPropagation();
-                }}
-                className="w-full cursor-pointer rounded-lg text-text-primary hover:bg-surface-hover focus:bg-surface-hover disabled:cursor-not-allowed"
+                className="w-full cursor-pointer rounded-lg disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:bg-gray-700"
               >
-                <TextSearch className="mr-2 h-4 w-4 text-text-primary" aria-hidden="true" />
+                <TextSearch className="mr-2 h-4 w-4" />
                 <span>{localize('com_ui_preview')}</span>
               </DropdownMenuItem>
-              {canEdit && (
+              {isOwner && (
                 <DropdownMenuGroup>
                   <DropdownMenuItem
-                    disabled={!canEdit}
-                    className="cursor-pointer rounded-lg text-text-primary hover:bg-surface-hover focus:bg-surface-hover disabled:cursor-not-allowed"
+                    disabled={!isOwner}
+                    className="cursor-pointer rounded-lg disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:bg-gray-700"
                     onClick={(e) => {
                       e.stopPropagation();
                       onEditClick(e);
                     }}
-                    onKeyDown={(e) => {
-                      e.stopPropagation();
-                    }}
                   >
-                    <EditIcon className="mr-2 h-4 w-4 text-text-primary" aria-hidden="true" />
+                    <EditIcon className="mr-2 h-4 w-4" />
                     <span>{localize('com_ui_edit')}</span>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
@@ -141,5 +114,3 @@ function ChatGroupItem({
     </>
   );
 }
-
-export default memo(ChatGroupItem);

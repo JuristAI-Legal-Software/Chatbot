@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
 import * as Popover from '@radix-ui/react-popover';
-import { useToastContext } from '@librechat/client';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   fileConfig as defaultFileConfig,
@@ -8,6 +7,7 @@ import {
   defaultOrderQuery,
   mergeFileConfig,
 } from 'librechat-data-provider';
+import type { UseMutationResult } from '@tanstack/react-query';
 import type {
   Metadata,
   Assistant,
@@ -15,11 +15,10 @@ import type {
   AssistantCreateParams,
   AssistantListResponse,
 } from 'librechat-data-provider';
-import type { UseMutationResult } from '@tanstack/react-query';
 import { useUploadAssistantAvatarMutation, useGetFileConfig } from '~/data-provider';
+import { useToastContext, useAssistantsMapContext } from '~/Providers';
 import { AssistantAvatar, NoImage, AvatarMenu } from './Images';
-import { useAssistantsMapContext } from '~/Providers';
-// import { Spinner } from '@librechat/client';
+// import { Spinner } from '~/components/svg';
 import { useLocalize } from '~/hooks';
 import { formatBytes } from '~/utils';
 
@@ -69,7 +68,7 @@ function Avatar({
       setInput(null);
       setPreviewUrl(data.metadata?.avatar as string | null);
 
-      const res = queryClient.getQueryData<AssistantListResponse | undefined>([
+      const res = queryClient.getQueryData<AssistantListResponse>([
         QueryKeys.assistants,
         endpoint,
         defaultOrderQuery,
@@ -79,15 +78,16 @@ function Avatar({
         return;
       }
 
-      const assistants = res.data.map((assistant) => {
-        if (assistant.id === assistant_id) {
-          return {
-            ...assistant,
-            ...data,
-          };
-        }
-        return assistant;
-      });
+      const assistants =
+        res.data.map((assistant) => {
+          if (assistant.id === assistant_id) {
+            return {
+              ...assistant,
+              ...data,
+            };
+          }
+          return assistant;
+        }) ?? [];
 
       queryClient.setQueryData<AssistantListResponse>(
         [QueryKeys.assistants, endpoint, defaultOrderQuery],
@@ -149,6 +149,10 @@ function Avatar({
       formData.append('file', input, input.name);
       formData.append('assistant_id', createMutation.data.id);
 
+      if (typeof createMutation.data.metadata === 'object') {
+        formData.append('metadata', JSON.stringify(createMutation.data.metadata));
+      }
+
       uploadAvatar({
         assistant_id: createMutation.data.id,
         model: activeModel,
@@ -191,6 +195,10 @@ function Avatar({
       formData.append('file', file, file.name);
       formData.append('assistant_id', assistant_id);
 
+      if (typeof metadata === 'object') {
+        formData.append('metadata', JSON.stringify(metadata));
+      }
+
       uploadAvatar({
         assistant_id,
         model: activeModel,
@@ -201,7 +209,7 @@ function Avatar({
     } else {
       const megabytes = fileConfig.avatarSizeLimit ? formatBytes(fileConfig.avatarSizeLimit) : 2;
       showToast({
-        message: localize('com_ui_upload_invalid_var', { 0: megabytes + '' }),
+        message: localize('com_ui_upload_invalid_var', megabytes + ''),
         status: 'error',
       });
     }
@@ -213,11 +221,7 @@ function Avatar({
     <Popover.Root open={menuOpen} onOpenChange={setMenuOpen}>
       <div className="flex w-full items-center justify-center gap-4">
         <Popover.Trigger asChild>
-          <button
-            type="button"
-            className="h-20 w-20"
-            aria-label={localize('com_ui_upload_avatar_label')}
-          >
+          <button type="button" className="h-20 w-20">
             {previewUrl ? <AssistantAvatar url={previewUrl} progress={progress} /> : <NoImage />}
           </button>
         </Popover.Trigger>
