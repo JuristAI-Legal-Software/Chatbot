@@ -416,11 +416,11 @@ const uploadImageBuffer = async ({ req, context, metadata = {}, resize = true })
  * @param {FileMetadata} params.metadata - Additional metadata for the file.
  * @returns {Promise<void>}
  */
-const processFileUpload = async ({ req, res, file, metadata }) => {
+const processFileUpload = async ({ req, res, metadata }) => {
   const isAssistantUpload = isAssistantsEndpoint(metadata.endpoint);
   const assistantSource =
     metadata.endpoint === EModelEndpoint.azureAssistants ? FileSources.azure : FileSources.openai;
-  // Use the configured file strategy for regular file uploads (not vectordb)
+  const appConfig = req.config;
   const source = isAssistantUpload ? assistantSource : appConfig.fileStrategy;
   const { handleFileUpload } = getStrategyFunctions(source);
   const { file_id, temp_file_id = null } = metadata;
@@ -1096,3 +1096,6 @@ module.exports = {
   processAgentFileUpload,
   retrieveAndProcessFile,
 };
+
+
+
