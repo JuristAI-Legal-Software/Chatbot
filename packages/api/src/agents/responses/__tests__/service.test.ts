@@ -391,6 +391,28 @@ describe('buildResponseModelParameters', () => {
     expect(modelParameters).not.toHaveProperty('store');
     expect(modelParameters).not.toHaveProperty('stream_options');
   });
+
+  it('merges interop ids into metadata for downstream provider context', () => {
+    const modelParameters = buildResponseModelParameters({
+      model: 'agent_123',
+      input: 'Hello',
+      conversation_id: 'conv_libre_1',
+      openai_conversation_id: 'conv_openai_1',
+      prompt_id: 'pmpt_1',
+      prompt_version: '2',
+    });
+
+    expect(modelParameters).toEqual(
+      expect.objectContaining({
+        metadata: {
+          librechat_conversation_id: 'conv_libre_1',
+          openai_conversation_id: 'conv_openai_1',
+          prompt_id: 'pmpt_1',
+          prompt_version: '2',
+        },
+      }),
+    );
+  });
 });
 
 describe('validateResponseRequest', () => {
@@ -414,6 +436,15 @@ describe('validateResponseRequest', () => {
       error: 'include must be an array of strings',
     });
   });
+
+  it('rejects blank interop id fields', () => {
+    expect(
+      validateResponseRequest({ model: 'agent_123', input: 'Hello', openai_conversation_id: '   ' }),
+    ).toEqual({
+      valid: false,
+      error: 'openai_conversation_id must be a non-empty string',
+    });
+  });
 });
 
 describe('responses context and output defaults', () => {
@@ -427,6 +458,30 @@ describe('responses context and output defaults', () => {
 
     expect(defaultContext.store).toBe(true);
     expect(disabledContext.store).toBe(false);
+  });
+
+  it('carries interop ids into context and response payload extensions', () => {
+    const context = createResponseContext({
+      model: 'agent_123',
+      input: 'Hello',
+      conversation_id: 'conv_libre_1',
+      openai_conversation_id: 'conv_openai_1',
+      prompt_id: 'pmpt_1',
+      prompt_version: '2',
+    });
+    const response = buildAggregatedResponse(context, createResponseAggregator());
+
+    expect(context.metadata).toEqual(
+      expect.objectContaining({
+        openai_conversation_id: 'conv_openai_1',
+        prompt_id: 'pmpt_1',
+        prompt_version: '2',
+      }),
+    );
+    expect(response.conversation_id).toBe('conv_libre_1');
+    expect(response.openai_conversation_id).toBe('conv_openai_1');
+    expect(response.prompt_id).toBe('pmpt_1');
+    expect(response.prompt_version).toBe('2');
   });
 
   it('surfaces encrypted reasoning content in aggregated responses', () => {
@@ -452,3 +507,4 @@ describe('responses context and output defaults', () => {
     expect(response.store).toBe(true);
   });
 });
+

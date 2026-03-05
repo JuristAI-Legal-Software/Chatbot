@@ -93,6 +93,19 @@ export function validateResponseRequest(body: unknown): RequestValidationResult 
     }
   }
 
+  const interopStringFields: Array<keyof ResponseRequest> = [
+    'conversation_id',
+    'openai_conversation_id',
+    'prompt_id',
+    'prompt_version',
+  ];
+  for (const field of interopStringFields) {
+    const value = request[field];
+    if (value !== undefined && (typeof value !== 'string' || value.trim().length === 0)) {
+      return { valid: false, error: `${field} must be a non-empty string` };
+    }
+  }
+
   return { valid: true, request: request as unknown as ResponseRequest };
 }
 
@@ -144,6 +157,25 @@ export function buildResponseModelParameters(
 
   if (request.previous_response_id) {
     modelParameters.previous_response_id = request.previous_response_id;
+  }
+
+  const metadata: Record<string, string> = {
+    ...(request.metadata ?? {}),
+  };
+  if (request.conversation_id) {
+    metadata.librechat_conversation_id = request.conversation_id;
+  }
+  if (request.openai_conversation_id) {
+    metadata.openai_conversation_id = request.openai_conversation_id;
+  }
+  if (request.prompt_id) {
+    metadata.prompt_id = request.prompt_id;
+  }
+  if (request.prompt_version) {
+    metadata.prompt_version = request.prompt_version;
+  }
+  if (Object.keys(metadata).length > 0) {
+    modelParameters.metadata = metadata;
   }
 
   return modelParameters;
@@ -335,6 +367,19 @@ export function createResponseContext(
   request: ResponseRequest,
   responseId?: string,
 ): ResponseContext {
+  const metadata: Record<string, string> = {
+    ...(request.metadata ?? {}),
+  };
+  if (request.openai_conversation_id) {
+    metadata.openai_conversation_id = request.openai_conversation_id;
+  }
+  if (request.prompt_id) {
+    metadata.prompt_id = request.prompt_id;
+  }
+  if (request.prompt_version) {
+    metadata.prompt_version = request.prompt_version;
+  }
+
   return {
     responseId: responseId ?? generateResponseId(),
     model: request.model,
@@ -342,6 +387,11 @@ export function createResponseContext(
     previousResponseId: request.previous_response_id,
     instructions: request.instructions,
     store: request.store !== false,
+    conversationId: request.conversation_id,
+    openaiConversationId: request.openai_conversation_id,
+    promptId: request.prompt_id,
+    promptVersion: request.prompt_version,
+    metadata,
   };
 }
 
@@ -807,9 +857,13 @@ export function buildAggregatedResponse(
     store: context.store,
     background: false,
     service_tier: 'default',
-    metadata: {},
+    metadata: context.metadata,
     safety_identifier: null,
     prompt_cache_key: null,
+    conversation_id: context.conversationId,
+    openai_conversation_id: context.openaiConversationId,
+    prompt_id: context.promptId,
+    prompt_version: context.promptVersion,
   };
 }
 
@@ -962,3 +1016,4 @@ export function createAggregatorEventHandlers(aggregator: ResponseAggregator): R
     },
   };
 }
+

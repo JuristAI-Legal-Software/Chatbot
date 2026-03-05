@@ -166,9 +166,13 @@ export function buildResponse(
     store: context.store,
     background: false,
     service_tier: 'default',
-    metadata: {},
+    metadata: context.metadata,
     safety_identifier: null,
     prompt_cache_key: null,
+    conversation_id: context.conversationId,
+    openai_conversation_id: context.openaiConversationId,
+    prompt_id: context.promptId,
+    prompt_version: context.promptVersion,
   };
 }
 
@@ -912,3 +916,4 @@ export function updateTrackerUsage(
     tracker.usage.cachedTokens = usage.cachedTokens;
   }
 }
+
