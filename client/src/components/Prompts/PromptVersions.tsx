@@ -1,4 +1,3 @@
-/* eslint-disable i18next/no-literal-string */
 import React from 'react';
 import { format } from 'date-fns';
 import { Layers3, Crown, Zap } from 'lucide-react';

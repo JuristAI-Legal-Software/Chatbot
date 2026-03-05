@@ -9,7 +9,7 @@ interface OGDialogProps extends DialogPrimitive.DialogProps {
 }
 
 const Dialog = React.forwardRef<HTMLDivElement, OGDialogProps>(
-  ({ children, triggerRef, triggerRefs, onOpenChange, ...props }, _ref) => {
+  ({ children, triggerRef, triggerRefs, onOpenChange, ...props }) => {
     const handleOpenChange = (open: boolean) => {
       if (!open && triggerRef?.current) {
         setTimeout(() => {

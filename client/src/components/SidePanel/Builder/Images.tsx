@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import * as Popover from '@radix-ui/react-popover';
+import { useLocalize } from '~/hooks';
 
 export function NoImage() {
   return (
@@ -23,17 +24,9 @@ export function NoImage() {
   );
 }
 
-export const AssistantAvatar = ({
-  url,
-  progress = 1,
-}: {
-  url?: string;
-  progress: number; // between 0 and 1
-}) => {
-  const radius = 55; // Radius of the SVG circle
+export const AssistantAvatar = ({ url, progress = 1 }: { url?: string; progress: number }) => {
+  const radius = 55;
   const circumference = 2 * Math.PI * radius;
-
-  // Calculate the offset based on the loading progress
   const offset = circumference - progress * circumference;
   const circleCSSProperties = {
     transition: 'stroke-dashoffset 0.3s linear',
@@ -87,6 +80,7 @@ export function AvatarMenu({
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const localize = useLocalize();
 
   const onItemClick = () => {
     if (fileInputRef.current) {
@@ -108,16 +102,8 @@ export function AvatarMenu({
           data-orientation="vertical"
           onClick={onItemClick}
         >
-          Upload Photo
+          {localize('com_ui_upload_image')}
         </div>
-        {/* <Popover.Close
-          role="menuitem"
-          className="group m-1.5 flex cursor-pointer gap-2 rounded p-2.5 text-sm hover:bg-black/5 focus:ring-0 radix-disabled:pointer-events-none radix-disabled:opacity-50 dark:hover:bg-white/5"
-          tabIndex={-1}
-          data-orientation="vertical"
-        >
-          Use DALL·E
-        </Popover.Close> */}
         <input
           accept="image/png,.png,image/jpeg,.jpg,.jpeg,image/gif,.gif,image/webp,.webp"
           multiple={false}
