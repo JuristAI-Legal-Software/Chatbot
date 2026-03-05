@@ -158,7 +158,7 @@ const startServer = async () => {
 
   /* OAUTH */
   app.use(passport.initialize());
-  passport.use(jwtLogin());
+  passport.use(await jwtLogin());
   passport.use(passportLogin());
 
   /* LDAP Auth */
@@ -314,3 +314,4 @@ process.on('uncaughtException', (err) => {
 
 /** Export app for easier testing purposes */
 module.exports = app;
+
