@@ -7,15 +7,12 @@ export default function Google({
   size?: number;
   className?: string;
 }) {
-  const unit = '41';
-  const height = size;
-  const width = size;
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
       fill="currentColor"
-      width="24px"
-      height="24px"
+      width={size}
+      height={size}
       viewBox="0 0 512 512"
       strokeWidth="1.5"
       className={cn(className, '')}

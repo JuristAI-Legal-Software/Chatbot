@@ -1,4 +1,15 @@
 import type { RedisStore } from 'rate-limit-redis';
+type ClosableClient = {
+  quit?: () => Promise<unknown>;
+  disconnect?: () => void;
+  end?: () => Promise<unknown>;
+};
+
+type StoreWithClients = RedisStore & {
+  client?: ClosableClient;
+  redis?: ClosableClient;
+  clientRedis?: ClosableClient;
+};
 
 describe('limiterCache', () => {
   let originalEnv: NodeJS.ProcessEnv;
@@ -25,7 +36,9 @@ describe('limiterCache', () => {
     // Close any client attached to testStore (covers various Redis store implementations)
     if (testStore) {
       const maybeClient =
-        (testStore as any).client || (testStore as any).redis || (testStore as any).clientRedis;
+        (testStore as StoreWithClients).client ||
+        (testStore as StoreWithClients).redis ||
+        (testStore as StoreWithClients).clientRedis;
 
       if (maybeClient) {
         try {
@@ -39,7 +52,7 @@ describe('limiterCache', () => {
             // allow some time to close sockets
             await new Promise((r) => setTimeout(r, 50));
           }
-        } catch (err) {
+        } catch (_err) {
           // swallow to avoid masking test failures
         }
       }
@@ -50,10 +63,10 @@ describe('limiterCache', () => {
     // Try closing shared clients from redisClients module (if present)
     try {
       const redisClients = await import('../../redisClients');
-      const closers: Promise<any>[] = [];
+      const closers: Promise<unknown>[] = [];
 
       if (redisClients) {
-        const maybeClose = (obj: any) => {
+        const maybeClose = (obj: ClosableClient | null | undefined) => {
           if (!obj) return;
           try {
             if (typeof obj.quit === 'function') {
@@ -64,7 +77,7 @@ describe('limiterCache', () => {
             } else if (typeof obj.end === 'function') {
               closers.push(obj.end());
             }
-          } catch (e) {
+          } catch (_e) {
             // ignore
           }
         };
@@ -77,7 +90,7 @@ describe('limiterCache', () => {
 
       // await any async quits
       if (closers.length > 0) await Promise.allSettled(closers);
-    } catch (err) {
+    } catch (_err) {
       // ignore cleanup errors
     }
 
@@ -92,19 +105,23 @@ describe('limiterCache', () => {
         await redisClients.closeRedisClients();
       } else {
         // Fallback: attempt to individually close known clients (non-fatal)
-        const maybeClose = async (c: any) => {
+        const maybeClose = async (c: ClosableClient | null | undefined) => {
           if (!c) return;
           try {
             if (typeof c.quit === 'function') await c.quit();
             if (typeof c.disconnect === 'function') c.disconnect();
-          } catch (e) {
+          } catch (_e) {
             // swallow
           }
         };
-        await maybeClose((redisClients as any)?.ioredisClient);
-        await maybeClose((redisClients as any)?.clusterClient);
+        await maybeClose(
+          (redisClients as Partial<Record<'ioredisClient', ClosableClient>>)?.ioredisClient,
+        );
+        await maybeClose(
+          (redisClients as Partial<Record<'clusterClient', ClosableClient>>)?.clusterClient,
+        );
       }
-    } catch (err) {
+    } catch (_err) {
       // ignore
     }
   });

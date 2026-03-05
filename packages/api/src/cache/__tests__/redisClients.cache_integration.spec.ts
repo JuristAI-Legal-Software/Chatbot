@@ -2,6 +2,12 @@ import type { Redis, Cluster } from 'ioredis';
 import type { RedisClientType, RedisClusterType } from '@redis/client';
 
 type RedisClient = RedisClientType | RedisClusterType | Redis | Cluster;
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
 
 describe('redisClients Integration Tests', () => {
   let originalEnv: NodeJS.ProcessEnv;
@@ -59,8 +65,8 @@ describe('redisClients Integration Tests', () => {
         if (keys.length > 0) {
           await ioredisClient.del(...keys);
         }
-      } catch (error: any) {
-        console.warn('Error cleaning up test keys:', error.message);
+      } catch (error: unknown) {
+        console.warn('Error cleaning up test keys:', getErrorMessage(error));
       }
     }
 
@@ -70,8 +76,8 @@ describe('redisClients Integration Tests', () => {
         if (ioredisClient.status === 'ready') {
           ioredisClient.disconnect();
         }
-      } catch (error: any) {
-        console.warn('Error disconnecting ioredis client:', error.message);
+      } catch (error: unknown) {
+        console.warn('Error disconnecting ioredis client:', getErrorMessage(error));
       }
       ioredisClient = null;
     }
@@ -80,8 +86,8 @@ describe('redisClients Integration Tests', () => {
       try {
         // Try to disconnect - keyv/redis client doesn't have an isReady property
         await keyvRedisClient.disconnect();
-      } catch (error: any) {
-        console.warn('Error disconnecting keyv redis client:', error.message);
+      } catch (error: unknown) {
+        console.warn('Error disconnecting keyv redis client:', getErrorMessage(error));
       }
       keyvRedisClient = null;
     }

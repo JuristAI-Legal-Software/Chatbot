@@ -41,6 +41,7 @@ export default [
       'packages/data-schemas/dist/**/*',
       'data-node/**/*',
       'meili_data/**/*',
+      'src/tests/**/*.ts',
       '**/node_modules/**/*',
       '.devcontainer/**/*',
     ],
@@ -356,3 +357,4 @@ export default [
     },
   },
 ];
+
