@@ -1,4 +1,3 @@
-/* eslint-disable i18next/no-literal-string */
 import debounce from 'lodash/debounce';
 import { useState, useEffect } from 'react';
 import { useFormContext } from 'react-hook-form';

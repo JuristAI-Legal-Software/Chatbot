@@ -1,4 +1,3 @@
-/* eslint-disable i18next/no-literal-string */
 import React from 'react';
 import FileList from './FileList';
 import { Button, Input } from '@librechat/client';
