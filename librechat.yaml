@@ -19,6 +19,19 @@ interface:
     externalUrl: 'https://librechat.ai/tos'
     openNewTab: true
 
+
+  modelSelect: true
+  agents:
+    use: true
+    create: true
+    share: false
+    public: false
+  remoteAgents:
+    use: true
+    create: true
+    share: false
+    public: false
+
 # Example Registration Object Structure (optional)
 registration:
   socialLogins: ['github', 'google', 'discord', 'openid', 'facebook']
@@ -53,6 +66,9 @@ registration:
 
 # Definition of custom endpoints
 endpoints:
+  agents:
+    disableBuilder: false
+
   # assistants:
   #   disableBuilder: false # Disable Assistants Builder Interface by setting to `true`
   #   pollIntervalMs: 3000  # Polling interval for checking assistant updates
@@ -165,3 +181,4 @@ endpoints:
 #   avatarSizeLimit: 2  # Limit for user avatar image size in MB
 # See the Custom Configuration Guide for more information on Assistants Config:
 # https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/assistants_endpoint
+
