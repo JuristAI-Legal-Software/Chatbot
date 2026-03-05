@@ -57,7 +57,18 @@ jest.mock('@librechat/api', () => ({
   generateResponseId: jest.fn().mockReturnValue('resp_mock-123'),
   isValidationFailure: jest.fn().mockReturnValue(false),
   emitResponseCreated: jest.fn(),
-  createResponseContext: jest.fn().mockReturnValue({ responseId: 'resp_123' }),
+  createResponseContext: jest.fn().mockReturnValue({
+    responseId: 'resp_123',
+    model: 'agent-123',
+    createdAt: Math.floor(Date.now() / 1000),
+    store: true,
+    metadata: {},
+  }),
+  buildResponseModelParameters: jest.fn().mockImplementation((request, modelParameters = {}) => ({
+    ...modelParameters,
+    useResponsesApi: true,
+    ...(request ?? {}),
+  })),
   createResponseTracker: jest.fn().mockReturnValue({
     usage: { promptTokens: 100, completionTokens: 50 },
   }),

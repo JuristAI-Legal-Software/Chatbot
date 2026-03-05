@@ -353,7 +353,10 @@ const createResponse = async (req, res) => {
   const parentMessageId = null;
 
   // Create response context
-  const context = createResponseContext(request, responseId);
+  const context = createResponseContext(
+    { ...request, conversation_id: conversationId },
+    responseId,
+  );
 
   logger.debug(
     `[Responses API] Request ${responseId} started for agent ${agentId}, stream: ${isStreaming}`,
@@ -917,9 +920,10 @@ const getResponse = async (req, res) => {
       store: true,
       background: false,
       service_tier: 'default',
-      metadata: {},
+      metadata: { librechat_conversation_id: resolvedConversationId },
       safety_identifier: null,
       prompt_cache_key: null,
+      conversation_id: resolvedConversationId,
     };
 
     res.json(response);

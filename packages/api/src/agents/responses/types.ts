@@ -335,6 +335,18 @@ export interface ResponseRequest {
   /** Input context - string or array of items */
   input: string | InputItem[];
 
+  /** LibreChat conversation ID (selected by upstream orchestrator) */
+  conversation_id?: string;
+
+  /** External OpenAI-style conversation ID */
+  openai_conversation_id?: string;
+
+  /** Prompt identifier resolved by upstream orchestrator */
+  prompt_id?: string;
+
+  /** Prompt version resolved by upstream orchestrator */
+  prompt_version?: string;
+
   /** Previous response ID for conversation continuation */
   previous_response_id?: string;
 
@@ -540,6 +552,18 @@ export interface Response {
 
   /** Prompt cache key - null if none */
   prompt_cache_key: string | null;
+
+  /** LibreChat conversation ID used for this response */
+  conversation_id?: string;
+
+  /** External OpenAI-style conversation ID associated with this response */
+  openai_conversation_id?: string;
+
+  /** Prompt identifier used by upstream orchestration */
+  prompt_id?: string;
+
+  /** Prompt version used by upstream orchestration */
+  prompt_version?: string;
 }
 
 /* =============================================================================
@@ -777,6 +801,21 @@ export interface ResponseContext {
   instructions?: string;
   /** Whether response should be stored */
   store: boolean;
+
+  /** LibreChat conversation ID used for this response */
+  conversationId?: string;
+
+  /** External OpenAI-style conversation ID associated with this response */
+  openaiConversationId?: string;
+
+  /** Prompt identifier used by upstream orchestration */
+  promptId?: string;
+
+  /** Prompt version used by upstream orchestration */
+  promptVersion?: string;
+
+  /** Metadata carried through to response payloads/events */
+  metadata: Metadata;
 }
 
 /** Validation result for requests */
