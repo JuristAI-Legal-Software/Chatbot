@@ -353,7 +353,10 @@ const createResponse = async (req, res) => {
   const parentMessageId = null;
 
   // Create response context
-  const context = createResponseContext({ ...request, conversation_id: conversationId }, responseId);
+  const context = createResponseContext(
+    { ...request, conversation_id: conversationId },
+    responseId,
+  );
 
   logger.debug(
     `[Responses API] Request ${responseId} started for agent ${agentId}, stream: ${isStreaming}`,
@@ -941,4 +944,3 @@ module.exports = {
   listModels,
   setAppConfig,
 };
-

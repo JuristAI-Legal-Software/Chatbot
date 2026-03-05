@@ -64,13 +64,11 @@ jest.mock('@librechat/api', () => ({
     store: true,
     metadata: {},
   }),
-  buildResponseModelParameters: jest
-    .fn()
-    .mockImplementation((request, modelParameters = {}) => ({
-      ...modelParameters,
-      useResponsesApi: true,
-      ...(request ?? {}),
-    })),
+  buildResponseModelParameters: jest.fn().mockImplementation((request, modelParameters = {}) => ({
+    ...modelParameters,
+    useResponsesApi: true,
+    ...(request ?? {}),
+  })),
   createResponseTracker: jest.fn().mockReturnValue({
     usage: { promptTokens: 100, completionTokens: 50 },
   }),
@@ -391,4 +389,3 @@ describe('createResponse controller', () => {
     });
   });
 });
-

@@ -439,7 +439,11 @@ describe('validateResponseRequest', () => {
 
   it('rejects blank interop id fields', () => {
     expect(
-      validateResponseRequest({ model: 'agent_123', input: 'Hello', openai_conversation_id: '   ' }),
+      validateResponseRequest({
+        model: 'agent_123',
+        input: 'Hello',
+        openai_conversation_id: '   ',
+      }),
     ).toEqual({
       valid: false,
       error: 'openai_conversation_id must be a non-empty string',
@@ -507,4 +511,3 @@ describe('responses context and output defaults', () => {
     expect(response.store).toBe(true);
   });
 });
-
