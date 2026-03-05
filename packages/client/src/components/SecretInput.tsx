@@ -3,8 +3,10 @@ import { useState, useCallback } from 'react';
 import { Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { cn } from '~/utils';
 
-export interface SecretInputProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> {
+export interface SecretInputProps extends Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  'type'
+> {
   /** Show copy button */
   showCopy?: boolean;
   /** Callback when value is copied */
