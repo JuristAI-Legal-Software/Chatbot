@@ -8,6 +8,8 @@ const {
 const { canAccessResource } = require('./canAccessResource');
 const { getAgent } = require('~/models/Agent');
 
+const DEFAULT_AGENT_ID = process.env.DEFAULT_AGENT_ID ?? 'agent_lhpnDhDHKBbh96Ra1s1Qu';
+
 /**
  * Agent ID resolver function for agent_id from request body
  * Resolves custom agent ID (e.g., "agent_abc123") to MongoDB ObjectId
@@ -58,6 +60,8 @@ const canAccessAgentFromBody = (options) => {
 
       if (!isAgentsEndpoint(endpoint)) {
         agentId = Constants.EPHEMERAL_AGENT_ID;
+      } else if (!agentId) {
+        agentId = DEFAULT_AGENT_ID;
       }
 
       if (!agentId) {
@@ -102,3 +106,4 @@ const canAccessAgentFromBody = (options) => {
 module.exports = {
   canAccessAgentFromBody,
 };
+

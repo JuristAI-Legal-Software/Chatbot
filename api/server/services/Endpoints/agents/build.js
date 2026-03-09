@@ -2,16 +2,22 @@ const { logger } = require('@librechat/data-schemas');
 const { isAgentsEndpoint, removeNullishValues, Constants } = require('librechat-data-provider');
 const { loadAgent } = require('~/models/Agent');
 
+const DEFAULT_AGENT_ID = process.env.DEFAULT_AGENT_ID ?? 'agent_lhpnDhDHKBbh96Ra1s1Qu';
+
 const buildOptions = (req, endpoint, parsedBody, endpointType) => {
   const { spec, iconURL, agent_id, ...model_parameters } = parsedBody;
+  const resolvedAgentId = isAgentsEndpoint(endpoint)
+    ? agent_id || DEFAULT_AGENT_ID
+    : Constants.EPHEMERAL_AGENT_ID;
+
   const agentPromise = loadAgent({
     req,
     spec,
-    agent_id: isAgentsEndpoint(endpoint) ? agent_id : Constants.EPHEMERAL_AGENT_ID,
+    agent_id: resolvedAgentId,
     endpoint,
     model_parameters,
   }).catch((error) => {
-    logger.error(`[/agents/:${agent_id}] Error retrieving agent during build options step`, error);
+    logger.error(`[/agents/:${resolvedAgentId}] Error retrieving agent during build options step`, error);
     return undefined;
   });
 
@@ -22,7 +28,7 @@ const buildOptions = (req, endpoint, parsedBody, endpointType) => {
     spec,
     iconURL,
     endpoint,
-    agent_id,
+    agent_id: resolvedAgentId,
     endpointType,
     model_parameters,
     agent: agentPromise,
