@@ -10,12 +10,75 @@ const {
   messageUserLimiter,
 } = require('~/server/middleware');
 const { saveMessage } = require('~/models');
+const {
+  getLatestConvoByOpenAIConversationId,
+  isLibreChatConversationId,
+  isOpenAIConversationId,
+} = require('~/models/Conversation');
 const openai = require('./openai');
 const responses = require('./responses');
 const { v1 } = require('./v1');
 const chat = require('./chat');
 
 const { LIMIT_MESSAGE_IP, LIMIT_MESSAGE_USER } = process.env ?? {};
+
+const readTextValue = (value) => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const findJobByThreadId = async (userId, threadId) => {
+  if (!userId || !threadId) {
+    return null;
+  }
+
+  const activeJobIds = await GenerationJobManager.getActiveJobIdsForUser(userId);
+  for (const jobId of activeJobIds) {
+    const job = await GenerationJobManager.getJob(jobId);
+    if (job?.metadata?.openaiConversationId === threadId) {
+      return { job, streamId: jobId };
+    }
+  }
+
+  return null;
+};
+
+const resolveConversationReference = async (userId, rawConversationId, rawThreadId) => {
+  const threadId = readTextValue(rawThreadId);
+  const conversationId = readTextValue(rawConversationId);
+
+  if (threadId && isOpenAIConversationId(threadId)) {
+    const activeJob = await findJobByThreadId(userId, threadId);
+    if (activeJob) {
+      return {
+        conversationId: activeJob.streamId,
+        threadId,
+        activeJob: activeJob.job,
+      };
+    }
+
+    const conversation = await getLatestConvoByOpenAIConversationId(userId, threadId);
+    return {
+      conversationId: conversation?.conversationId ?? null,
+      threadId,
+      activeJob: null,
+    };
+  }
+
+  if (conversationId && isOpenAIConversationId(conversationId)) {
+    return resolveConversationReference(userId, null, conversationId);
+  }
+
+  return {
+    conversationId: conversationId && isLibreChatConversationId(conversationId) ? conversationId : null,
+    threadId: null,
+    activeJob: null,
+  };
+};
 
 const router = express.Router();
 
@@ -151,13 +214,26 @@ router.get('/chat/active', async (req, res) => {
  * @returns { active, streamId, status, aggregatedContent, createdAt, resumeState }
  */
 router.get('/chat/status/:conversationId', async (req, res) => {
-  const { conversationId } = req.params;
+  const resolvedReference = await resolveConversationReference(
+    req.user.id,
+    req.params.conversationId,
+    req.query.threadId,
+  );
+  const conversationId = resolvedReference.conversationId;
+
+  if (!conversationId) {
+    return res.json({ active: false, threadId: resolvedReference.threadId });
+  }
 
   // streamId === conversationId, so we can use getJob directly
-  const job = await GenerationJobManager.getJob(conversationId);
+  const job = resolvedReference.activeJob ?? (await GenerationJobManager.getJob(conversationId));
 
   if (!job) {
-    return res.json({ active: false });
+    return res.json({
+      active: false,
+      conversationId,
+      threadId: resolvedReference.threadId,
+    });
   }
 
   if (job.metadata.userId !== req.user.id) {
@@ -172,6 +248,8 @@ router.get('/chat/status/:conversationId', async (req, res) => {
   res.json({
     active: isActive,
     streamId: conversationId,
+    conversationId,
+    threadId: resolvedReference.threadId ?? job.metadata?.openaiConversationId ?? null,
     status: job.status,
     aggregatedContent: resumeState?.aggregatedContent ?? [],
     createdAt: job.createdAt,
@@ -190,13 +268,23 @@ router.post('/chat/abort', async (req, res) => {
   logger.debug(`[AgentStream] Method: ${req.method}, Path: ${req.path}`);
   logger.debug(`[AgentStream] Body:`, req.body);
 
-  const { streamId, conversationId, abortKey } = req.body;
+  const { streamId, conversationId, abortKey, threadId } = req.body;
   const userId = req.user?.id;
 
   // streamId === conversationId, so try any of the provided IDs
   // Skip "new" as it's a placeholder for new conversations, not an actual ID
-  let jobStreamId =
-    streamId || (conversationId !== 'new' ? conversationId : null) || abortKey?.split(':')[0];
+  let jobStreamId = streamId;
+  if (!jobStreamId) {
+    const resolvedReference = await resolveConversationReference(userId, conversationId, threadId);
+    jobStreamId = resolvedReference.conversationId;
+  }
+  if (!jobStreamId) {
+    jobStreamId =
+      conversationId !== 'new' ? conversationId : null;
+  }
+  if (!jobStreamId) {
+    jobStreamId = abortKey?.split(':')[0];
+  }
   let job = jobStreamId ? await GenerationJobManager.getJob(jobStreamId) : null;
 
   // Fallback: if job not found and we have a userId, look up active jobs for user
@@ -262,7 +350,11 @@ router.post('/chat/abort', async (req, res) => {
       }
     }
 
-    return res.json({ success: true, aborted: jobStreamId });
+    return res.json({
+      success: true,
+      aborted: jobStreamId,
+      threadId: job.metadata?.openaiConversationId ?? readTextValue(threadId) ?? null,
+    });
   }
 
   logger.warn(`[AgentStream] Job not found for streamId: ${jobStreamId}`);

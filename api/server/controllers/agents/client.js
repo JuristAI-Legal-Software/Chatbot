@@ -133,6 +133,31 @@ class AgentClient extends BaseClient {
       );
     }
 
+    const readTextValue = (value) => {
+      if (typeof value !== 'string') {
+        return undefined;
+      }
+
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    };
+
+    const reqBody = this.options?.req?.body ?? {};
+    const modelParameters = this.options?.agent?.model_parameters ?? {};
+    const openaiConversationId =
+      readTextValue(reqBody.openai_conversation_id) ??
+      readTextValue(reqBody.openaiConversationId) ??
+      readTextValue(reqBody.threadId) ??
+      readTextValue(modelParameters.openai_conversation_id);
+    const promptId =
+      readTextValue(reqBody.prompt_id) ??
+      readTextValue(reqBody.promptId) ??
+      readTextValue(modelParameters.prompt_id);
+    const promptVersion =
+      readTextValue(reqBody.prompt_version) ??
+      readTextValue(reqBody.promptVersion) ??
+      readTextValue(modelParameters.prompt_version);
+
     return removeNullishValues(
       Object.assign(
         {
@@ -144,6 +169,9 @@ class AgentClient extends BaseClient {
           resendFiles: this.options.resendFiles,
           imageDetail: this.options.imageDetail,
           maxContextTokens: this.maxContextTokens,
+          openaiConversationId,
+          promptId,
+          promptVersion,
         },
         // TODO: PARSE OPTIONS BY PROVIDER, MAY CONTAIN SENSITIVE DATA
         runOptions,

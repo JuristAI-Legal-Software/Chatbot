@@ -13,6 +13,23 @@ const { disposeClient, clientRegistry, requestDataMap } = require('~/server/clea
 const { handleAbortError } = require('~/server/middleware');
 const { logViolation } = require('~/cache');
 const { saveMessage } = require('~/models');
+const {
+  getConvo,
+  isOpenAIConversationId,
+  isLibreChatConversationId,
+  getLatestConvoByOpenAIConversationId,
+} = require('~/models/Conversation');
+
+const readTextValue = (value) => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const buildOpenAIConversationId = () => `conv_${crypto.randomUUID().replace(/-/g, '')}`;
 
 function createCloseHandler(abortController) {
   return function (manual) {
@@ -50,6 +67,38 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
   } = req.body;
 
   const userId = req.user.id;
+  const requestedConversationId = readTextValue(reqConversationId);
+  const requestedThreadId =
+    readTextValue(req.body.threadId) ??
+    readTextValue(req.body.openai_conversation_id) ??
+    readTextValue(req.body.openaiConversationId);
+  const promptId = readTextValue(req.body.promptId) ?? readTextValue(req.body.prompt_id);
+  const promptVersion =
+    readTextValue(req.body.promptVersion) ?? readTextValue(req.body.prompt_version);
+  let openaiConversationId = requestedThreadId;
+  let resolvedConversationId = requestedConversationId;
+
+  if (requestedConversationId && !isLibreChatConversationId(requestedConversationId)) {
+    if (!isOpenAIConversationId(requestedConversationId)) {
+      return res.status(400).json({ error: 'invalid_conversation_reference' });
+    }
+    openaiConversationId = requestedConversationId;
+    resolvedConversationId = null;
+  }
+
+  if (!openaiConversationId && resolvedConversationId) {
+    const existingConvo = await getConvo(userId, resolvedConversationId);
+    openaiConversationId = readTextValue(existingConvo?.openaiConversationId);
+  }
+
+  if (!openaiConversationId && !resolvedConversationId) {
+    openaiConversationId = buildOpenAIConversationId();
+  }
+
+  if (openaiConversationId && !resolvedConversationId) {
+    const existingConvo = await getLatestConvoByOpenAIConversationId(userId, openaiConversationId);
+    resolvedConversationId = readTextValue(existingConvo?.conversationId);
+  }
 
   const { allowed, pendingRequests, limit } = await checkAndIncrementPendingRequest(userId);
   if (!allowed) {
@@ -61,8 +110,25 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
   // Generate conversationId upfront if not provided - streamId === conversationId always
   // Treat "new" as a placeholder that needs a real UUID (frontend may send "new" for new convos)
   const conversationId =
-    !reqConversationId || reqConversationId === 'new' ? crypto.randomUUID() : reqConversationId;
+    !resolvedConversationId || resolvedConversationId === 'new'
+      ? crypto.randomUUID()
+      : resolvedConversationId;
   const streamId = conversationId;
+  const isNewConvoRequest =
+    !resolvedConversationId || resolvedConversationId === 'new';
+  req.body.conversationId = conversationId;
+  if (openaiConversationId) {
+    req.body.threadId = openaiConversationId;
+    req.body.openai_conversation_id = openaiConversationId;
+  }
+  if (promptId) {
+    req.body.promptId = promptId;
+    req.body.prompt_id = promptId;
+  }
+  if (promptVersion) {
+    req.body.promptVersion = promptVersion;
+    req.body.prompt_version = promptVersion;
+  }
 
   let client = null;
 
@@ -77,10 +143,20 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
     const job = await GenerationJobManager.createJob(streamId, userId, conversationId);
     const jobCreatedAt = job.createdAt; // Capture creation time to detect job replacement
     req._resumableStreamId = streamId;
+    GenerationJobManager.updateMetadata(streamId, {
+      openaiConversationId,
+      promptId,
+      promptVersion,
+    });
 
     // Send JSON response IMMEDIATELY so client can connect to SSE stream
     // This is critical: tool loading (MCP OAuth) may emit events that the client needs to receive
-    res.json({ streamId, conversationId, status: 'started' });
+    res.json({
+      streamId,
+      conversationId,
+      threadId: openaiConversationId ?? null,
+      status: 'started',
+    });
 
     // Note: We no longer use res.on('close') to abort since we send JSON immediately.
     // The response closes normally after res.json(), which is not an abort condition.
@@ -211,6 +287,7 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
             created: true,
             message: userMessage,
             streamId,
+            threadId: openaiConversationId ?? null,
           });
         };
 
@@ -262,11 +339,10 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
 
         // Check abort state BEFORE calling completeJob (which triggers abort signal for cleanup)
         const wasAbortedBeforeComplete = job.abortController.signal.aborted;
-        const isNewConvo = !reqConversationId || reqConversationId === 'new';
         const shouldGenerateTitle =
           addTitle &&
           parentMessageId === Constants.NO_PARENT &&
-          isNewConvo &&
+          isNewConvoRequest &&
           !wasAbortedBeforeComplete;
 
         // Save user message BEFORE sending final event to avoid race condition
@@ -308,6 +384,9 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
           const finalEvent = {
             final: true,
             conversation,
+            threadId: openaiConversationId ?? null,
+            promptId: promptId ?? null,
+            promptVersion: promptVersion ?? null,
             title: conversation.title,
             requestMessage: sanitizeMessageForTransmit(userMessage),
             responseMessage: { ...response },
@@ -328,6 +407,9 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
           const finalEvent = {
             final: true,
             conversation,
+            threadId: openaiConversationId ?? null,
+            promptId: promptId ?? null,
+            promptVersion: promptVersion ?? null,
             title: conversation.title,
             requestMessage: sanitizeMessageForTransmit(userMessage),
             responseMessage: { ...response, unfinished: true },

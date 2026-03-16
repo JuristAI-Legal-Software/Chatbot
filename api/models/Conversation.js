@@ -3,6 +3,18 @@ const { createTempChatExpirationDate } = require('@librechat/api');
 const { getMessages, deleteMessages } = require('./Message');
 const { Conversation } = require('~/db/models');
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const OPENAI_CONVERSATION_PATTERN = /^conv_[A-Za-z0-9._-]+$/;
+
+const isLibreChatConversationId = (value) =>
+  typeof value === 'string' &&
+  UUID_PATTERN.test(value.trim()) &&
+  value.trim() !== '00000000-0000-0000-0000-000000000000';
+
+const isOpenAIConversationId = (value) =>
+  typeof value === 'string' && OPENAI_CONVERSATION_PATTERN.test(value.trim());
+
 /**
  * Searches for a conversation by conversationId and returns a lean document with only conversationId and user.
  * @param {string} conversationId - The conversation's ID.
@@ -29,6 +41,20 @@ const getConvo = async (user, conversationId) => {
   } catch (error) {
     logger.error('[getConvo] Error getting single conversation', error);
     throw new Error('Error getting single conversation');
+  }
+};
+
+const getLatestConvoByOpenAIConversationId = async (user, openaiConversationId) => {
+  try {
+    return await Conversation.findOne({ user, openaiConversationId })
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .lean();
+  } catch (error) {
+    logger.error(
+      '[getLatestConvoByOpenAIConversationId] Error getting conversation by OpenAI conversation ID',
+      error,
+    );
+    throw new Error('Error getting conversation by OpenAI conversation ID');
   }
 };
 
@@ -314,6 +340,9 @@ module.exports = {
     }
   },
   getConvo,
+  getLatestConvoByOpenAIConversationId,
+  isLibreChatConversationId,
+  isOpenAIConversationId,
   /* chore: this method is not properly error handled */
   getConvoTitle: async (user, conversationId) => {
     try {

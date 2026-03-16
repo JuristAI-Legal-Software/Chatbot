@@ -48,6 +48,9 @@ export interface IConversation extends Document {
   reasoning_summary?: string;
   verbosity?: string;
   useResponsesApi?: boolean;
+  openaiConversationId?: string;
+  promptId?: string;
+  promptVersion?: string;
   web_search?: boolean;
   disableStreaming?: boolean;
   fileTokenLimit?: number;

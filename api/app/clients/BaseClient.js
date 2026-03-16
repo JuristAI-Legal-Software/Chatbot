@@ -994,7 +994,13 @@ class BaseClient {
         : await getConvo(this.options?.req?.user?.id, message.conversationId);
 
     const unsetFields = {};
-    const exceptions = new Set(['spec', 'iconURL']);
+    const exceptions = new Set([
+      'spec',
+      'iconURL',
+      'openaiConversationId',
+      'promptId',
+      'promptVersion',
+    ]);
     const hasNonEphemeralAgent =
       isAgentsEndpoint(this.options.endpoint) &&
       endpointOptions?.agent_id &&
