@@ -27,5 +27,4 @@ run_params:
         - subnet-0f2362935094b065c
       security_groups:
         - sg-097b648bf7a6fbaca
-      assign_public_ip: "ENABLED"
-
+      assign_public_ip: 'ENABLED'

@@ -53,6 +53,9 @@ export const knownOpenAIParams = new Set([
   'truncation',
   'include',
   'previous_response_id',
+  'openai_conversation_id',
+  'prompt_id',
+  'prompt_version',
   // LangChain specific
   '__includeRawResponse',
   'maxConcurrency',

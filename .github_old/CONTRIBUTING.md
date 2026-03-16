@@ -30,23 +30,23 @@ Project maintainers have the right and responsibility to remove, edit, or reject
 2. Run `npm run smart-reinstall` to install dependencies (uses Turborepo). Use `npm run reinstall` for a clean install, or `npm ci` for a fresh lockfile-based install.
 3. Build all compiled code: `npm run build`.
 4. Setup and run unit tests:
-    - Copy `.env.test`: `cp api/test/.env.test.example api/test/.env.test`.
-    - Run backend unit tests: `npm run test:api`.
-    - Run frontend unit tests: `npm run test:client`.
+   - Copy `.env.test`: `cp api/test/.env.test.example api/test/.env.test`.
+   - Run backend unit tests: `npm run test:api`.
+   - Run frontend unit tests: `npm run test:client`.
 5. Setup and run integration tests:
-    - Create `.env`: `cp .env.example .env`.
-    - Install [MongoDB Community Edition](https://www.mongodb.com/docs/manual/administration/install-community/), ensure that `mongosh` connects to your local instance.
-    - Run: `npx install playwright`, then `npx playwright install`.
-    - Copy `config.local`: `cp e2e/config.local.example.ts e2e/config.local.ts`.
-    - Copy `librechat.yaml`: `cp librechat.example.yaml librechat.yaml`.
-    - Run: `npm run e2e`.
+   - Create `.env`: `cp .env.example .env`.
+   - Install [MongoDB Community Edition](https://www.mongodb.com/docs/manual/administration/install-community/), ensure that `mongosh` connects to your local instance.
+   - Run: `npx install playwright`, then `npx playwright install`.
+   - Copy `config.local`: `cp e2e/config.local.example.ts e2e/config.local.ts`.
+   - Copy `librechat.yaml`: `cp librechat.example.yaml librechat.yaml`.
+   - Run: `npm run e2e`.
 
 ## 2. Development Notes
 
 1. Before starting work, make sure your main branch has the latest commits with `npm run update`.
 2. Run linting command to find errors: `npm run lint`. Alternatively, ensure husky pre-commit checks are functioning.
-3. After your changes, reinstall packages in your current branch using `npm run reinstall` and ensure everything still works. 
-    - Restart the ESLint server ("ESLint: Restart ESLint Server" in VS Code command bar) and your IDE after reinstalling or updating.
+3. After your changes, reinstall packages in your current branch using `npm run reinstall` and ensure everything still works.
+   - Restart the ESLint server ("ESLint: Restart ESLint Server" in VS Code command bar) and your IDE after reinstalling or updating.
 4. Clear web app localStorage and cookies before and after changes.
 5. To check for introduced errors, build all compiled code: `npm run build`.
 6. Run backend unit tests: `npm run test:api`.
@@ -79,8 +79,10 @@ feat: add hat wobble
 ```
 
 ### Commit Guidelines
+
 - Do your best to reduce the number of commits, organizing them as much possible. Look into [squashing commits](https://www.freecodecamp.org/news/git-squash-commits/) in order to keep a neat history.
 - For those that care about maximizing commits for stats, adhere to the above as I 'squash and merge' an unorganized and/or unformatted commit history, which reduces the number of your commits to 1,:
+
 ```
 * Update Br.tsx
 
@@ -88,7 +90,6 @@ feat: add hat wobble
 
 * Update Br.tsx
 ```
-
 
 ## 5. Pull Request Process
 

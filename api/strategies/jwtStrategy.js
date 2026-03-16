@@ -52,4 +52,3 @@ const jwtLogin = () =>
   );
 
 module.exports = jwtLogin;
-

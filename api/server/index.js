@@ -314,4 +314,3 @@ process.on('uncaughtException', (err) => {
 
 /** Export app for easier testing purposes */
 module.exports = app;
-

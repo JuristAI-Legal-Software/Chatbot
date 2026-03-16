@@ -139,6 +139,15 @@ export const conversationPreset = {
   useResponsesApi: {
     type: Boolean,
   },
+  openaiConversationId: {
+    type: String,
+  },
+  promptId: {
+    type: String,
+  },
+  promptVersion: {
+    type: String,
+  },
   /** OpenAI Responses API / Anthropic API / Google API */
   web_search: {
     type: Boolean,
