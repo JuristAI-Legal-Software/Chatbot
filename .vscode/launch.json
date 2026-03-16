@@ -6,9 +6,9 @@
       "request": "launch",
       "program": "${workspaceFolder}/api/server/index.js",
       "env": {
-        "NODE_ENV": "production",
+        "NODE_ENV": "production"
       },
-      "console": "integratedTerminal",
+      "console": "integratedTerminal"
     }
   ]
 }

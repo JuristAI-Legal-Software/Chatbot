@@ -74,7 +74,8 @@ const resolveConversationReference = async (userId, rawConversationId, rawThread
   }
 
   return {
-    conversationId: conversationId && isLibreChatConversationId(conversationId) ? conversationId : null,
+    conversationId:
+      conversationId && isLibreChatConversationId(conversationId) ? conversationId : null,
     threadId: null,
     activeJob: null,
   };
@@ -279,8 +280,7 @@ router.post('/chat/abort', async (req, res) => {
     jobStreamId = resolvedReference.conversationId;
   }
   if (!jobStreamId) {
-    jobStreamId =
-      conversationId !== 'new' ? conversationId : null;
+    jobStreamId = conversationId !== 'new' ? conversationId : null;
   }
   if (!jobStreamId) {
     jobStreamId = abortKey?.split(':')[0];

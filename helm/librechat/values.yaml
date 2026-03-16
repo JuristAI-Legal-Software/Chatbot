@@ -4,19 +4,17 @@
 
 replicaCount: 1
 
-
-
 global:
-   # default Secret for envs/ only Passwords. Can be locally generated with: kubectl create secret generic librechat-secret-envs --from-env-file=.env.example --dry-run=client -o yaml > secret-envs.yaml
-   # For better maintainabillity, you can put all vars directly in the config Section and only overwrite Secrets with this if nessesary.
-   # Required Values:
-   # - CREDS_KEY
-   # - CREDS_IV
-   # - JWT_SECRET
-   # - JWT_REFRESH_SECRET
-   # - MEILI_MASTER_KEY
+  # default Secret for envs/ only Passwords. Can be locally generated with: kubectl create secret generic librechat-secret-envs --from-env-file=.env.example --dry-run=client -o yaml > secret-envs.yaml
+  # For better maintainabillity, you can put all vars directly in the config Section and only overwrite Secrets with this if nessesary.
+  # Required Values:
+  # - CREDS_KEY
+  # - CREDS_IV
+  # - JWT_SECRET
+  # - JWT_REFRESH_SECRET
+  # - MEILI_MASTER_KEY
   librechat:
-    existingSecretName: "librechat-credentials-env"
+    existingSecretName: 'librechat-credentials-env'
     # Used for Setting the Right Key, can be something like AZURE_API_KEY, if Azure OpenAI is used
     existingSecretApiKey: OPENAI_API_KEY
     # Optionally add extra globally accessible environment variables here. These can be referenced under ConfigEnv to make them accessible inside LibreChat
@@ -46,10 +44,10 @@ librechat:
     # For better maintainabillity, you can put all vars directly in the config Section and only overwrite Secrets with this if nessesary.
     # Required Values:
     # - MEILI_MASTER_KEY
-  existingSecretName: "librechat-credentials-env"
-  
+  existingSecretName: 'librechat-credentials-env'
+
   # For adding a custom config yaml-file you can set the contents in this var. See https://www.librechat.ai/docs/configuration/librechat_yaml/example
-  configYamlContent: ""
+  configYamlContent: ''
   # configYamlContent: |
   #   version: 1.0.8
 
@@ -67,7 +65,7 @@ librechat:
   #       openNewTab: true
 
   #   registration:
-  #     socialLogins: ["discord", "facebook", "github", "google", "openid"] 
+  #     socialLogins: ["discord", "facebook", "github", "google", "openid"]
   #   endpoints:
   #     azureOpenAI:
   #      # Endpoint-level configuration
@@ -100,14 +98,14 @@ librechat:
   #         modelDisplayLabel: "OpenRouter"
 
   # name of existing Yaml configmap, key must be librechat.yaml
-  existingConfigYaml: ""
+  existingConfigYaml: ''
 
   # Volume used to store image Files uploaded to the Web UI
   imageVolume:
     enabled: true
     size: 10G
     accessModes: ReadWriteOnce
-    # storageClassName: 
+    # storageClassName:
 
 # only lite RAG is supported
 librechat-rag-api:
@@ -115,18 +113,16 @@ librechat-rag-api:
   # can be azure, openai, huggingface or huggingfacetei
   embeddingsProvider: openai
 
-
 image:
   repository: danny-avila/librechat
   registry: registry.librechat.ai
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
-
+  tag: ''
 
 imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
+nameOverride: ''
+fullnameOverride: ''
 
 # This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
 serviceAccount:
@@ -138,15 +134,13 @@ serviceAccount:
   annotations: {}
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
-  name: ""
+  name: ''
 
 lifecycle: {}
 # # base for adding a custom banner // see https://github.com/danny-avila/LibreChat/pull/3952 for an example
 #   postStart:
 #     exec:
 #       command: ["/bin/sh", "-c", "npm run update-banner <displayFrom(Format: yyyy-mm-ddTHH:MM:SSZ)> <displayTo(Format: yyyy-mm-ddTHH:MM:SSZ)> <message> <isPublic(true/false)>"]
-
-
 
 podAnnotations: {}
 podLabels: {}
@@ -164,7 +158,7 @@ podSecurityContext:
 securityContext:
   capabilities:
     drop:
-    - ALL
+      - ALL
   # readOnlyRootFilesystem: true # not supported yet
   runAsNonRoot: true
   runAsUser: 1000
@@ -178,7 +172,7 @@ service:
 
 ingress:
   enabled: true
-  className: ""
+  className: ''
   annotations: {}
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
@@ -203,7 +197,6 @@ resources: {}
   # requests:
   #   cpu: 100m
   #   memory: 128Mi
-
 
 autoscaling:
   enabled: false
@@ -257,7 +250,7 @@ hostAliases: []
 
 # DNS Configuration
 # Customize DNS resolution for redirecting traffic to proxy servers
-dnsPolicy: ""  # Options: ClusterFirst, Default, None, ClusterFirstWithHostNet
+dnsPolicy: '' # Options: ClusterFirst, Default, None, ClusterFirstWithHostNet
 dnsConfig: {}
 # Example configuration for custom DNS:
 # dnsPolicy: "None"  # Use only custom DNS settings
@@ -294,21 +287,20 @@ mongodb:
   auth:
     enabled: false
   databases:
-   - LibreChat
-#  persistence: 
+    - LibreChat
+#  persistence:
 #    size: 8Gi
-
 
 meilisearch:
   enabled: true
   persistence:
     enabled: true
-    storageClass: ""
+    storageClass: ''
   image:
-    tag: "v1.7.3"
+    tag: 'v1.7.3'
   auth:
     # Use an existing Kubernetes secret for the MEILI_MASTER_KEY
-    existingMasterKeySecret: "librechat-credentials-env"
+    existingMasterKeySecret: 'librechat-credentials-env'
 
 # Redis Parameters
 redis:

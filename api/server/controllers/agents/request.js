@@ -114,8 +114,7 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
       ? crypto.randomUUID()
       : resolvedConversationId;
   const streamId = conversationId;
-  const isNewConvoRequest =
-    !resolvedConversationId || resolvedConversationId === 'new';
+  const isNewConvoRequest = !resolvedConversationId || resolvedConversationId === 'new';
   req.body.conversationId = conversationId;
   if (openaiConversationId) {
     req.body.threadId = openaiConversationId;

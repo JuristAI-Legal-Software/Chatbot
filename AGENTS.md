@@ -4,14 +4,14 @@
 
 LibreChat is a monorepo with the following key workspaces:
 
-| Workspace | Language | Side | Dependency | Purpose |
-|---|---|---|---|---|
-| `/api` | JS (legacy) | Backend | `packages/api`, `packages/data-schemas`, `packages/data-provider`, `@librechat/agents` | Express server — minimize changes here |
-| `/packages/api` | **TypeScript** | Backend | `packages/data-schemas`, `packages/data-provider` | New backend code lives here (TS only, consumed by `/api`) |
-| `/packages/data-schemas` | TypeScript | Backend | `packages/data-provider` | Database models/schemas, shareable across backend projects |
-| `/packages/data-provider` | TypeScript | Shared | — | Shared API types, endpoints, data-service — used by both frontend and backend |
-| `/client` | TypeScript/React | Frontend | `packages/data-provider`, `packages/client` | Frontend SPA |
-| `/packages/client` | TypeScript | Frontend | `packages/data-provider` | Shared frontend utilities |
+| Workspace                 | Language         | Side     | Dependency                                                                             | Purpose                                                                       |
+| ------------------------- | ---------------- | -------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `/api`                    | JS (legacy)      | Backend  | `packages/api`, `packages/data-schemas`, `packages/data-provider`, `@librechat/agents` | Express server — minimize changes here                                        |
+| `/packages/api`           | **TypeScript**   | Backend  | `packages/data-schemas`, `packages/data-provider`                                      | New backend code lives here (TS only, consumed by `/api`)                     |
+| `/packages/data-schemas`  | TypeScript       | Backend  | `packages/data-provider`                                                               | Database models/schemas, shareable across backend projects                    |
+| `/packages/data-provider` | TypeScript       | Shared   | —                                                                                      | Shared API types, endpoints, data-service — used by both frontend and backend |
+| `/client`                 | TypeScript/React | Frontend | `packages/data-provider`, `packages/client`                                            | Frontend SPA                                                                  |
+| `/packages/client`        | TypeScript       | Frontend | `packages/data-provider`                                                               | Shared frontend utilities                                                     |
 
 The source code for `@librechat/agents` (major backend dependency, same team) is at `/home/danny/agentus`.
 
@@ -126,16 +126,16 @@ Multi-line imports count total character length across all lines. Consolidate va
 
 ## Development Commands
 
-| Command | Purpose |
-|---|---|
-| `npm run smart-reinstall` | Install deps (if lockfile changed) + build via Turborepo |
-| `npm run reinstall` | Clean install — wipe `node_modules` and reinstall from scratch |
-| `npm run backend` | Start the backend server |
-| `npm run backend:dev` | Start backend with file watching (development) |
-| `npm run build` | Build all compiled code via Turborepo (parallel, cached) |
-| `npm run frontend` | Build all compiled code sequentially (legacy fallback) |
-| `npm run frontend:dev` | Start frontend dev server with HMR (port 3090, requires backend running) |
-| `npm run build:data-provider` | Rebuild `packages/data-provider` after changes |
+| Command                       | Purpose                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------ |
+| `npm run smart-reinstall`     | Install deps (if lockfile changed) + build via Turborepo                 |
+| `npm run reinstall`           | Clean install — wipe `node_modules` and reinstall from scratch           |
+| `npm run backend`             | Start the backend server                                                 |
+| `npm run backend:dev`         | Start backend with file watching (development)                           |
+| `npm run build`               | Build all compiled code via Turborepo (parallel, cached)                 |
+| `npm run frontend`            | Build all compiled code sequentially (legacy fallback)                   |
+| `npm run frontend:dev`        | Start frontend dev server with HMR (port 3090, requires backend running) |
+| `npm run build:data-provider` | Rebuild `packages/data-provider` after changes                           |
 
 - Node.js: v20.19.0+ or ^22.12.0 or >= 23.0.0
 - Database: MongoDB

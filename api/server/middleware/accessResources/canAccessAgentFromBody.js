@@ -106,4 +106,3 @@ const canAccessAgentFromBody = (options) => {
 module.exports = {
   canAccessAgentFromBody,
 };
-

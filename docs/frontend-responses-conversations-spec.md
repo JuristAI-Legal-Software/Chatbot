@@ -17,10 +17,10 @@ All new frontend chat requests must use the Responses API flow. Do not call the 
 
 Use `appId` to select prompt identity:
 
-| appId | Product | prompt.id | prompt.version |
-|---|---|---|---|
-| `2` | civil / litigai | `pmpt_694030b0bc6c8194906e2aee647e640b0959472384122916` | `2` |
-| `1` | criminal / fedcrim.ai | `pmpt_694030e601dc8196b472e5dcf8f2e3bd0aa422f8a026f796` | `3` |
+| appId | Product               | prompt.id                                               | prompt.version |
+| ----- | --------------------- | ------------------------------------------------------- | -------------- |
+| `2`   | civil / litigai       | `pmpt_694030b0bc6c8194906e2aee647e640b0959472384122916` | `2`            |
+| `1`   | criminal / fedcrim.ai | `pmpt_694030e601dc8196b472e5dcf8f2e3bd0aa422f8a026f796` | `3`            |
 
 If `appId` is missing or unsupported, the frontend must fail fast before sending the request.
 

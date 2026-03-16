@@ -47,7 +47,10 @@ const buildOptions = (req, endpoint, parsedBody, endpointType) => {
     endpoint,
     model_parameters: normalizedModelParameters,
   }).catch((error) => {
-    logger.error(`[/agents/:${resolvedAgentId}] Error retrieving agent during build options step`, error);
+    logger.error(
+      `[/agents/:${resolvedAgentId}] Error retrieving agent during build options step`,
+      error,
+    );
     return undefined;
   });
 
