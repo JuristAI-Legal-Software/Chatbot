@@ -4,12 +4,14 @@ const { getMessages, deleteMessages } = require('./Message');
 const { Conversation } = require('~/db/models');
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const STRUCTURED_CONVERSATION_ID_PATTERN =
+  /^userId:[^|]+(?:\|caseId:[^|]+)?(?:\|threadId:[^|]+)?(?:\|tag:[^|]+)?(?:\|customId:[^|]+)?$/;
 const OPENAI_CONVERSATION_PATTERN = /^conv_[A-Za-z0-9._-]+$/;
 
 const isLibreChatConversationId = (value) =>
   typeof value === 'string' &&
-  UUID_PATTERN.test(value.trim()) &&
-  value.trim() !== '00000000-0000-0000-0000-000000000000';
+  value.trim() !== '00000000-0000-0000-0000-000000000000' &&
+  (UUID_PATTERN.test(value.trim()) || STRUCTURED_CONVERSATION_ID_PATTERN.test(value.trim()));
 
 const isOpenAIConversationId = (value) =>
   typeof value === 'string' && OPENAI_CONVERSATION_PATTERN.test(value.trim());

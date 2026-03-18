@@ -6,6 +6,12 @@ import type { SearchResultData } from './types/web';
 import type { TFile } from './types/files';
 
 export const isUUID = z.string().uuid();
+export const structuredConversationId = z
+  .string()
+  .regex(
+    /^userId:[^|]+(?:\|caseId:[^|]+)?(?:\|threadId:[^|]+)?(?:\|tag:[^|]+)?(?:\|customId:[^|]+)?$/,
+  );
+export const isConversationId = z.union([isUUID, structuredConversationId]);
 
 export enum AuthType {
   OVERRIDE_AUTH = 'override_auth',
