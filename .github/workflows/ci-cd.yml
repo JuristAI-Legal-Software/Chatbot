@@ -21,7 +21,6 @@ env:
   TASK_CPU: '1024'
   TASK_MEMORY: '2048'
   EXECUTION_ROLE_ARN: arn:aws:iam::730335261767:role/ecsTaskExecutionRole
-  TASK_ROLE_ARN: arn:aws:iam::730335261767:role/ecsTaskRole
   LOG_GROUP: /ecs/librechat
   LOG_STREAM_PREFIX: librechat-container
   APP_PORT: ${{ vars.APP_PORT || '3080' }}
@@ -182,7 +181,6 @@ jobs:
             --arg taskCpu "${TASK_CPU}" \
             --arg taskMemory "${TASK_MEMORY}" \
             --arg executionRoleArn "${EXECUTION_ROLE_ARN}" \
-            --arg taskRoleArn "${TASK_ROLE_ARN}" \
             '{
               family: $family,
               networkMode: "awsvpc",
@@ -240,8 +238,7 @@ jobs:
               requiresCompatibilities: ["FARGATE"],
               cpu: $taskCpu,
               memory: $taskMemory,
-              executionRoleArn: $executionRoleArn,
-              taskRoleArn: $taskRoleArn
+              executionRoleArn: $executionRoleArn
             }' > task-definition.json
 
       - name: Register ECS task definition
