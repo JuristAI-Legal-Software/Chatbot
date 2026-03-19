@@ -14,6 +14,7 @@ function buildSubmissionFromResumeState(
   streamId: string,
   messages: TMessage[],
   conversationId: string,
+  threadId?: string | null,
 ): TSubmission {
   const userMessageData = resumeState.userMessage;
   const responseMessageId =
@@ -70,6 +71,7 @@ function buildSubmissionFromResumeState(
     conversationId,
     title: 'Resumed Chat',
     endpoint: null,
+    thread_id: threadId ?? existingResponseMessage?.thread_id ?? existingUserMessage?.thread_id,
   } as TConversation;
 
   return {
@@ -209,6 +211,7 @@ export default function useResumeOnLoad(
         streamStatus.streamId,
         messages,
         conversationId,
+        streamStatus.threadId,
       );
       setSubmission(submission);
     } else {
@@ -231,6 +234,7 @@ export default function useResumeOnLoad(
         // Signal to useResumableSSE to subscribe to existing stream instead of starting new
         resumeStreamId: streamStatus.streamId,
       } as TSubmission & { resumeStreamId: string };
+      submission.conversation.thread_id = streamStatus.threadId ?? undefined;
       setSubmission(submission);
     }
   }, [

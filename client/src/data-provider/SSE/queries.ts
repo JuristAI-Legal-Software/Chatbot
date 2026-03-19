@@ -7,6 +7,7 @@ import { updateConvoInAllQueries } from '~/utils';
 export interface StreamStatusResponse {
   active: boolean;
   streamId?: string;
+  threadId?: string | null;
   status?: 'running' | 'complete' | 'error' | 'aborted';
   aggregatedContent?: Array<{ type: string; text?: string }>;
   createdAt?: number;

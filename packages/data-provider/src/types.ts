@@ -77,6 +77,9 @@ export type TEndpointOption = Pick<
   key?: string | null;
   /** @deprecated Assistants API */
   thread_id?: string;
+  threadId?: string;
+  openaiConversationId?: string;
+  openai_conversation_id?: string;
   // Conversation identifiers for multi-response streams
   overrideConvoId?: string;
   overrideUserMessageId?: string;
@@ -108,6 +111,9 @@ export type TPayload = Partial<TMessage> &
     isContinued: boolean;
     isRegenerate?: boolean;
     conversationId: string | null;
+    threadId?: string;
+    openaiConversationId?: string;
+    openai_conversation_id?: string;
     messages?: TMessages;
     isTemporary: boolean;
     ephemeralAgent?: TEphemeralAgent | null;

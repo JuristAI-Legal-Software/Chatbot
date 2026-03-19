@@ -166,7 +166,8 @@ export default function useChatFunctions({
       (msg) => msg.messageId === targetParentMessageId,
     );
 
-    let thread_id = targetParentMessage?.thread_id ?? latestMessage?.thread_id;
+    let thread_id =
+      targetParentMessage?.thread_id ?? latestMessage?.thread_id ?? conversation?.thread_id;
     if (thread_id == null) {
       thread_id = currentMessages.find((message) => message.thread_id)?.thread_id;
     }

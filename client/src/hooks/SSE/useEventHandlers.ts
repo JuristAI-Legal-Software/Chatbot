@@ -45,7 +45,8 @@ import store from '~/store';
 
 type TSyncData = {
   sync: boolean;
-  thread_id: string;
+  thread_id?: string;
+  threadId?: string | null;
   messages?: TMessage[];
   requestMessage: TMessage;
   responseMessage: TMessage;
@@ -270,7 +271,8 @@ export default function useEventHandlers({
 
   const syncHandler = useCallback(
     (data: TSyncData, submission: EventSubmission) => {
-      const { conversationId, thread_id, responseMessage, requestMessage } = data;
+      const { conversationId, responseMessage, requestMessage } = data;
+      const threadId = data.threadId ?? data.thread_id;
       const { initialResponse, messages: _messages, userMessage } = submission;
       const messages = _messages.filter((msg) => msg.messageId !== userMessage.messageId);
 
@@ -280,6 +282,7 @@ export default function useEventHandlers({
         {
           ...initialResponse,
           ...responseMessage,
+          thread_id: responseMessage.thread_id ?? threadId ?? initialResponse.thread_id,
         },
       ]);
 
@@ -301,7 +304,7 @@ export default function useEventHandlers({
           update = tConvoUpdateSchema.parse({
             ...prevState,
             conversationId,
-            thread_id,
+            thread_id: threadId,
             title,
             messages: [requestMessage.messageId, responseMessage.messageId],
           }) as TConversation;
@@ -318,7 +321,7 @@ export default function useEventHandlers({
           update = tConvoUpdateSchema.parse({
             ...prevState,
             conversationId,
-            thread_id,
+            thread_id: threadId,
             messages: [requestMessage.messageId, responseMessage.messageId],
           }) as TConversation;
           return update;
@@ -359,6 +362,7 @@ export default function useEventHandlers({
       }
 
       const { conversationId, parentMessageId } = userMessage;
+      const threadId = data.threadId ?? userMessage.thread_id;
       lastAnnouncementTimeRef.current = Date.now();
       announcePolite({
         message: 'start',
@@ -378,6 +382,7 @@ export default function useEventHandlers({
           update = tConvoUpdateSchema.parse({
             ...prevState,
             conversationId,
+            thread_id: threadId,
             title,
           }) as TConversation;
           return update;
@@ -395,6 +400,7 @@ export default function useEventHandlers({
           update = tConvoUpdateSchema.parse({
             ...prevState,
             conversationId,
+            thread_id: threadId,
           }) as TConversation;
           return update;
         });
@@ -439,6 +445,7 @@ export default function useEventHandlers({
       } = submission;
 
       try {
+        const threadId = data.threadId ?? responseMessage?.thread_id ?? requestMessage?.thread_id;
         // Handle early abort - aborted during tool loading before any messages saved
         // Don't update conversation state, just reset UI and stay on new chat
         if ((data as Record<string, unknown>).earlyAbort) {
@@ -481,6 +488,21 @@ export default function useEventHandlers({
         announcePolite({ message: 'end', isStatus: true });
         announcePolite({ message: getAllContentText(responseMessage) });
 
+        const normalizedRequestMessage =
+          requestMessage == null || threadId == null
+            ? requestMessage
+            : {
+                ...requestMessage,
+                thread_id: requestMessage.thread_id ?? threadId,
+              };
+        const normalizedResponseMessage =
+          responseMessage == null || threadId == null
+            ? responseMessage
+            : {
+                ...responseMessage,
+                thread_id: responseMessage.thread_id ?? threadId,
+              };
+
         const isNewConvo = conversation.conversationId !== submissionConvo.conversationId;
 
         if (isNewConvo && conversation.conversationId) {
@@ -510,7 +532,7 @@ export default function useEventHandlers({
             currentConvoId === Constants.NEW_CONVO;
 
           setFinalMessages(currentConvoId, isNewChat ? [] : [...messages]);
-          setDraft({ id: currentConvoId, value: requestMessage?.text });
+          setDraft({ id: currentConvoId, value: normalizedRequestMessage?.text });
           if (isNewChat) {
             navigate(`/c/${Constants.NEW_CONVO}`, { replace: true, state: { focusChat: true } });
           }
@@ -521,10 +543,10 @@ export default function useEventHandlers({
         let finalMessages: TMessage[] = [];
         if (runMessages) {
           finalMessages = [...runMessages];
-        } else if (isRegenerate && responseMessage) {
-          finalMessages = [...messages, responseMessage];
-        } else if (requestMessage != null && responseMessage != null) {
-          finalMessages = [...messages, requestMessage, responseMessage];
+        } else if (isRegenerate && normalizedResponseMessage) {
+          finalMessages = [...messages, normalizedResponseMessage];
+        } else if (normalizedRequestMessage != null && normalizedResponseMessage != null) {
+          finalMessages = [...messages, normalizedRequestMessage, normalizedResponseMessage];
         }
         if (finalMessages.length > 0) {
           setFinalMessages(conversation.conversationId, finalMessages);
@@ -548,6 +570,7 @@ export default function useEventHandlers({
             const update = {
               ...prevState,
               ...(conversation as TConversation),
+              thread_id: threadId ?? prevState?.thread_id,
             };
             if (prevState?.model != null && prevState.model !== submissionConvo.model) {
               update.model = prevState.model;
