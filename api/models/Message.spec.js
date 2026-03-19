@@ -82,6 +82,23 @@ describe('Message Operations', () => {
       const result = await saveMessage(mockReq, mockMessageData);
       expect(result).toBeUndefined();
     });
+
+    it('should save a message with a structured conversation ID', async () => {
+      mockMessageData.conversationId =
+        'userId:abc|caseId:123|threadId:conv_test123|tag:research|customId:test';
+
+      const result = await saveMessage(mockReq, mockMessageData);
+
+      expect(result.messageId).toBe('msg123');
+      expect(result.conversationId).toBe(mockMessageData.conversationId);
+
+      const savedMessage = await Message.findOne({
+        messageId: 'msg123',
+        user: 'user123',
+      });
+      expect(savedMessage).toBeTruthy();
+      expect(savedMessage.conversationId).toBe(mockMessageData.conversationId);
+    });
   });
 
   describe('updateMessageText', () => {

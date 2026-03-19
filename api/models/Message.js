@@ -1,9 +1,9 @@
-const { z } = require('zod');
 const { logger } = require('@librechat/data-schemas');
 const { createTempChatExpirationDate } = require('@librechat/api');
 const { Message } = require('~/db/models');
 
-const idSchema = z.string().uuid();
+const isValidConversationId = (conversationId) =>
+  require('./Conversation').isLibreChatConversationId(conversationId);
 
 /**
  * Saves a message in the database.
@@ -39,8 +39,7 @@ async function saveMessage(req, params, metadata) {
     throw new Error('User not authenticated');
   }
 
-  const validConvoId = idSchema.safeParse(params.conversationId);
-  if (!validConvoId.success) {
+  if (!isValidConversationId(params.conversationId)) {
     logger.warn(`Invalid conversation ID: ${params.conversationId}`);
     logger.info(`---\`saveMessage\` context: ${metadata?.context}`);
     logger.info(`---Invalid conversation ID Params: ${JSON.stringify(params, null, 2)}`);
