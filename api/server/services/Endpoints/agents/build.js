@@ -19,6 +19,7 @@ const buildOptions = (req, endpoint, parsedBody, endpointType) => {
     iconURL,
     agent_id,
     threadId,
+    thread_id,
     promptId,
     promptVersion,
     openaiConversationId,
@@ -35,7 +36,8 @@ const buildOptions = (req, endpoint, parsedBody, endpointType) => {
     openai_conversation_id:
       readTextValue(openai_conversation_id) ??
       readTextValue(openaiConversationId) ??
-      readTextValue(threadId),
+      readTextValue(threadId) ??
+      readTextValue(thread_id),
     prompt_id: readTextValue(prompt_id) ?? readTextValue(promptId),
     prompt_version: readTextValue(prompt_version) ?? readTextValue(promptVersion),
   });

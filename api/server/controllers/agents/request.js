@@ -70,6 +70,7 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
   const requestedConversationId = readTextValue(reqConversationId);
   const requestedThreadId =
     readTextValue(req.body.threadId) ??
+    readTextValue(req.body.thread_id) ??
     readTextValue(req.body.openai_conversation_id) ??
     readTextValue(req.body.openaiConversationId);
   const promptId = readTextValue(req.body.promptId) ?? readTextValue(req.body.prompt_id);

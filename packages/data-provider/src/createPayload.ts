@@ -39,6 +39,15 @@ const getPromptConfig = (
   return promptConfigByAppId[String(value.appId)];
 };
 
+const readTextValue = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
 export default function createPayload(submission: t.TSubmission) {
   const {
     isEdited,
@@ -53,9 +62,20 @@ export default function createPayload(submission: t.TSubmission) {
     endpointOption,
   } = submission;
   const { conversationId } = s.tConvoUpdateSchema.parse(conversation);
+  const conversationThreadId =
+    conversation != null && typeof conversation === 'object' && 'thread_id' in conversation
+      ? conversation.thread_id
+      : undefined;
   const { endpoint: _e } = endpointOption as {
     endpoint: s.EModelEndpoint;
   };
+  const threadId =
+    readTextValue(conversationThreadId) ??
+    readTextValue(userMessage.thread_id) ??
+    readTextValue(endpointOption.threadId) ??
+    readTextValue(endpointOption.openai_conversation_id) ??
+    readTextValue(endpointOption.openaiConversationId) ??
+    readTextValue(endpointOption.thread_id);
 
   const promptConfig = getPromptConfig(endpointOption.additionalModelRequestFields);
   const isLegacyAssistantsEndpoint = s.isAssistantsEndpoint(_e);
@@ -98,6 +118,9 @@ export default function createPayload(submission: t.TSubmission) {
     isRegenerate,
     editedContent,
     conversationId,
+    threadId,
+    openaiConversationId: threadId,
+    openai_conversation_id: threadId,
     isContinued: !!(isEdited && isContinued),
     ephemeralAgent: s.isAssistantsEndpoint(endpoint) ? undefined : ephemeralAgent,
   };

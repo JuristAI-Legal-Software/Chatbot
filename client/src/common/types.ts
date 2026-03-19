@@ -599,6 +599,7 @@ export type TBaseResData = {
   previousMessages?: t.TMessage[];
   conversation: t.TConversation;
   conversationId?: string;
+  threadId?: string | null;
   runMessages?: t.TMessage[];
 };
 
