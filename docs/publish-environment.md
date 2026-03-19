@@ -14,14 +14,12 @@ Configure these as `publish` environment secrets:
 - `MONGO_URI`
 - `OPENAI_API_KEY`
 - `PGVECTOR_HOST`
-- `POSTGRES_PASSWORD`
 - `RAG_API_URL`
 
 ## Environment Variables
 
 Configure these as `publish` environment variables:
 
-- `MEILI_HOST`
 - `APP_PORT`
 - `APP_HOST`
 - `ALLOW_REGISTRATION`
@@ -35,6 +33,11 @@ Configure these as `publish` environment variables:
 - `CONSOLE_JSON`
 - `DEBUG_OPENAI`
 - `MEILI_MASTER_KEY` if non-empty
+
+Optional `publish` environment variables:
+
+- `MEILI_HOST`
+  Omit if you do not use Meilisearch-backed search/indexing features in this deployment.
 
 ## Defaults
 
@@ -54,7 +57,7 @@ If a variable is omitted, the workflow currently falls back to these defaults:
 - `BAN_VIOLATIONS=false`
 - `MEILI_MASTER_KEY=''`
 
-`MEILI_HOST` has no safe default. The workflow now fails fast if it is missing. It also fails if any required secret is missing.
+`MEILI_HOST` is optional. If omitted, the app should still boot, but Meilisearch-backed search/indexing features may be unavailable or degraded. The workflow still fails if any required secret is missing.
 
 ## Deployment Behavior
 

@@ -98,7 +98,6 @@ jobs:
       IMAGE_URI: ${{ needs.build.outputs.image_uri }}
       JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
       MONGO_URI: ${{ secrets.MONGO_URI }}
-      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       CREDS_IV: ${{ secrets.CREDS_IV }}
       CREDS_KEY: ${{ secrets.CREDS_KEY }}
@@ -123,11 +122,9 @@ jobs:
             fi
           }
 
-          require_value "MEILI_HOST (publish variable)" "${MEILI_HOST}"
           require_value "PGVECTOR_HOST (publish secret)" "${PGVECTOR_HOST}"
           require_value "RAG_API_URL (publish secret)" "${RAG_API_URL}"
           require_value "MONGO_URI (publish secret)" "${MONGO_URI}"
-          require_value "POSTGRES_PASSWORD (publish secret)" "${POSTGRES_PASSWORD}"
           require_value "JWT_SECRET (publish secret)" "${JWT_SECRET}"
           require_value "JWT_REFRESH_SECRET (publish secret)" "${JWT_REFRESH_SECRET}"
           require_value "CREDS_KEY (publish secret)" "${CREDS_KEY}"
@@ -163,7 +160,6 @@ jobs:
             --arg consoleJson "${CONSOLE_JSON}" \
             --arg mongoUri "${MONGO_URI}" \
             --arg debugOpenai "${DEBUG_OPENAI}" \
-            --arg postgresPassword "${POSTGRES_PASSWORD}" \
             --arg appHost "${APP_HOST}" \
             --arg postgresDb "${POSTGRES_DB}" \
             --arg allowRegistration "${ALLOW_REGISTRATION}" \
@@ -211,7 +207,6 @@ jobs:
                     { name: "CONSOLE_JSON", value: $consoleJson },
                     { name: "MONGO_URI", value: $mongoUri },
                     { name: "DEBUG_OPENAI", value: $debugOpenai },
-                    { name: "POSTGRES_PASSWORD", value: $postgresPassword },
                     { name: "HOST", value: $appHost },
                     { name: "POSTGRES_DB", value: $postgresDb },
                     { name: "ALLOW_REGISTRATION", value: $allowRegistration },
