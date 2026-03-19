@@ -15,6 +15,9 @@ $TASKDEF_PATH = "td-register-fixed.json"
 Write-Host "===================================="
 Write-Host "JuristAI LibreChat Deploy Starting"
 Write-Host "===================================="
+Write-Warning "GitHub Actions is the canonical ECS deploy path."
+Write-Warning "This script is a manual fallback only and expects a fully rendered task definition."
+Write-Warning "The checked-in $TASKDEF_PATH is sanitized and contains placeholders, not live secrets."
 
 Set-Location "C:\Users\aibns\Git Projects\juristai\Chatbot"
 
@@ -86,6 +89,12 @@ Write-Host "6) Registering new task definition revision..."
 
 if (!(Test-Path $TASKDEF_PATH)) {
     Write-Error "Task definition file not found: $TASKDEF_PATH"
+    exit 1
+}
+
+$taskDefinitionRaw = Get-Content $TASKDEF_PATH -Raw
+if ($taskDefinitionRaw.Contains("<github-")) {
+    Write-Error "Task definition contains GitHub placeholder values. Render a real task definition before using this fallback script."
     exit 1
 }
 
