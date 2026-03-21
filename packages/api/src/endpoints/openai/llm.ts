@@ -49,6 +49,8 @@ export const knownOpenAIParams = new Set([
   'prediction',
   'promptIndex',
   // Responses API specific
+  'conversation',
+  'prompt',
   'text',
   'truncation',
   'include',
@@ -363,6 +365,46 @@ export function getOpenAILLMConfig({
 
   if (hasModelKwargs) {
     llmConfig.modelKwargs = modelKwargs;
+  }
+
+  if (llmConfig.useResponsesApi === true) {
+    const responsesConfig = llmConfig as Record<string, unknown>;
+    const openAIConversationId =
+      typeof responsesConfig.openai_conversation_id === 'string' &&
+      responsesConfig.openai_conversation_id.trim() !== ''
+        ? responsesConfig.openai_conversation_id.trim()
+        : undefined;
+    const promptId =
+      typeof responsesConfig.prompt_id === 'string' && responsesConfig.prompt_id.trim() !== ''
+        ? responsesConfig.prompt_id.trim()
+        : undefined;
+    const promptVersion =
+      typeof responsesConfig.prompt_version === 'string' &&
+      responsesConfig.prompt_version.trim() !== ''
+        ? responsesConfig.prompt_version.trim()
+        : undefined;
+
+    if (
+      (responsesConfig.conversation == null || responsesConfig.conversation === '') &&
+      openAIConversationId
+    ) {
+      responsesConfig.conversation = openAIConversationId;
+    }
+
+    delete responsesConfig.openai_conversation_id;
+
+    if (responsesConfig.prompt == null && promptId) {
+      responsesConfig.prompt = removeNullishValues(
+        {
+          id: promptId,
+          version: promptVersion,
+        },
+        true,
+      );
+    }
+
+    delete responsesConfig.prompt_id;
+    delete responsesConfig.prompt_version;
   }
 
   if (!azure) {

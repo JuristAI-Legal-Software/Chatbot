@@ -15,9 +15,9 @@ const { logViolation } = require('~/cache');
 const { saveMessage } = require('~/models');
 const {
   getConvo,
+  saveConvo,
   isOpenAIConversationId,
   isLibreChatConversationId,
-  getLatestConvoByOpenAIConversationId,
 } = require('~/models/Conversation');
 
 const readTextValue = (value) => {
@@ -29,7 +29,12 @@ const readTextValue = (value) => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-const buildOpenAIConversationId = () => `conv_${crypto.randomUUID().replace(/-/g, '')}`;
+const extractOpenAIConversationId = (response) =>
+  readTextValue(response?.response_metadata?.conversation_id) ??
+  readTextValue(response?.response_metadata?.openai_conversation_id) ??
+  readTextValue(response?.response_metadata?.thread_id) ??
+  readTextValue(response?.conversation_id) ??
+  readTextValue(response?.openai_conversation_id);
 
 function createCloseHandler(abortController) {
   return function (manual) {
@@ -78,6 +83,7 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
     readTextValue(req.body.promptVersion) ?? readTextValue(req.body.prompt_version);
   let openaiConversationId = requestedThreadId;
   let resolvedConversationId = requestedConversationId;
+  let existingConvo = null;
 
   if (requestedConversationId && !isLibreChatConversationId(requestedConversationId)) {
     if (!isOpenAIConversationId(requestedConversationId)) {
@@ -88,17 +94,8 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
   }
 
   if (!openaiConversationId && resolvedConversationId) {
-    const existingConvo = await getConvo(userId, resolvedConversationId);
+    existingConvo = await getConvo(userId, resolvedConversationId);
     openaiConversationId = readTextValue(existingConvo?.openaiConversationId);
-  }
-
-  if (!openaiConversationId && !resolvedConversationId) {
-    openaiConversationId = buildOpenAIConversationId();
-  }
-
-  if (openaiConversationId && !resolvedConversationId) {
-    const existingConvo = await getLatestConvoByOpenAIConversationId(userId, openaiConversationId);
-    resolvedConversationId = readTextValue(existingConvo?.conversationId);
   }
 
   const { allowed, pendingRequests, limit } = await checkAndIncrementPendingRequest(userId);
@@ -108,14 +105,11 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
     return res.status(429).json(violationInfo);
   }
 
-  // Generate conversationId upfront if not provided - streamId === conversationId always
-  // Treat "new" as a placeholder that needs a real UUID (frontend may send "new" for new convos)
-  const conversationId =
-    !resolvedConversationId || resolvedConversationId === 'new'
-      ? crypto.randomUUID()
-      : resolvedConversationId;
+  // Use the frontend-provided internal conversation ID when present.
+  // If the conversation has not been persisted yet, this is the first turn for that thread.
+  const conversationId = resolvedConversationId ?? crypto.randomUUID();
   const streamId = conversationId;
-  const isNewConvoRequest = !resolvedConversationId || resolvedConversationId === 'new';
+  const isNewConvoRequest = existingConvo == null;
   req.body.conversationId = conversationId;
   if (openaiConversationId) {
     req.body.threadId = openaiConversationId;
@@ -328,6 +322,41 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
         const conversation = { ...convoData };
         conversation.title =
           conversation && !conversation.title ? null : conversation?.title || 'New Chat';
+        const resolvedOpenAIConversationId =
+          extractOpenAIConversationId(response) ?? openaiConversationId;
+
+        if (
+          resolvedOpenAIConversationId &&
+          conversation?.conversationId &&
+          resolvedOpenAIConversationId !== conversation.openaiConversationId
+        ) {
+          const updatedConversation = await saveConvo(
+            req,
+            {
+              conversationId: conversation.conversationId,
+              openaiConversationId: resolvedOpenAIConversationId,
+            },
+            {
+              context: 'api/server/controllers/agents/request.js - persist OpenAI conversation id',
+            },
+          );
+
+          if (updatedConversation?.openaiConversationId) {
+            conversation.openaiConversationId = updatedConversation.openaiConversationId;
+          } else {
+            conversation.openaiConversationId = resolvedOpenAIConversationId;
+          }
+        }
+
+        if (resolvedOpenAIConversationId) {
+          openaiConversationId = resolvedOpenAIConversationId;
+          req.body.threadId = resolvedOpenAIConversationId;
+          req.body.openai_conversation_id = resolvedOpenAIConversationId;
+          req.body.openaiConversationId = resolvedOpenAIConversationId;
+          GenerationJobManager.updateMetadata(streamId, {
+            openaiConversationId: resolvedOpenAIConversationId,
+          });
+        }
 
         if (req.body.files && Array.isArray(client.options.attachments)) {
           const files = buildMessageFiles(req.body.files, client.options.attachments);

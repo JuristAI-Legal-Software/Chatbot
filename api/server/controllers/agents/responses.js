@@ -100,23 +100,40 @@ function convertToInternalMessages(input) {
 /**
  * Resolve conversation context from Open Responses request fields.
  * Priority:
- * 1) conversation_id (LibreChat extension)
- * 2) previous_response_id as messageId (OpenAI-style chaining)
+ * 1) conversation_id (LibreChat branch identifier)
+ * 2) previous_response_id as messageId (legacy chaining fallback)
  * 3) previous_response_id as conversationId (legacy LibreChat behavior)
  * 4) new generated UUID
  * @param {import('@librechat/api').ResponseRequest} request
  * @param {string} userId
- * @returns {Promise<{ conversationId: string; previousMessages: Array }>}
+ * @returns {Promise<{ conversationId: string; previousMessages: Array; previousResponseId: string | null; openaiConversationId: string | null }>}
  */
 async function resolveConversationContext(request, userId) {
   const requestedConversationId =
     typeof request?.conversation_id === 'string' && request.conversation_id.trim().length > 0
       ? request.conversation_id.trim()
       : null;
+  const requestedOpenAIConversationId =
+    typeof request?.openai_conversation_id === 'string' &&
+    request.openai_conversation_id.trim().length > 0
+      ? request.openai_conversation_id.trim()
+      : null;
 
   if (requestedConversationId) {
+    const existingConversation = await getConvo(userId, requestedConversationId);
+    const persistedOpenAIConversationId =
+      typeof existingConversation?.openaiConversationId === 'string' &&
+      existingConversation.openaiConversationId.trim().length > 0
+        ? existingConversation.openaiConversationId.trim()
+        : null;
+
     const previousMessages = await loadPreviousMessages(requestedConversationId, userId);
-    return { conversationId: requestedConversationId, previousMessages };
+    return {
+      conversationId: requestedConversationId,
+      previousMessages,
+      previousResponseId: request.previous_response_id ?? null,
+      openaiConversationId: requestedOpenAIConversationId ?? persistedOpenAIConversationId,
+    };
   }
 
   if (request.previous_response_id) {
@@ -127,10 +144,11 @@ async function resolveConversationContext(request, userId) {
     });
 
     if (previousMessage?.conversationId) {
-      const previousMessages = await loadPreviousMessages(previousMessage.conversationId, userId);
       return {
         conversationId: previousMessage.conversationId,
-        previousMessages,
+        previousMessages: [],
+        previousResponseId,
+        openaiConversationId: requestedOpenAIConversationId,
       };
     }
 
@@ -138,13 +156,36 @@ async function resolveConversationContext(request, userId) {
     return {
       conversationId: previousResponseId,
       previousMessages,
+      previousResponseId,
+      openaiConversationId: requestedOpenAIConversationId,
     };
   }
 
   return {
     conversationId: uuidv4(),
     previousMessages: [],
+    previousResponseId: null,
+    openaiConversationId: requestedOpenAIConversationId,
   };
+}
+
+function extractOpenAIConversationId(response) {
+  const candidates = [
+    response?.openai_conversation_id,
+    response?.conversation_id,
+    response?.metadata?.openai_conversation_id,
+    response?.response_metadata?.conversation_id,
+    response?.response_metadata?.openai_conversation_id,
+    response?.response_metadata?.thread_id,
+  ];
+
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -268,7 +309,7 @@ async function saveResponseOutput(req, conversationId, responseId, response, age
  * @param {object} agent
  * @returns {Promise<void>}
  */
-async function saveConversation(req, conversationId, agentId, agent) {
+async function saveConversation(req, conversationId, agentId, agent, openaiConversationId = null) {
   await saveConvo(
     req,
     {
@@ -277,6 +318,7 @@ async function saveConversation(req, conversationId, agentId, agent) {
       agentId,
       title: agent?.name || 'Open Responses Conversation',
       model: agent?.model,
+      ...(openaiConversationId ? { openaiConversationId } : {}),
     },
     { context: 'Responses API - save conversation' },
   );
@@ -350,14 +392,18 @@ const createResponse = async (req, res) => {
 
   // Generate IDs
   const responseId = generateResponseId();
-  const { conversationId, previousMessages } = await resolveConversationContext(request, userId);
+  const { conversationId, previousMessages, previousResponseId, openaiConversationId } =
+    await resolveConversationContext(request, userId);
   const parentMessageId = null;
+  const requestWithResolvedState = {
+    ...request,
+    conversation_id: conversationId,
+    previous_response_id: previousResponseId ?? request.previous_response_id,
+    openai_conversation_id: openaiConversationId ?? request.openai_conversation_id,
+  };
 
   // Create response context
-  const context = createResponseContext(
-    { ...request, conversation_id: conversationId },
-    responseId,
-  );
+  const context = createResponseContext(requestWithResolvedState, responseId);
 
   logger.debug(
     `[Responses API] Request ${responseId} started for agent ${agentId}, stream: ${isStreaming}`,
@@ -386,7 +432,10 @@ const createResponse = async (req, res) => {
     // Initialize the agent first to check for disableStreaming
     const endpointOption = {
       endpoint: agent.provider,
-      model_parameters: buildResponseModelParameters(request, agent.model_parameters),
+      model_parameters: buildResponseModelParameters(
+        requestWithResolvedState,
+        agent.model_parameters,
+      ),
     };
 
     const primaryConfig = await initializeAgent(
@@ -592,7 +641,11 @@ const createResponse = async (req, res) => {
       if (shouldStore) {
         try {
           // Save conversation
-          await saveConversation(req, conversationId, agentId, agent);
+          const resolvedOpenAIConversationId =
+            extractOpenAIConversationId(finalResponse) ??
+            requestWithResolvedState.openai_conversation_id ??
+            null;
+          await saveConversation(req, conversationId, agentId, agent, resolvedOpenAIConversationId);
 
           // Save input messages
           await saveInputMessages(req, conversationId, inputMessages, agentId);
@@ -746,7 +799,11 @@ const createResponse = async (req, res) => {
 
       if (shouldStore) {
         try {
-          await saveConversation(req, conversationId, agentId, agent);
+          const resolvedOpenAIConversationId =
+            extractOpenAIConversationId(response) ??
+            requestWithResolvedState.openai_conversation_id ??
+            null;
+          await saveConversation(req, conversationId, agentId, agent, resolvedOpenAIConversationId);
 
           await saveInputMessages(req, conversationId, inputMessages, agentId);
 
