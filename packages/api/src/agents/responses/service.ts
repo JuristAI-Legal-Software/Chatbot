@@ -159,6 +159,17 @@ export function buildResponseModelParameters(
     modelParameters.previous_response_id = request.previous_response_id;
   }
 
+  if (request.openai_conversation_id) {
+    modelParameters.conversation = request.openai_conversation_id;
+  }
+
+  if (request.prompt_id) {
+    modelParameters.prompt = {
+      id: request.prompt_id,
+      ...(request.prompt_version ? { version: request.prompt_version } : {}),
+    };
+  }
+
   const metadata: Record<string, string> = {
     ...(request.metadata ?? {}),
   };
