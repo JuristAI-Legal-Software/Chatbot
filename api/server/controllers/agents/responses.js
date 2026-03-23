@@ -1,11 +1,17 @@
 const { nanoid } = require('nanoid');
 const { v4: uuidv4 } = require('uuid');
 const { logger } = require('@librechat/data-schemas');
-const { Callback, ToolEndHandler, formatAgentMessages } = require('@librechat/agents');
+const { Callback, ToolEndHandler } = require('@librechat/agents');
+const {
+  AIMessage,
+  ChatMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+} = require('@langchain/core/messages');
 const { EModelEndpoint, ResourceType, PermissionBits } = require('librechat-data-provider');
 const {
   createRun,
-  buildToolSet,
   createSafeUser,
   initializeAgent,
   getBalanceConfig,
@@ -97,6 +103,64 @@ function convertToInternalMessages(input) {
   return convertInputToMessages(input);
 }
 
+function parseToolArgs(argumentsString) {
+  try {
+    return JSON.parse(argumentsString);
+  } catch {
+    return {};
+  }
+}
+
+function formatResponseMessages(messages) {
+  return messages.map((message) => {
+    if (message.role === 'user') {
+      return new HumanMessage({
+        content: message.content,
+        ...(message.name ? { name: message.name } : {}),
+      });
+    }
+
+    if (message.role === 'developer') {
+      return new ChatMessage({
+        role: 'developer',
+        content: message.content,
+        ...(message.name ? { name: message.name } : {}),
+      });
+    }
+
+    if (message.role === 'tool') {
+      return new ToolMessage({
+        content:
+          typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+        tool_call_id: message.tool_call_id ?? '',
+      });
+    }
+
+    if (message.role === 'assistant') {
+      return new AIMessage({
+        content: message.content,
+        ...(Array.isArray(message.tool_calls) && message.tool_calls.length > 0
+          ? {
+              tool_calls: message.tool_calls.map((toolCall) => ({
+                id: toolCall.id,
+                name: toolCall.function.name,
+                args: parseToolArgs(toolCall.function.arguments),
+                type: 'tool_call',
+              })),
+            }
+          : {}),
+        ...(message.response_metadata ? { response_metadata: message.response_metadata } : {}),
+        ...(message.additional_kwargs ? { additional_kwargs: message.additional_kwargs } : {}),
+      });
+    }
+
+    return new SystemMessage({
+      content: message.content,
+      ...(message.name ? { name: message.name } : {}),
+    });
+  });
+}
+
 /**
  * Resolve conversation context from Open Responses request fields.
  * Priority:
@@ -114,10 +178,12 @@ async function resolveConversationContext(request, userId) {
       ? request.conversation_id.trim()
       : null;
   const requestedOpenAIConversationId =
-    typeof request?.openai_conversation_id === 'string' &&
-    request.openai_conversation_id.trim().length > 0
-      ? request.openai_conversation_id.trim()
-      : null;
+    typeof request?.conversation === 'string' && request.conversation.trim().length > 0
+      ? request.conversation.trim()
+      : typeof request?.openai_conversation_id === 'string' &&
+          request.openai_conversation_id.trim().length > 0
+        ? request.openai_conversation_id.trim()
+        : null;
 
   if (requestedConversationId) {
     const existingConversation = await getConvo(userId, requestedConversationId);
@@ -171,9 +237,12 @@ async function resolveConversationContext(request, userId) {
 
 function extractOpenAIConversationId(response) {
   const candidates = [
+    response?.conversation,
     response?.openai_conversation_id,
     response?.conversation_id,
+    response?.metadata?.conversation,
     response?.metadata?.openai_conversation_id,
+    response?.response_metadata?.conversation,
     response?.response_metadata?.conversation_id,
     response?.response_metadata?.openai_conversation_id,
     response?.response_metadata?.thread_id,
@@ -186,6 +255,45 @@ function extractOpenAIConversationId(response) {
   }
 
   return null;
+}
+
+async function resolveItemReferences(input, userId) {
+  if (!Array.isArray(input)) {
+    return input;
+  }
+
+  const resolvedItems = [];
+
+  for (const item of input) {
+    if (item?.type !== 'item_reference') {
+      resolvedItems.push(item);
+      continue;
+    }
+
+    const referencedMessage = await db.getMessage({
+      user: userId,
+      messageId: item.id,
+    });
+
+    if (!referencedMessage) {
+      continue;
+    }
+
+    const content =
+      typeof referencedMessage.text === 'string'
+        ? referencedMessage.text
+        : Array.isArray(referencedMessage.content)
+          ? referencedMessage.content
+          : String(referencedMessage.text ?? '');
+
+    resolvedItems.push({
+      type: 'message',
+      role: referencedMessage.isCreatedByUser ? 'user' : 'assistant',
+      content,
+    });
+  }
+
+  return resolvedItems;
 }
 
 /**
@@ -394,12 +502,16 @@ const createResponse = async (req, res) => {
   const responseId = generateResponseId();
   const { conversationId, previousMessages, previousResponseId, openaiConversationId } =
     await resolveConversationContext(request, userId);
+  const resolvedInput = await resolveItemReferences(request.input, userId);
   const parentMessageId = null;
   const requestWithResolvedState = {
     ...request,
+    input: resolvedInput,
     conversation_id: conversationId,
     previous_response_id: previousResponseId ?? request.previous_response_id,
-    openai_conversation_id: openaiConversationId ?? request.openai_conversation_id,
+    conversation: openaiConversationId ?? request.conversation ?? request.openai_conversation_id,
+    openai_conversation_id:
+      openaiConversationId ?? request.conversation ?? request.openai_conversation_id,
   };
 
   // Create response context
@@ -468,19 +580,13 @@ const createResponse = async (req, res) => {
     const streamingDisabled = !!primaryConfig.model_parameters?.disableStreaming;
     const actuallyStreaming = isStreaming && !streamingDisabled;
     // Convert input to internal messages
-    const inputMessages = convertToInternalMessages(
-      typeof request.input === 'string' ? request.input : request.input,
-    );
+    const inputMessages = convertToInternalMessages(requestWithResolvedState.input);
 
     // Merge previous messages with new input
     const allMessages = [...previousMessages, ...inputMessages];
 
-    const toolSet = buildToolSet(primaryConfig);
-    const { messages: formattedMessages, indexTokenCountMap } = formatAgentMessages(
-      allMessages,
-      {},
-      toolSet,
-    );
+    const formattedMessages = formatResponseMessages(allMessages);
+    const indexTokenCountMap = {};
 
     // Create tracker for streaming or aggregator for non-streaming
     const tracker = actuallyStreaming ? createResponseTracker() : null;
@@ -640,9 +746,11 @@ const createResponse = async (req, res) => {
 
       if (shouldStore) {
         try {
+          const finalResponse = buildResponse(context, tracker, 'completed');
           // Save conversation
           const resolvedOpenAIConversationId =
             extractOpenAIConversationId(finalResponse) ??
+            requestWithResolvedState.conversation ??
             requestWithResolvedState.openai_conversation_id ??
             null;
           await saveConversation(req, conversationId, agentId, agent, resolvedOpenAIConversationId);
@@ -650,8 +758,6 @@ const createResponse = async (req, res) => {
           // Save input messages
           await saveInputMessages(req, conversationId, inputMessages, agentId);
 
-          // Build response for saving (use tracker with buildResponse for streaming)
-          const finalResponse = buildResponse(context, tracker, 'completed');
           await saveResponseOutput(req, conversationId, responseId, finalResponse, agentId);
 
           logger.debug(
@@ -801,6 +907,7 @@ const createResponse = async (req, res) => {
         try {
           const resolvedOpenAIConversationId =
             extractOpenAIConversationId(response) ??
+            requestWithResolvedState.conversation ??
             requestWithResolvedState.openai_conversation_id ??
             null;
           await saveConversation(req, conversationId, agentId, agent, resolvedOpenAIConversationId);

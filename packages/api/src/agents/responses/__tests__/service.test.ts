@@ -22,12 +22,12 @@ describe('convertInputToMessages', () => {
   });
 
   // ── Role mapping ───────────────────────────────────────────────────
-  it('maps developer role to system', () => {
+  it('preserves developer role', () => {
     const input: InputItem[] = [
       { type: 'message', role: 'developer', content: 'You are helpful.' },
     ];
     expect(convertInputToMessages(input)).toEqual([
-      { role: 'system', content: 'You are helpful.' },
+      { role: 'developer', content: 'You are helpful.' },
     ]);
   });
 
@@ -43,7 +43,21 @@ describe('convertInputToMessages', () => {
 
   it('maps assistant role to assistant', () => {
     const input: InputItem[] = [{ type: 'message', role: 'assistant', content: 'Hello!' }];
-    expect(convertInputToMessages(input)).toEqual([{ role: 'assistant', content: 'Hello!' }]);
+    expect(convertInputToMessages(input)).toEqual([
+      {
+        role: 'assistant',
+        content: 'Hello!',
+        response_metadata: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Hello!', annotations: [], logprobs: [] }],
+            },
+          ],
+        },
+      },
+    ]);
   });
 
   it('defaults unknown roles to user', () => {
@@ -63,7 +77,9 @@ describe('convertInputToMessages', () => {
       },
     ];
     const result = convertInputToMessages(input);
-    expect(result).toEqual([{ role: 'user', content: [{ type: 'text', text: 'Hello world' }] }]);
+    expect(result).toEqual([
+      { role: 'user', content: [{ type: 'input_text', text: 'Hello world' }] },
+    ]);
   });
 
   // ── output_text content blocks (the original bug) ──────────────────
@@ -77,7 +93,21 @@ describe('convertInputToMessages', () => {
     ];
     const result = convertInputToMessages(input);
     expect(result).toEqual([
-      { role: 'assistant', content: [{ type: 'text', text: 'I can help!' }] },
+      {
+        role: 'assistant',
+        content: 'I can help!',
+        response_metadata: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [
+                { type: 'output_text', text: 'I can help!', annotations: [], logprobs: [] },
+              ],
+            },
+          ],
+        },
+      },
     ]);
   });
 
@@ -92,7 +122,19 @@ describe('convertInputToMessages', () => {
     ];
     const result = convertInputToMessages(input);
     expect(result).toEqual([
-      { role: 'assistant', content: [{ type: 'text', text: 'I cannot do that.' }] },
+      {
+        role: 'assistant',
+        content: 'I cannot do that.',
+        response_metadata: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'refusal', refusal: 'I cannot do that.' }],
+            },
+          ],
+        },
+      },
     ]);
   });
 
@@ -113,8 +155,10 @@ describe('convertInputToMessages', () => {
         role: 'user',
         content: [
           {
-            type: 'image_url',
-            image_url: { url: 'https://example.com/img.png', detail: 'high' },
+            type: 'input_image',
+            image_url: 'https://example.com/img.png',
+            file_id: undefined,
+            detail: 'high',
           },
         ],
       },
@@ -122,7 +166,7 @@ describe('convertInputToMessages', () => {
   });
 
   // ── input_file content blocks ──────────────────────────────────────
-  it('converts input_file blocks to text placeholders', () => {
+  it('preserves input_file blocks', () => {
     const input: InputItem[] = [
       {
         type: 'message',
@@ -132,11 +176,16 @@ describe('convertInputToMessages', () => {
     ];
     const result = convertInputToMessages(input);
     expect(result).toEqual([
-      { role: 'user', content: [{ type: 'text', text: '[File: report.pdf]' }] },
+      {
+        role: 'user',
+        content: [
+          { type: 'input_file', file_id: 'f_123', file_data: undefined, filename: 'report.pdf' },
+        ],
+      },
     ]);
   });
 
-  it('uses "unknown" for input_file without filename', () => {
+  it('preserves input_file without filename', () => {
     const input: InputItem[] = [
       {
         type: 'message',
@@ -146,7 +195,12 @@ describe('convertInputToMessages', () => {
     ];
     const result = convertInputToMessages(input);
     expect(result).toEqual([
-      { role: 'user', content: [{ type: 'text', text: '[File: unknown]' }] },
+      {
+        role: 'user',
+        content: [
+          { type: 'input_file', file_id: 'f_123', file_data: undefined, filename: undefined },
+        ],
+      },
     ]);
   });
 
@@ -160,7 +214,7 @@ describe('convertInputToMessages', () => {
       },
     ] as unknown as InputItem[];
     const result = convertInputToMessages(input);
-    expect(result).toEqual([{ role: 'user', content: [{ type: 'text', text: 'valid' }] }]);
+    expect(result).toEqual([{ role: 'user', content: [{ type: 'input_text', text: 'valid' }] }]);
   });
 
   // ── Missing text field defaults to empty string ────────────────────
@@ -173,7 +227,7 @@ describe('convertInputToMessages', () => {
       },
     ] as unknown as InputItem[];
     const result = convertInputToMessages(input);
-    expect(result).toEqual([{ role: 'user', content: [{ type: 'text', text: '' }] }]);
+    expect(result).toEqual([{ role: 'user', content: [{ type: 'input_text', text: '' }] }]);
   });
 
   it('defaults to empty string when text field is missing on output_text', () => {
@@ -185,7 +239,21 @@ describe('convertInputToMessages', () => {
       },
     ] as unknown as InputItem[];
     const result = convertInputToMessages(input);
-    expect(result).toEqual([{ role: 'assistant', content: [{ type: 'text', text: '' }] }]);
+    expect(result).toEqual([
+      {
+        role: 'assistant',
+        content: '',
+        response_metadata: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: '', annotations: [], logprobs: [] }],
+            },
+          ],
+        },
+      },
+    ]);
   });
 
   it('defaults to empty string when refusal field is missing on refusal block', () => {
@@ -197,7 +265,21 @@ describe('convertInputToMessages', () => {
       },
     ] as unknown as InputItem[];
     const result = convertInputToMessages(input);
-    expect(result).toEqual([{ role: 'assistant', content: [{ type: 'text', text: '' }] }]);
+    expect(result).toEqual([
+      {
+        role: 'assistant',
+        content: '',
+        response_metadata: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'refusal', refusal: '' }],
+            },
+          ],
+        },
+      },
+    ]);
   });
 
   // ── Unknown block types are filtered out ───────────────────────────
@@ -213,7 +295,7 @@ describe('convertInputToMessages', () => {
       },
     ] as unknown as InputItem[];
     const result = convertInputToMessages(input);
-    expect(result).toEqual([{ role: 'user', content: [{ type: 'text', text: 'keep me' }] }]);
+    expect(result).toEqual([{ role: 'user', content: [{ type: 'input_text', text: 'keep me' }] }]);
   });
 
   // ── Mixed valid/invalid content in same array ──────────────────────
@@ -234,10 +316,19 @@ describe('convertInputToMessages', () => {
     expect(result).toEqual([
       {
         role: 'assistant',
-        content: [
-          { type: 'text', text: 'Hello' },
-          { type: 'text', text: 'No can do' },
-        ],
+        content: 'HelloNo can do',
+        response_metadata: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [
+                { type: 'output_text', text: 'Hello', annotations: [], logprobs: [] },
+                { type: 'refusal', refusal: 'No can do' },
+              ],
+            },
+          ],
+        },
       },
     ]);
   });
@@ -331,10 +422,25 @@ describe('convertInputToMessages', () => {
     ];
     const result = convertInputToMessages(input);
     expect(result).toEqual([
-      { role: 'system', content: [{ type: 'text', text: 'You are a helpful assistant.' }] },
-      { role: 'user', content: [{ type: 'text', text: 'What is 2+2?' }] },
-      { role: 'assistant', content: [{ type: 'text', text: '2+2 is 4.' }] },
-      { role: 'user', content: [{ type: 'text', text: 'And 3+3?' }] },
+      {
+        role: 'developer',
+        content: [{ type: 'input_text', text: 'You are a helpful assistant.' }],
+      },
+      { role: 'user', content: [{ type: 'input_text', text: 'What is 2+2?' }] },
+      {
+        role: 'assistant',
+        content: '2+2 is 4.',
+        response_metadata: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: '2+2 is 4.', annotations: [], logprobs: [] }],
+            },
+          ],
+        },
+      },
+      { role: 'user', content: [{ type: 'input_text', text: 'And 3+3?' }] },
     ]);
   });
 });
@@ -397,9 +503,8 @@ describe('buildResponseModelParameters', () => {
       model: 'agent_123',
       input: 'Hello',
       conversation_id: 'conv_libre_1',
-      openai_conversation_id: 'conv_openai_1',
-      prompt_id: 'pmpt_1',
-      prompt_version: '2',
+      conversation: 'conv_openai_1',
+      prompt: { id: 'pmpt_1', version: '2' },
     });
 
     expect(modelParameters).toEqual(
@@ -449,6 +554,20 @@ describe('validateResponseRequest', () => {
       error: 'openai_conversation_id must be a non-empty string',
     });
   });
+
+  it('rejects conversation with previous_response_id', () => {
+    expect(
+      validateResponseRequest({
+        model: 'agent_123',
+        input: 'Hello',
+        conversation: 'conv_openai_1',
+        previous_response_id: 'resp_prev_1',
+      }),
+    ).toEqual({
+      valid: false,
+      error: 'conversation cannot be used together with previous_response_id',
+    });
+  });
 });
 
 describe('responses context and output defaults', () => {
@@ -469,9 +588,8 @@ describe('responses context and output defaults', () => {
       model: 'agent_123',
       input: 'Hello',
       conversation_id: 'conv_libre_1',
-      openai_conversation_id: 'conv_openai_1',
-      prompt_id: 'pmpt_1',
-      prompt_version: '2',
+      conversation: 'conv_openai_1',
+      prompt: { id: 'pmpt_1', version: '2' },
     });
     const response = buildAggregatedResponse(context, createResponseAggregator());
 
@@ -483,7 +601,9 @@ describe('responses context and output defaults', () => {
       }),
     );
     expect(response.conversation_id).toBe('conv_libre_1');
+    expect(response.conversation).toBe('conv_openai_1');
     expect(response.openai_conversation_id).toBe('conv_openai_1');
+    expect(response.prompt).toEqual({ id: 'pmpt_1', version: '2' });
     expect(response.prompt_id).toBe('pmpt_1');
     expect(response.prompt_version).toBe('2');
   });
