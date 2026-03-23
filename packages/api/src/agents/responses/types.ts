@@ -173,6 +173,8 @@ export interface UserMessageItemParam {
 export interface AssistantMessageItemParam {
   type: 'message';
   role: 'assistant';
+  id?: string;
+  phase?: 'commentary' | 'final_answer';
   content: string | ModelContent[];
 }
 
@@ -338,13 +340,22 @@ export interface ResponseRequest {
   /** LibreChat conversation ID (selected by upstream orchestrator) */
   conversation_id?: string;
 
-  /** External OpenAI-style conversation ID */
+  /** External OpenAI conversation ID */
+  conversation?: string;
+
+  /** @deprecated Backwards-compatible alias for `conversation` */
   openai_conversation_id?: string;
 
-  /** Prompt identifier resolved by upstream orchestrator */
+  /** OpenAI prompt selection */
+  prompt?: {
+    id: string;
+    version?: string;
+  };
+
+  /** @deprecated Backwards-compatible alias for `prompt.id` */
   prompt_id?: string;
 
-  /** Prompt version resolved by upstream orchestrator */
+  /** @deprecated Backwards-compatible alias for `prompt.version` */
   prompt_version?: string;
 
   /** Previous response ID for conversation continuation */
@@ -556,13 +567,22 @@ export interface Response {
   /** LibreChat conversation ID used for this response */
   conversation_id?: string;
 
-  /** External OpenAI-style conversation ID associated with this response */
+  /** External OpenAI conversation ID associated with this response */
+  conversation?: string | null;
+
+  /** @deprecated Backwards-compatible alias for `conversation` */
   openai_conversation_id?: string;
 
-  /** Prompt identifier used by upstream orchestration */
+  /** OpenAI prompt used by upstream orchestration */
+  prompt?: {
+    id: string;
+    version?: string;
+  } | null;
+
+  /** @deprecated Backwards-compatible alias for `prompt.id` */
   prompt_id?: string;
 
-  /** Prompt version used by upstream orchestration */
+  /** @deprecated Backwards-compatible alias for `prompt.version` */
   prompt_version?: string;
 }
 

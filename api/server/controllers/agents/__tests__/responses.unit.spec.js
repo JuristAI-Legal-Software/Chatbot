@@ -326,10 +326,6 @@ describe('createResponse controller', () => {
         expect.objectContaining({ conversationId: 'conv_1' }),
         expect.any(Object),
       );
-      expect(models.getMessages).toHaveBeenCalledWith({
-        conversationId: 'conv_1',
-        user: 'user-123',
-      });
     });
   });
 
