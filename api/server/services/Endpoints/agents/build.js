@@ -13,10 +13,19 @@ const readTextValue = (value) => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const readPromptValue = (value, field) => {
+  if (value == null || typeof value !== 'object') {
+    return undefined;
+  }
+
+  return readTextValue(value[field]);
+};
+
 const buildOptions = (req, endpoint, parsedBody, endpointType) => {
   const {
     spec,
     iconURL,
+    model_parameters: nestedModelParameters,
     agent_id,
     threadId,
     thread_id,
@@ -26,20 +35,39 @@ const buildOptions = (req, endpoint, parsedBody, endpointType) => {
     openai_conversation_id,
     prompt_id,
     prompt_version,
-    ...model_parameters
+    ...flatModelParameters
   } = parsedBody;
+  const mergedModelParameters =
+    nestedModelParameters != null && typeof nestedModelParameters === 'object'
+      ? { ...nestedModelParameters, ...flatModelParameters }
+      : { ...flatModelParameters };
+  const promptConfig =
+    mergedModelParameters.prompt != null && typeof mergedModelParameters.prompt === 'object'
+      ? mergedModelParameters.prompt
+      : undefined;
   const resolvedAgentId = isAgentsEndpoint(endpoint)
     ? agent_id || DEFAULT_AGENT_ID
     : Constants.EPHEMERAL_AGENT_ID;
   const normalizedModelParameters = removeNullishValues({
-    ...model_parameters,
+    ...mergedModelParameters,
     openai_conversation_id:
       readTextValue(openai_conversation_id) ??
       readTextValue(openaiConversationId) ??
       readTextValue(threadId) ??
-      readTextValue(thread_id),
-    prompt_id: readTextValue(prompt_id) ?? readTextValue(promptId),
-    prompt_version: readTextValue(prompt_version) ?? readTextValue(promptVersion),
+      readTextValue(thread_id) ??
+      readTextValue(mergedModelParameters.openai_conversation_id) ??
+      readTextValue(mergedModelParameters.openaiConversationId) ??
+      readTextValue(mergedModelParameters.conversation),
+    prompt_id:
+      readTextValue(prompt_id) ??
+      readTextValue(promptId) ??
+      readTextValue(mergedModelParameters.prompt_id) ??
+      readPromptValue(promptConfig, 'id'),
+    prompt_version:
+      readTextValue(prompt_version) ??
+      readTextValue(promptVersion) ??
+      readTextValue(mergedModelParameters.prompt_version) ??
+      readPromptValue(promptConfig, 'version'),
   });
 
   const agentPromise = loadAgent({

@@ -21,6 +21,7 @@ const buildFunction = {
 
 async function buildEndpointOption(req, res, next) {
   const { endpoint, endpointType } = req.body;
+  const requestBody = req.body ?? {};
 
   let endpointsConfig;
   try {
@@ -36,7 +37,7 @@ async function buildEndpointOption(req, res, next) {
     parsedBody = parseCompactConvo({
       endpoint,
       endpointType,
-      conversation: req.body,
+      conversation: requestBody,
       defaultParamsEndpoint,
     });
   } catch (error) {
@@ -45,6 +46,28 @@ async function buildEndpointOption(req, res, next) {
       'Error parsing compact conversation': { endpoint, endpointType, conversation: req.body },
     });
     return handleError(res, { text: 'Error parsing conversation' });
+  }
+
+  if (isAgentsEndpoint(endpoint)) {
+    const passthroughKeys = [
+      'model_parameters',
+      'modelOptions',
+      'threadId',
+      'thread_id',
+      'openaiConversationId',
+      'openai_conversation_id',
+      'promptId',
+      'prompt_id',
+      'promptVersion',
+      'prompt_version',
+      'additionalModelRequestFields',
+    ];
+
+    for (const key of passthroughKeys) {
+      if (requestBody[key] !== undefined) {
+        parsedBody[key] = requestBody[key];
+      }
+    }
   }
 
   const appConfig = req.config;

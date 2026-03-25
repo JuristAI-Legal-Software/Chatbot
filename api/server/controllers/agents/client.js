@@ -141,22 +141,47 @@ class AgentClient extends BaseClient {
       const trimmed = value.trim();
       return trimmed.length > 0 ? trimmed : undefined;
     };
+    const readPromptValue = (value, field) => {
+      if (value == null || typeof value !== 'object') {
+        return undefined;
+      }
+
+      return readTextValue(value[field]);
+    };
 
     const reqBody = this.options?.req?.body ?? {};
     const modelParameters = this.options?.agent?.model_parameters ?? {};
+    const requestModelParameters =
+      reqBody.model_parameters != null && typeof reqBody.model_parameters === 'object'
+        ? reqBody.model_parameters
+        : {};
+    const promptConfig =
+      modelParameters.prompt != null && typeof modelParameters.prompt === 'object'
+        ? modelParameters.prompt
+        : requestModelParameters.prompt != null && typeof requestModelParameters.prompt === 'object'
+          ? requestModelParameters.prompt
+          : undefined;
     const openaiConversationId =
       readTextValue(reqBody.openai_conversation_id) ??
       readTextValue(reqBody.openaiConversationId) ??
       readTextValue(reqBody.threadId) ??
-      readTextValue(modelParameters.openai_conversation_id);
+      readTextValue(modelParameters.openai_conversation_id) ??
+      readTextValue(requestModelParameters.openai_conversation_id) ??
+      readTextValue(requestModelParameters.openaiConversationId) ??
+      readTextValue(modelParameters.conversation) ??
+      readTextValue(requestModelParameters.conversation);
     const promptId =
       readTextValue(reqBody.prompt_id) ??
       readTextValue(reqBody.promptId) ??
-      readTextValue(modelParameters.prompt_id);
+      readTextValue(modelParameters.prompt_id) ??
+      readTextValue(requestModelParameters.prompt_id) ??
+      readPromptValue(promptConfig, 'id');
     const promptVersion =
       readTextValue(reqBody.prompt_version) ??
       readTextValue(reqBody.promptVersion) ??
-      readTextValue(modelParameters.prompt_version);
+      readTextValue(modelParameters.prompt_version) ??
+      readTextValue(requestModelParameters.prompt_version) ??
+      readPromptValue(promptConfig, 'version');
 
     return removeNullishValues(
       Object.assign(
