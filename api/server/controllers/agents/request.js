@@ -29,6 +29,14 @@ const readTextValue = (value) => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const readPromptValue = (value, field) => {
+  if (value == null || typeof value !== 'object') {
+    return null;
+  }
+
+  return readTextValue(value[field]);
+};
+
 const extractOpenAIConversationId = (response) =>
   readTextValue(response?.response_metadata?.conversation_id) ??
   readTextValue(response?.response_metadata?.openai_conversation_id) ??
@@ -72,15 +80,33 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
   } = req.body;
 
   const userId = req.user.id;
+  const requestModelParameters =
+    req.body?.model_parameters != null && typeof req.body.model_parameters === 'object'
+      ? req.body.model_parameters
+      : {};
+  const promptConfig =
+    requestModelParameters.prompt != null && typeof requestModelParameters.prompt === 'object'
+      ? requestModelParameters.prompt
+      : null;
   const requestedConversationId = readTextValue(reqConversationId);
   const requestedThreadId =
     readTextValue(req.body.threadId) ??
     readTextValue(req.body.thread_id) ??
     readTextValue(req.body.openai_conversation_id) ??
-    readTextValue(req.body.openaiConversationId);
-  const promptId = readTextValue(req.body.promptId) ?? readTextValue(req.body.prompt_id);
+    readTextValue(req.body.openaiConversationId) ??
+    readTextValue(requestModelParameters.openai_conversation_id) ??
+    readTextValue(requestModelParameters.openaiConversationId) ??
+    readTextValue(requestModelParameters.conversation);
+  const promptId =
+    readTextValue(req.body.promptId) ??
+    readTextValue(req.body.prompt_id) ??
+    readTextValue(requestModelParameters.prompt_id) ??
+    readPromptValue(promptConfig, 'id');
   const promptVersion =
-    readTextValue(req.body.promptVersion) ?? readTextValue(req.body.prompt_version);
+    readTextValue(req.body.promptVersion) ??
+    readTextValue(req.body.prompt_version) ??
+    readTextValue(requestModelParameters.prompt_version) ??
+    readPromptValue(promptConfig, 'version');
   let openaiConversationId = requestedThreadId;
   let resolvedConversationId = requestedConversationId;
   let existingConvo = null;

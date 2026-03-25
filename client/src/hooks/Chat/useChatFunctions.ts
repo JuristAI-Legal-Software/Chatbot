@@ -152,7 +152,7 @@ export default function useChatFunctions({
     if (conversationId == Constants.NEW_CONVO) {
       parentMessageId = Constants.NO_PARENT;
       currentMessages = [];
-      conversationId = null;
+      conversationId = overrideConvoId ?? v4();
       navigate('/c/new', { state: { focusChat: true } });
     }
 

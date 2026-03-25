@@ -15,6 +15,7 @@ const {
   ErrorTypes,
   FileSources,
   ContentTypes,
+  parseTextParts,
   excludedKeys,
   EModelEndpoint,
   isParamEndpoint,
@@ -742,7 +743,7 @@ class BaseClient {
       (this.clientName === EModelEndpoint.agents ||
         isParamEndpoint(this.options.endpoint, this.options.endpointType))
     ) {
-      responseMessage.text = '';
+      responseMessage.text = parseTextParts(completion);
 
       if (!opts.editedContent || this.currentMessages.length === 0) {
         responseMessage.content = completion;
