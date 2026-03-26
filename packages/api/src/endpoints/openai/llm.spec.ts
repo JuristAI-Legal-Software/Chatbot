@@ -707,6 +707,52 @@ describe('getOpenAILLMConfig', () => {
       expect(result.llmConfig.modelKwargs).toHaveProperty('text', { verbosity: Verbosity.low });
       expect(result.llmConfig.modelKwargs).not.toHaveProperty('verbosity');
     });
+
+    it('should move Responses API-only fields into modelKwargs', () => {
+      const result = getOpenAILLMConfig({
+        apiKey: 'test-api-key',
+        streaming: true,
+        modelOptions: {
+          model: 'gpt-4.1',
+          useResponsesApi: true,
+          openai_conversation_id: 'conv_openai_1',
+          prompt_id: 'pmpt_1',
+          prompt_version: '2',
+          instructions: 'Use a civil-law lens.',
+          previous_response_id: 'resp_prev_1',
+          truncation: 'auto',
+          include: ['reasoning.encrypted_content'],
+          metadata: {
+            openai_conversation_id: 'conv_openai_1',
+            prompt_id: 'pmpt_1',
+          },
+        },
+      });
+
+      expect(result.llmConfig).toMatchObject({
+        model: 'gpt-4.1',
+        useResponsesApi: true,
+      });
+      expect(result.llmConfig).not.toHaveProperty('conversation');
+      expect(result.llmConfig).not.toHaveProperty('prompt');
+      expect(result.llmConfig).not.toHaveProperty('instructions');
+      expect(result.llmConfig).not.toHaveProperty('previous_response_id');
+      expect(result.llmConfig.modelKwargs).toMatchObject({
+        conversation: 'conv_openai_1',
+        prompt: {
+          id: 'pmpt_1',
+          version: '2',
+        },
+        instructions: 'Use a civil-law lens.',
+        previous_response_id: 'resp_prev_1',
+        truncation: 'auto',
+        include: ['reasoning.encrypted_content'],
+        metadata: {
+          openai_conversation_id: 'conv_openai_1',
+          prompt_id: 'pmpt_1',
+        },
+      });
+    });
   });
 });
 
