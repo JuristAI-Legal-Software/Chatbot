@@ -54,11 +54,11 @@ export const messages = (params: q.MessagesListParams) => {
   const { conversationId, messageId, ...rest } = params;
 
   if (conversationId && messageId) {
-    return `${messagesRoot}/${conversationId}/${messageId}`;
+    return `${messagesRoot}/${encodeURIComponent(conversationId)}/${encodeURIComponent(messageId)}`;
   }
 
   if (conversationId) {
-    return `${messagesRoot}/${conversationId}`;
+    return `${messagesRoot}/${encodeURIComponent(conversationId)}`;
   }
 
   return `${messagesRoot}${buildQuery(rest)}`;
@@ -107,7 +107,7 @@ export const conversations = (params: q.ConversationListParams) => {
   return `${conversationsRoot}${buildQuery(params)}`;
 };
 
-export const conversationById = (id: string) => `${conversationsRoot}/${id}`;
+export const conversationById = (id: string) => `${conversationsRoot}/${encodeURIComponent(id)}`;
 
 export const genTitle = (conversationId: string) =>
   `${conversationsRoot}/gen_title/${encodeURIComponent(conversationId)}`;

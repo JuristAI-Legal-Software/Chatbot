@@ -12,6 +12,7 @@ const {
 const { saveMessage } = require('~/models');
 const {
   getLatestConvoByOpenAIConversationId,
+  extractThreadIdFromConversationId,
   isLibreChatConversationId,
   isOpenAIConversationId,
 } = require('~/models/Conversation');
@@ -48,8 +49,10 @@ const findJobByThreadId = async (userId, threadId) => {
 };
 
 const resolveConversationReference = async (userId, rawConversationId, rawThreadId) => {
-  const threadId = readTextValue(rawThreadId);
   const conversationId = readTextValue(rawConversationId);
+  const threadId =
+    readTextValue(rawThreadId) ??
+    (conversationId != null ? extractThreadIdFromConversationId(conversationId) : null);
 
   if (threadId && isOpenAIConversationId(threadId)) {
     const activeJob = await findJobByThreadId(userId, threadId);
@@ -76,7 +79,7 @@ const resolveConversationReference = async (userId, rawConversationId, rawThread
   return {
     conversationId:
       conversationId && isLibreChatConversationId(conversationId) ? conversationId : null,
-    threadId: null,
+    threadId,
     activeJob: null,
   };
 };

@@ -18,7 +18,7 @@ export const streamStatusQueryKey = (conversationId: string) => ['streamStatus',
 
 export const fetchStreamStatus = async (conversationId: string): Promise<StreamStatusResponse> => {
   return request.get<StreamStatusResponse>(
-    `${apiBaseUrl()}/api/agents/chat/status/${conversationId}`,
+    `${apiBaseUrl()}/api/agents/chat/status/${encodeURIComponent(conversationId)}`,
   );
 };
 

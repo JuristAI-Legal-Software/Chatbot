@@ -16,6 +16,24 @@ const isLibreChatConversationId = (value) =>
 const isOpenAIConversationId = (value) =>
   typeof value === 'string' && OPENAI_CONVERSATION_PATTERN.test(value.trim());
 
+const extractThreadIdFromConversationId = (conversationId) => {
+  if (!STRUCTURED_CONVERSATION_ID_PATTERN.test(conversationId ?? '')) {
+    return null;
+  }
+
+  const parts = conversationId.split('|');
+  for (const part of parts) {
+    if (!part.startsWith('threadId:')) {
+      continue;
+    }
+
+    const threadId = part.slice('threadId:'.length).trim();
+    return isOpenAIConversationId(threadId) ? threadId : null;
+  }
+
+  return null;
+};
+
 /**
  * Searches for a conversation by conversationId and returns a lean document with only conversationId and user.
  * @param {string} conversationId - The conversation's ID.
@@ -57,6 +75,39 @@ const getLatestConvoByOpenAIConversationId = async (user, openaiConversationId) 
     );
     throw new Error('Error getting conversation by OpenAI conversation ID');
   }
+};
+
+const resolveConvoReference = async (user, conversationId) => {
+  const normalizedConversationId = typeof conversationId === 'string' ? conversationId.trim() : '';
+  if (!normalizedConversationId) {
+    return null;
+  }
+
+  const exactConversation = await getConvo(user, normalizedConversationId);
+  if (exactConversation) {
+    const threadId =
+      typeof exactConversation.openaiConversationId === 'string'
+        ? exactConversation.openaiConversationId.trim()
+        : extractThreadIdFromConversationId(exactConversation.conversationId);
+
+    if (!isOpenAIConversationId(threadId)) {
+      return exactConversation;
+    }
+
+    const latestConversation = await getLatestConvoByOpenAIConversationId(user, threadId);
+    return latestConversation ?? exactConversation;
+  }
+
+  if (isOpenAIConversationId(normalizedConversationId)) {
+    return getLatestConvoByOpenAIConversationId(user, normalizedConversationId);
+  }
+
+  const embeddedThreadId = extractThreadIdFromConversationId(normalizedConversationId);
+  if (!embeddedThreadId) {
+    return null;
+  }
+
+  return getLatestConvoByOpenAIConversationId(user, embeddedThreadId);
 };
 
 const deleteNullOrEmptyConversations = async () => {
@@ -342,6 +393,8 @@ module.exports = {
   },
   getConvo,
   getLatestConvoByOpenAIConversationId,
+  extractThreadIdFromConversationId,
+  resolveConvoReference,
   isLibreChatConversationId,
   isOpenAIConversationId,
   /* chore: this method is not properly error handled */
