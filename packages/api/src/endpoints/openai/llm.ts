@@ -68,6 +68,17 @@ export const knownOpenAIParams = new Set([
   'disableStreaming',
 ]);
 
+const responsesModelKwargKeys = [
+  'conversation',
+  'prompt',
+  'instructions',
+  'previous_response_id',
+  'include',
+  'text',
+  'truncation',
+  'metadata',
+] as const;
+
 function hasReasoningParams({
   reasoning_effort,
   reasoning_summary,
@@ -405,6 +416,18 @@ export function getOpenAILLMConfig({
 
     delete responsesConfig.prompt_id;
     delete responsesConfig.prompt_version;
+
+    for (const key of responsesModelKwargKeys) {
+      if (responsesConfig[key] === undefined) {
+        continue;
+      }
+
+      modelKwargs[key] = responsesConfig[key];
+      delete responsesConfig[key];
+      hasModelKwargs = true;
+    }
+
+    llmConfig.modelKwargs = modelKwargs;
   }
 
   if (!azure) {
