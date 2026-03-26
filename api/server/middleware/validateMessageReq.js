@@ -1,4 +1,4 @@
-const { getConvo } = require('~/models');
+const { resolveConvoReference } = require('~/models/Conversation');
 
 // Middleware to validate conversationId and user relationship
 const validateMessageReq = async (req, res, next) => {
@@ -12,7 +12,7 @@ const validateMessageReq = async (req, res, next) => {
     conversationId = req.body.message.conversationId;
   }
 
-  const conversation = await getConvo(req.user.id, conversationId);
+  const conversation = await resolveConvoReference(req.user.id, conversationId);
 
   if (!conversation) {
     return res.status(404).json({ error: 'Conversation not found' });
@@ -20,6 +20,14 @@ const validateMessageReq = async (req, res, next) => {
 
   if (conversation.user !== req.user.id) {
     return res.status(403).json({ error: 'User not authorized for this conversation' });
+  }
+
+  req.params.conversationId = conversation.conversationId;
+  if (req.body?.conversationId) {
+    req.body.conversationId = conversation.conversationId;
+  }
+  if (req.body?.message?.conversationId) {
+    req.body.message.conversationId = conversation.conversationId;
   }
 
   next();

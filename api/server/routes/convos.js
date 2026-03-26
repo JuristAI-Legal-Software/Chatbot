@@ -10,7 +10,13 @@ const {
   createForkLimiters,
   configMiddleware,
 } = require('~/server/middleware');
-const { getConvosByCursor, deleteConvos, getConvo, saveConvo } = require('~/models/Conversation');
+const {
+  getConvosByCursor,
+  deleteConvos,
+  getConvo,
+  saveConvo,
+  resolveConvoReference,
+} = require('~/models/Conversation');
 const { forkConversation, duplicateConversation } = require('~/server/utils/import/fork');
 const { storage, importFileFilter } = require('~/server/routes/files/multer');
 const { deleteAllSharedLinks, deleteConvoSharedLink } = require('~/models');
@@ -59,7 +65,7 @@ router.get('/', async (req, res) => {
 
 router.get('/:conversationId', async (req, res) => {
   const { conversationId } = req.params;
-  const convo = await getConvo(req.user.id, conversationId);
+  const convo = await resolveConvoReference(req.user.id, conversationId);
 
   if (convo) {
     res.status(200).json(convo);
