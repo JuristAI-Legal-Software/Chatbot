@@ -5,14 +5,7 @@ import { FileSources } from 'librechat-data-provider';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import ProgressCircle from './ProgressCircle';
 import SourceIcon from './SourceIcon';
-import { cn } from '~/utils';
-
-type styleProps = {
-  backgroundImage?: string;
-  backgroundSize?: string;
-  backgroundPosition?: string;
-  backgroundRepeat?: string;
-};
+import { cn, isSafeImageSrc } from '~/utils';
 
 const ImagePreview = ({
   imageBase64,
@@ -82,22 +75,9 @@ const ImagePreview = ({
     return () => document.removeEventListener('keydown', onKey);
   }, [isModalOpen, handleOpenChange]);
 
-  const baseStyle: styleProps = {
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
-    backgroundRepeat: 'no-repeat',
-  };
-
   const imageUrl = imageBase64 ?? url ?? '';
 
-  const style: styleProps = imageUrl
-    ? {
-        ...baseStyle,
-        backgroundImage: `url(${imageUrl})`,
-      }
-    : baseStyle;
-
-  if (typeof style.backgroundImage !== 'string' || style.backgroundImage.length === 0) {
+  if (!isSafeImageSrc(imageUrl)) {
     return null;
   }
 
@@ -118,7 +98,6 @@ const ImagePreview = ({
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface-primary',
           className,
         )}
-        style={style}
         aria-label={`View ${alt} in full size`}
         aria-haspopup="dialog"
         onClick={(e) => {
@@ -129,6 +108,13 @@ const ImagePreview = ({
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
+        <img
+          src={imageUrl}
+          alt=""
+          className="size-full object-cover"
+          draggable={false}
+          aria-hidden="true"
+        />
         {progress < 1 ? (
           <ProgressCircle
             circumference={circumference}

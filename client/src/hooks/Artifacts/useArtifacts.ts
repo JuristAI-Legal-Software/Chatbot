@@ -6,6 +6,14 @@ import { isCodeOnlyArtifact } from '~/utils/artifacts';
 import { logger } from '~/utils';
 import store from '~/store';
 
+function hasEnclosedArtifactBlock(text: string): boolean {
+  const start = text.indexOf(':::artifact');
+  if (start === -1) {
+    return false;
+  }
+  return text.indexOf(':::', start + ':::artifact'.length) !== -1;
+}
+
 export default function useArtifacts() {
   const [activeTab, setActiveTab] = useState('preview');
   const { isSubmitting, latestMessageId, latestMessageText, conversationId } =
@@ -136,12 +144,7 @@ export default function useArtifacts() {
       return;
     }
 
-    const hasEnclosedArtifact =
-      /:::artifact(?:\{[^}]*\})?(?:\s|\n)*(?:```[\s\S]*?```(?:\s|\n)*)?:::/m.test(
-        latestMessageText.trim(),
-      );
-
-    if (hasEnclosedArtifact) {
+    if (hasEnclosedArtifactBlock(latestMessageText.trim())) {
       logger.log('artifacts', 'Enclosed artifact detected during generation, switching to preview');
       setActiveTab('preview');
       hasEnclosedArtifactRef.current = true;

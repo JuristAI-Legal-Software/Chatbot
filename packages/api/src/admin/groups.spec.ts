@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import { PrincipalType } from 'librechat-data-provider';
+import { logger } from '@librechat/data-schemas';
 import type { IGroup, IUser } from '@librechat/data-schemas';
 import type { Response } from 'express';
 import type { ServerRequest } from '~/types/http';
@@ -45,7 +46,7 @@ describe('createAdminGroupsHandlers', () => {
   function createReqRes(
     overrides: {
       params?: Record<string, string>;
-      query?: Record<string, string>;
+      query?: Record<string, unknown>;
       body?: Record<string, unknown>;
     } = {},
   ) {
@@ -163,6 +164,20 @@ describe('createAdminGroupsHandlers', () => {
       expect(deps.listGroups).not.toHaveBeenCalled();
     });
 
+    it('returns 400 when search is provided more than once', async () => {
+      const deps = createDeps();
+      const handlers = createAdminGroupsHandlers(deps);
+      const { req, res, status, json } = createReqRes({
+        query: { search: ['eng', 'finance'] },
+      });
+
+      await handlers.listGroups(req, res);
+
+      expect(status).toHaveBeenCalledWith(400);
+      expect(json).toHaveBeenCalledWith({ error: 'search must be a single string' });
+      expect(deps.listGroups).not.toHaveBeenCalled();
+    });
+
     it('returns 500 when countGroups fails', async () => {
       const deps = createDeps({
         countGroups: jest.fn().mockRejectedValue(new Error('count failed')),
@@ -197,6 +212,8 @@ describe('createAdminGroupsHandlers', () => {
 
       await handlers.getGroup(req, res);
 
+      // eslint-disable-next-line no-console
+      console.log('logger error calls', (logger.error as jest.Mock).mock.calls);
       expect(status).toHaveBeenCalledWith(200);
       expect(json).toHaveBeenCalledWith({ group });
     });

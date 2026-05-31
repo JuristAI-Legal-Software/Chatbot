@@ -170,6 +170,11 @@ describe('Image', () => {
       expect(img).toHaveAttribute('src', 'data:image/png;base64,abc');
     });
 
+    it('does not render unsafe data SVG images', () => {
+      render(<Image {...defaultProps} imagePath="data:image/svg+xml;base64,abc" />);
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    });
+
     it('passes non-/images/ paths through unchanged', () => {
       render(<Image {...defaultProps} imagePath="/other/path.png" />);
       const img = screen.getByRole('img');

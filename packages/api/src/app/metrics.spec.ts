@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 import { EventEmitter } from 'events';
 import express from 'express';
+import request from 'supertest';
 import type { Request, Response } from 'express';
 import {
   createMetrics,
@@ -12,8 +13,6 @@ import {
   recordOpenIDUserLookup,
   setGenerationJobsInFlight,
 } from './metrics';
-
-const request = require('supertest') as (app: express.Express) => any;
 
 describe('normalizePath', () => {
   it.each([

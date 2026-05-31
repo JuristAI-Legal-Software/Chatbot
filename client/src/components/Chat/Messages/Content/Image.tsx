@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Skeleton } from '@librechat/client';
 import { apiBaseUrl } from 'librechat-data-provider';
 import DialogImage from './DialogImage';
-import { cn } from '~/utils';
+import { cn, isSafeImageSrc } from '~/utils';
 
 /** Max display height for chat images (Tailwind JIT class) */
 export const IMAGE_MAX_H = 'max-h-[45vh]' as const;
@@ -62,10 +62,14 @@ const Image = ({
     const baseURL = apiBaseUrl();
     return `${baseURL}${imagePath}`;
   }, [imagePath]);
+  const safeImageUrl = isSafeImageSrc(absoluteImageUrl) ? absoluteImageUrl : '';
 
   const downloadImage = async () => {
+    if (!safeImageUrl) {
+      return;
+    }
     try {
-      const response = await fetch(absoluteImageUrl);
+      const response = await fetch(safeImageUrl);
       if (!response.ok) {
         throw new Error(`Failed to fetch image: ${response.status}`);
       }
@@ -84,7 +88,7 @@ const Image = ({
     } catch (error) {
       console.error('Download failed:', error);
       const link = document.createElement('a');
-      link.href = absoluteImageUrl;
+      link.href = safeImageUrl;
       link.download = altText || 'image.png';
       document.body.appendChild(link);
       link.click();
@@ -93,15 +97,19 @@ const Image = ({
   };
 
   useEffect(() => {
-    if (width && height && absoluteImageUrl) {
-      dimensionCache.set(absoluteImageUrl, { width, height });
+    if (width && height && safeImageUrl) {
+      dimensionCache.set(safeImageUrl, { width, height });
     }
-  }, [absoluteImageUrl, width, height]);
+  }, [safeImageUrl, width, height]);
 
-  const dims = width && height ? { width, height } : dimensionCache.get(absoluteImageUrl);
+  if (!safeImageUrl) {
+    return null;
+  }
+
+  const dims = width && height ? { width, height } : dimensionCache.get(safeImageUrl);
   const hasDimensions = !!(dims?.width && dims?.height);
   const heightStyle = hasDimensions ? computeHeightStyle(dims.width, dims.height) : undefined;
-  const showSkeleton = hasDimensions && !paintedUrls.has(absoluteImageUrl);
+  const showSkeleton = hasDimensions && !paintedUrls.has(safeImageUrl);
 
   return (
     <div>
@@ -121,8 +129,8 @@ const Image = ({
         {showSkeleton && <Skeleton className="absolute inset-0" aria-hidden="true" />}
         <img
           alt={altText}
-          src={absoluteImageUrl}
-          onLoad={() => paintedUrls.add(absoluteImageUrl)}
+          src={safeImageUrl}
+          onLoad={() => paintedUrls.add(safeImageUrl)}
           className={cn(
             'relative block text-transparent',
             hasDimensions
@@ -134,7 +142,7 @@ const Image = ({
       <DialogImage
         isOpen={isOpen}
         onOpenChange={setIsOpen}
-        src={absoluteImageUrl}
+        src={safeImageUrl}
         downloadImage={downloadImage}
         args={args}
         triggerRef={triggerRef}

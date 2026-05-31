@@ -26,6 +26,16 @@ const MAX_EMAIL_LENGTH = 500;
 const MAX_AVATAR_LENGTH = 2000;
 const MAX_EXTERNAL_ID_LENGTH = 500;
 
+function getOptionalQueryString(value: unknown, field: string): { value?: string; error?: string } {
+  if (value == null) {
+    return {};
+  }
+  if (typeof value !== 'string') {
+    return { error: `${field} must be a single string` };
+  }
+  return { value };
+}
+
 interface GroupIdParams {
   id: string;
 }
@@ -102,7 +112,16 @@ export function createAdminGroupsHandlers(deps: AdminGroupsDeps) {
 
   async function listGroupsHandler(req: ServerRequest, res: Response) {
     try {
-      const { search, source } = req.query as { search?: string; source?: string };
+      const sourceResult = getOptionalQueryString(req.query.source, 'source');
+      if (sourceResult.error) {
+        return res.status(400).json({ error: sourceResult.error });
+      }
+      const searchResult = getOptionalQueryString(req.query.search, 'search');
+      if (searchResult.error) {
+        return res.status(400).json({ error: searchResult.error });
+      }
+      const { value: search } = searchResult;
+      const { value: source } = sourceResult;
       const filter: GroupListFilter = {};
       if (source && VALID_GROUP_SOURCES.has(source)) {
         filter.source = source as IGroup['source'];

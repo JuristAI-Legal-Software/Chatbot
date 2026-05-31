@@ -3,6 +3,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Button, TooltipAnchor } from '@librechat/client';
 import { X, ArrowDownToLine, PanelLeftOpen, PanelLeftClose, RotateCcw } from 'lucide-react';
 import { useLocalize } from '~/hooks';
+import { isSafeImageSrc } from '~/utils';
 
 const imageSizeCache = new Map<string, string>();
 
@@ -37,6 +38,7 @@ export default function DialogImage({
   triggerRef?: React.RefObject<HTMLButtonElement>;
 }) {
   const localize = useLocalize();
+  const safeSrc = isSafeImageSrc(src) ? src : '';
   const [isPromptOpen, setIsPromptOpen] = useState(false);
   const [imageSize, setImageSize] = useState<string | null>(null);
 
@@ -202,11 +204,11 @@ export default function DialogImage({
   }, [resetZoom, onOpenChange, isOpen, zoom]);
 
   useEffect(() => {
-    if (isOpen && src) {
-      getImageSize(src).then(setImageSize);
+    if (isOpen && safeSrc) {
+      getImageSize(safeSrc).then(setImageSize);
       resetZoom();
     }
-  }, [isOpen, src, getImageSize, resetZoom]);
+  }, [isOpen, safeSrc, getImageSize, resetZoom]);
 
   useEffect(() => {
     if (zoom === 1) {
@@ -363,7 +365,7 @@ export default function DialogImage({
               >
                 <img
                   ref={imageRef}
-                  src={src}
+                  src={safeSrc}
                   alt="Image"
                   decoding="async"
                   className="block max-h-[85vh] object-contain"

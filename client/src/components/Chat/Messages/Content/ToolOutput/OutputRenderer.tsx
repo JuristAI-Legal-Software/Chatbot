@@ -9,11 +9,22 @@ interface ContentBlock {
   text?: string;
 }
 
-const ERROR_PREFIX = /^Error:\s*(\[.*?\]\s*)*tool call failed:\s*/i;
 const ERROR_INNER = /^Error\s+\w+ing to endpoint\s*\(HTTP \d+\):\s*/i;
+const TOOL_CALL_FAILED = 'tool call failed:';
+
+function stripToolCallErrorPrefix(text: string): string {
+  if (!text.toLowerCase().startsWith('error:')) {
+    return text;
+  }
+  const markerIndex = text.toLowerCase().indexOf(TOOL_CALL_FAILED);
+  if (markerIndex === -1) {
+    return text;
+  }
+  return text.slice(markerIndex + TOOL_CALL_FAILED.length);
+}
 
 function cleanError(text: string): string {
-  let cleaned = text.replace(ERROR_PREFIX, '').trim();
+  let cleaned = stripToolCallErrorPrefix(text).trim();
   cleaned = cleaned.replace(ERROR_INNER, '').trim();
   if (cleaned.endsWith('Please fix your mistakes.')) {
     cleaned = cleaned.slice(0, -'Please fix your mistakes.'.length).trim();
@@ -22,7 +33,7 @@ function cleanError(text: string): string {
 }
 
 export function isError(text: string): boolean {
-  return ERROR_PREFIX.test(text) || text.startsWith('Error processing tool');
+  return stripToolCallErrorPrefix(text) !== text || text.startsWith('Error processing tool');
 }
 
 function isStructuredText(text: string): boolean {
