@@ -1,6 +1,5 @@
 import { Types } from 'mongoose';
 import { PrincipalType } from 'librechat-data-provider';
-import { logger } from '@librechat/data-schemas';
 import type { IGroup, IUser } from '@librechat/data-schemas';
 import type { Response } from 'express';
 import type { ServerRequest } from '~/types/http';
@@ -212,8 +211,6 @@ describe('createAdminGroupsHandlers', () => {
 
       await handlers.getGroup(req, res);
 
-      // eslint-disable-next-line no-console
-      console.log('logger error calls', (logger.error as jest.Mock).mock.calls);
       expect(status).toHaveBeenCalledWith(200);
       expect(json).toHaveBeenCalledWith({ group });
     });
