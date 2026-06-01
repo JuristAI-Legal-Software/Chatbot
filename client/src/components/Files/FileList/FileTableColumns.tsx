@@ -41,7 +41,8 @@ export const fileTableColumns: ColumnDef<TFile>[] = [
     },
     accessorKey: 'icon',
     header: () => {
-      return 'Icon';
+      const localize = useLocalize();
+      return localize('com_ui_icon');
     },
     cell: ({ row }) => {
       const file = row.original;
@@ -53,7 +54,7 @@ export const fileTableColumns: ColumnDef<TFile>[] = [
       size: '150px',
     },
     accessorKey: 'filename',
-    header: ({ column }) => {
+    header: () => {
       const localize = useLocalize();
       return <>{localize('com_ui_name')}</>;
     },
@@ -65,9 +66,11 @@ export const fileTableColumns: ColumnDef<TFile>[] = [
   {
     accessorKey: 'vectorStores',
     header: () => {
-      return 'Vector Stores';
+      const localize = useLocalize();
+      return localize('com_files_vector_stores');
     },
     cell: ({ row }) => {
+      const localize = useLocalize();
       const { vectorsAttached: attachedVectorStores } = row.original;
       return (
         <>
@@ -80,7 +83,9 @@ export const fileTableColumns: ColumnDef<TFile>[] = [
                 >
                   <PlusIcon className="h-3 w-3" />
                   &nbsp;
-                  {attachedVectorStores.length - index} more
+                  {localize('com_files_more_count', {
+                    count: attachedVectorStores.length - index,
+                  })}
                 </span>
               );
             }
@@ -101,16 +106,17 @@ export const fileTableColumns: ColumnDef<TFile>[] = [
     accessorKey: 'updatedAt',
     header: () => {
       const localize = useLocalize();
-      return 'Modified';
+      return localize('com_ui_file_modified');
     },
     cell: ({ row }) => formatDate(row.original.updatedAt),
   },
   {
     accessorKey: 'actions',
     header: () => {
-      return 'Actions';
+      const localize = useLocalize();
+      return localize('com_assistants_actions');
     },
-    cell: ({ row }) => {
+    cell: () => {
       return (
         <>
           <Button className="w-min content-center bg-transparent text-gray-500 hover:bg-slate-200">

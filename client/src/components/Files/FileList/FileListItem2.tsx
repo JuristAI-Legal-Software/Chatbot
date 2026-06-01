@@ -3,6 +3,7 @@ import { FileIcon, PlusIcon } from 'lucide-react';
 import { Button, DotsIcon, TrashIcon } from '@librechat/client';
 import type { TFile } from 'librechat-data-provider';
 import { useNavigate } from 'react-router-dom';
+import { useLocalize } from '~/hooks';
 
 type FileListItemProps = {
   file: TFile;
@@ -15,6 +16,7 @@ export default function FileListItem2({
   deleteFile,
   attachedVectorStores,
 }: FileListItemProps) {
+  const localize = useLocalize();
   const navigate = useNavigate();
 
   return (
@@ -41,7 +43,7 @@ export default function FileListItem2({
                 >
                   <PlusIcon className="h-3 w-3" />
                   &nbsp;
-                  {attachedVectorStores.length - index} more
+                  {localize('com_files_more_count', { count: attachedVectorStores.length - index })}
                 </span>
               );
             }
