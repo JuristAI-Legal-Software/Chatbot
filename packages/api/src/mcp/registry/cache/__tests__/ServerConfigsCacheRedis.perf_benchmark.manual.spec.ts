@@ -296,9 +296,10 @@ describe('ServerConfigsCacheRedis Performance Benchmark', () => {
    */
   describe('Alternative: Raw MGET vs Keyv batch GET', () => {
     it('should compare raw MGET vs Keyv GET for value retrieval', async () => {
+      expect.hasAssertions();
       const ns = `${PREFIX}-mget`;
       const configCount = 30;
-      const cache = await populateCache(ns, configCount);
+      await populateCache(ns, configCount);
 
       try {
         // First, discover keys via SCAN (same for both approaches)
@@ -309,6 +310,7 @@ describe('ServerConfigsCacheRedis Performance Benchmark', () => {
         })) {
           keys.push(key);
         }
+        expect(keys.length).toBe(configCount);
 
         // Approach 1: Keyv batch GET (current implementation)
         const keyvCache = standardCache(`MCP::ServersRegistry::Servers::${ns}`);
@@ -325,7 +327,8 @@ describe('ServerConfigsCacheRedis Performance Benchmark', () => {
             keyvRedisClient as { mGet: (keys: string[]) => Promise<(string | null)[]> }
           ).mGet(keys);
           // Parse the Keyv-wrapped JSON values
-          rawValues.filter(Boolean).map((v) => JSON.parse(v!));
+          const parsedValues = rawValues.filter(Boolean).map((v) => JSON.parse(v!));
+          expect(parsedValues).toHaveLength(configCount);
         }
         const mgetMs = Date.now() - mgetStart;
 

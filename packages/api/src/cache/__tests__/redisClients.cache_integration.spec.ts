@@ -104,6 +104,7 @@ describe('redisClients Integration Tests', () => {
 
     describe('when connecting to a Redis instance', () => {
       test('should connect and perform set/get/delete operations', async () => {
+        expect.hasAssertions();
         const clients = await import('../redisClients');
         ioredisClient = clients.ioredisClient;
         await testRedisOperations(ioredisClient!, 'ioredis-single');
@@ -112,6 +113,7 @@ describe('redisClients Integration Tests', () => {
 
     describe('when connecting to a Redis cluster', () => {
       test('should connect to cluster and perform set/get/delete operations', async () => {
+        expect.hasAssertions();
         process.env.USE_REDIS_CLUSTER = 'true';
         process.env.REDIS_URI =
           'redis://127.0.0.1:7001,redis://127.0.0.1:7002,redis://127.0.0.1:7003';
@@ -136,6 +138,7 @@ describe('redisClients Integration Tests', () => {
 
     describe('when connecting to a Redis instance', () => {
       test('should connect and perform set/get/delete operations', async () => {
+        expect.hasAssertions();
         const clients = await import('../redisClients');
         keyvRedisClient = clients.keyvRedisClient;
         await testRedisOperations(
@@ -148,6 +151,7 @@ describe('redisClients Integration Tests', () => {
 
     describe('when connecting to a Redis cluster', () => {
       test('should connect to cluster and perform set/get/delete operations', async () => {
+        expect.hasAssertions();
         process.env.USE_REDIS_CLUSTER = 'true';
         process.env.REDIS_URI =
           'redis://127.0.0.1:7001,redis://127.0.0.1:7002,redis://127.0.0.1:7003';

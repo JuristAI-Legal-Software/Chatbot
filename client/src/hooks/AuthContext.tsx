@@ -167,9 +167,12 @@ const AuthContextProvider = ({
 
   const userQuery = useGetUserQuery({ enabled: !!(token ?? '') });
 
-  const login = (data: t.TLoginUser) => {
-    loginUser.mutate(data);
-  };
+  const login = useCallback(
+    (data: t.TLoginUser) => {
+      loginUser.mutate(data);
+    },
+    [loginUser],
+  );
 
   const silentRefresh = useCallback(() => {
     if (authConfig?.test === true) {
@@ -244,6 +247,7 @@ const AuthContextProvider = ({
     userQuery.isError,
     userQuery.error,
     error,
+    doSetError,
     setUser,
     navigate,
     silentRefresh,
@@ -293,6 +297,8 @@ const AuthContextProvider = ({
       isCustomRole,
       userRoleName,
       customRole,
+      login,
+      logout,
     ],
   );
 

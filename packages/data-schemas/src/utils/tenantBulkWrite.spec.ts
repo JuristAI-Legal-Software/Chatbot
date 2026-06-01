@@ -1,6 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { tenantStorage, runAsSystem, SYSTEM_TENANT_ID } from '~/config/tenantContext';
+import { tenantStorage, runAsSystem } from '~/config/tenantContext';
 import { applyTenantIsolation, _resetStrictCache } from '~/models/plugins/tenantIsolation';
 import { tenantSafeBulkWrite, _resetBulkWriteStrictCache } from './tenantBulkWrite';
 
