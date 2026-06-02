@@ -75,13 +75,22 @@ function parseToolSearchJson(content: string, discoveredTools: Set<string>): boo
  * @param discoveredTools - Set to add discovered tool names to
  */
 function parseToolSearchLegacy(content: string, discoveredTools: Set<string>): void {
-  const toolNameRegex = /^- ([^\s(]+)\s*\(score:/gm;
-  let match: RegExpExecArray | null;
-  while ((match = toolNameRegex.exec(content)) !== null) {
-    const toolName = match[1];
-    if (toolName) {
-      discoveredTools.add(toolName);
+  for (const line of content.split('\n')) {
+    if (!line.startsWith('- ')) {
+      continue;
     }
+
+    const scoreMarkerIndex = line.indexOf('(score:');
+    if (scoreMarkerIndex === -1) {
+      continue;
+    }
+
+    const toolName = line.slice(2, scoreMarkerIndex).trim();
+    if (!toolName || /\s|\(/.test(toolName)) {
+      continue;
+    }
+
+    discoveredTools.add(toolName);
   }
 }
 

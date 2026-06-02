@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const path = require('path');
 const mongoose = require('mongoose');
 const { User } = require('@librechat/data-schemas').createModels(mongoose);
@@ -5,6 +6,11 @@ require('module-alias')({ base: path.resolve(__dirname, '..', 'api') });
 const { registerUser } = require('~/server/services/AuthService');
 const { askQuestion, silentExit } = require('./helpers');
 const connect = require('./connect');
+
+const generateSecurePassword = (length = 18) => {
+  const bytesNeeded = Math.ceil((length * 3) / 4);
+  return crypto.randomBytes(bytesNeeded).toString('base64url').slice(0, length);
+};
 
 (async () => {
   await connect();
@@ -72,7 +78,7 @@ const connect = require('./connect');
   if (password === undefined) {
     password = await askQuestion('Password: (leave blank, to generate one)');
     if (!password) {
-      password = Math.random().toString(36).slice(-18);
+      password = generateSecurePassword();
       console.orange('Your password is: ' + password);
     }
   }

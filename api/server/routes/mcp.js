@@ -41,7 +41,11 @@ const {
   resolveConfigServers,
   getMCPSetupData,
 } = require('~/server/services/MCP');
-const { requireJwtAuth, canAccessMCPServerResource } = require('~/server/middleware');
+const {
+  requireJwtAuth,
+  canAccessMCPServerResource,
+  createMCPOAuthLimiters,
+} = require('~/server/middleware');
 const { getUserPluginAuthValue } = require('~/server/services/PluginService');
 const { updateMCPServerTools } = require('~/server/services/Config/mcp');
 const { reinitMCPServer } = require('~/server/services/Tools/mcp');
@@ -49,6 +53,7 @@ const { getLogStores } = require('~/cache');
 const db = require('~/models');
 
 const router = Router();
+const { mcpOAuthIpLimiter, mcpOAuthUserLimiter } = createMCPOAuthLimiters();
 
 const OAUTH_CSRF_COOKIE_PATH = '/api/mcp';
 
@@ -76,71 +81,78 @@ router.get('/tools', requireJwtAuth, async (req, res) => {
  * Initiate OAuth flow
  * This endpoint is called when the user clicks the auth link in the UI
  */
-router.get('/:serverName/oauth/initiate', requireJwtAuth, setOAuthSession, async (req, res) => {
-  try {
-    const { serverName } = req.params;
-    const { userId, flowId } = req.query;
-    const user = req.user;
+router.get(
+  '/:serverName/oauth/initiate',
+  requireJwtAuth,
+  mcpOAuthIpLimiter,
+  mcpOAuthUserLimiter,
+  setOAuthSession,
+  async (req, res) => {
+    try {
+      const { serverName } = req.params;
+      const { userId, flowId } = req.query;
+      const user = req.user;
 
-    // Verify the userId matches the authenticated user
-    if (userId !== user.id) {
-      return res.status(403).json({ error: 'User mismatch' });
+      // Verify the userId matches the authenticated user
+      if (userId !== user.id) {
+        return res.status(403).json({ error: 'User mismatch' });
+      }
+
+      logger.debug('[MCP OAuth] Initiate request', { serverName, userId, flowId });
+
+      const flowsCache = getLogStores(CacheKeys.FLOWS);
+      const flowManager = getFlowStateManager(flowsCache);
+
+      /** Flow state to retrieve OAuth config */
+      const flowState = await flowManager.getFlowState(flowId, 'mcp_oauth');
+      if (!flowState) {
+        logger.error('[MCP OAuth] Flow state not found', { flowId });
+        return res.status(404).json({ error: 'Flow not found' });
+      }
+
+      const { serverUrl, oauth: oauthConfig } = flowState.metadata || {};
+      if (!serverUrl || !oauthConfig) {
+        logger.error('[MCP OAuth] Missing server URL or OAuth config in flow state');
+        return res.status(400).json({ error: 'Invalid flow state' });
+      }
+
+      const configServers = await resolveConfigServers(req);
+      const oauthHeaders = await getOAuthHeaders(serverName, userId, configServers);
+      const registry = getMCPServersRegistry();
+      const allowedDomains = registry.getAllowedDomains();
+      const allowedAddresses = registry.getAllowedAddresses();
+      const {
+        authorizationUrl,
+        flowId: oauthFlowId,
+        flowMetadata,
+      } = await MCPOAuthHandler.initiateOAuthFlow(
+        serverName,
+        serverUrl,
+        userId,
+        oauthHeaders,
+        oauthConfig,
+        allowedDomains,
+        undefined,
+        allowedAddresses,
+      );
+
+      logger.debug('[MCP OAuth] OAuth flow initiated', { oauthFlowId, authorizationUrl });
+
+      await MCPOAuthHandler.storeStateMapping(flowMetadata.state, oauthFlowId, flowManager);
+      setOAuthCsrfCookie(res, oauthFlowId, OAUTH_CSRF_COOKIE_PATH);
+      res.redirect(authorizationUrl);
+    } catch (error) {
+      logger.error('[MCP OAuth] Failed to initiate OAuth', error);
+      res.status(500).json({ error: 'Failed to initiate OAuth' });
     }
-
-    logger.debug('[MCP OAuth] Initiate request', { serverName, userId, flowId });
-
-    const flowsCache = getLogStores(CacheKeys.FLOWS);
-    const flowManager = getFlowStateManager(flowsCache);
-
-    /** Flow state to retrieve OAuth config */
-    const flowState = await flowManager.getFlowState(flowId, 'mcp_oauth');
-    if (!flowState) {
-      logger.error('[MCP OAuth] Flow state not found', { flowId });
-      return res.status(404).json({ error: 'Flow not found' });
-    }
-
-    const { serverUrl, oauth: oauthConfig } = flowState.metadata || {};
-    if (!serverUrl || !oauthConfig) {
-      logger.error('[MCP OAuth] Missing server URL or OAuth config in flow state');
-      return res.status(400).json({ error: 'Invalid flow state' });
-    }
-
-    const configServers = await resolveConfigServers(req);
-    const oauthHeaders = await getOAuthHeaders(serverName, userId, configServers);
-    const registry = getMCPServersRegistry();
-    const allowedDomains = registry.getAllowedDomains();
-    const allowedAddresses = registry.getAllowedAddresses();
-    const {
-      authorizationUrl,
-      flowId: oauthFlowId,
-      flowMetadata,
-    } = await MCPOAuthHandler.initiateOAuthFlow(
-      serverName,
-      serverUrl,
-      userId,
-      oauthHeaders,
-      oauthConfig,
-      allowedDomains,
-      undefined,
-      allowedAddresses,
-    );
-
-    logger.debug('[MCP OAuth] OAuth flow initiated', { oauthFlowId, authorizationUrl });
-
-    await MCPOAuthHandler.storeStateMapping(flowMetadata.state, oauthFlowId, flowManager);
-    setOAuthCsrfCookie(res, oauthFlowId, OAUTH_CSRF_COOKIE_PATH);
-    res.redirect(authorizationUrl);
-  } catch (error) {
-    logger.error('[MCP OAuth] Failed to initiate OAuth', error);
-    res.status(500).json({ error: 'Failed to initiate OAuth' });
-  }
-});
+  },
+);
 
 /**
  * OAuth callback handler
  * This handles the OAuth callback after the user has authorized the application
  */
-router.get('/:serverName/oauth/callback', async (req, res) => {
+router.get('/:serverName/oauth/callback', mcpOAuthIpLimiter, async (req, res) => {
   const basePath = getBasePath();
   try {
     const { serverName } = req.params;
@@ -439,7 +451,13 @@ router.get('/oauth/tokens/:flowId', requireJwtAuth, async (req, res) => {
  * (e.g. during chat via SSE). The frontend should call this before opening the OAuth URL
  * so the callback can verify the browser matches the flow initiator.
  */
-router.post('/:serverName/oauth/bind', requireJwtAuth, setOAuthSession, async (req, res) => {
+router.post(
+  '/:serverName/oauth/bind',
+  requireJwtAuth,
+  mcpOAuthIpLimiter,
+  mcpOAuthUserLimiter,
+  setOAuthSession,
+  async (req, res) => {
   try {
     const { serverName } = req.params;
     const user = req.user;
@@ -456,7 +474,8 @@ router.post('/:serverName/oauth/bind', requireJwtAuth, setOAuthSession, async (r
     logger.error('[MCP OAuth] Failed to set CSRF binding cookie', error);
     res.status(500).json({ error: 'Failed to bind OAuth flow' });
   }
-});
+  },
+);
 
 /**
  * Check OAuth flow status
@@ -499,7 +518,12 @@ router.get('/oauth/status/:flowId', requireJwtAuth, async (req, res) => {
  * Cancel OAuth flow
  * This endpoint cancels a pending OAuth flow
  */
-router.post('/oauth/cancel/:serverName', requireJwtAuth, async (req, res) => {
+router.post(
+  '/oauth/cancel/:serverName',
+  requireJwtAuth,
+  mcpOAuthIpLimiter,
+  mcpOAuthUserLimiter,
+  async (req, res) => {
   try {
     const { serverName } = req.params;
     const user = req.user;
@@ -535,7 +559,8 @@ router.post('/oauth/cancel/:serverName', requireJwtAuth, async (req, res) => {
     logger.error('[MCP OAuth Cancel] Failed to cancel OAuth flow', error);
     res.status(500).json({ error: 'Failed to cancel OAuth flow' });
   }
-});
+  },
+);
 
 /**
  * Reinitialize MCP server
@@ -544,6 +569,8 @@ router.post('/oauth/cancel/:serverName', requireJwtAuth, async (req, res) => {
 router.post(
   '/:serverName/reinitialize',
   requireJwtAuth,
+  mcpOAuthIpLimiter,
+  mcpOAuthUserLimiter,
   checkMCPUsePermissions,
   setOAuthSession,
   async (req, res) => {

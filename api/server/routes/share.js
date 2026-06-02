@@ -10,8 +10,10 @@ const {
   getSharedLinks,
   getSharedLink,
 } = require('~/models');
+const { createShareLimiters } = require('~/server/middleware');
 const requireJwtAuth = require('~/server/middleware/requireJwtAuth');
 const router = express.Router();
+const { shareIpLimiter, shareUserLimiter } = createShareLimiters();
 
 const resolveSharedLinkExpiration = (req, conversationId) =>
   getSharedLinkExpiration(
@@ -113,7 +115,7 @@ router.get('/link/:conversationId', requireJwtAuth, async (req, res) => {
   }
 });
 
-router.post('/:conversationId', requireJwtAuth, async (req, res) => {
+router.post('/:conversationId', requireJwtAuth, shareIpLimiter, shareUserLimiter, async (req, res) => {
   try {
     const { targetMessageId } = req.body;
     const expiredAt = await resolveSharedLinkExpiration(req, req.params.conversationId);
@@ -138,7 +140,7 @@ router.post('/:conversationId', requireJwtAuth, async (req, res) => {
   }
 });
 
-router.patch('/:shareId', requireJwtAuth, async (req, res) => {
+router.patch('/:shareId', requireJwtAuth, shareIpLimiter, shareUserLimiter, async (req, res) => {
   try {
     const { targetMessageId } = req.body ?? {};
     if (targetMessageId !== undefined && typeof targetMessageId !== 'string') {
@@ -175,7 +177,7 @@ router.patch('/:shareId', requireJwtAuth, async (req, res) => {
   }
 });
 
-router.delete('/:shareId', requireJwtAuth, async (req, res) => {
+router.delete('/:shareId', requireJwtAuth, shareIpLimiter, shareUserLimiter, async (req, res) => {
   try {
     const result = await deleteSharedLink(req.user.id, req.params.shareId);
 

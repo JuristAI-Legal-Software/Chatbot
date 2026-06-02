@@ -256,6 +256,21 @@ const isEventStreamContentType = (value: unknown): boolean =>
 const isMultipartContentType = (value: unknown): boolean =>
   headerIncludes(value, 'multipart/form-data');
 
+const getBearerToken = (auth: string): string | null => {
+  const separatorIndex = auth.indexOf(' ');
+  if (separatorIndex === -1) {
+    return null;
+  }
+
+  const scheme = auth.slice(0, separatorIndex).trim();
+  if (scheme.toLowerCase() !== 'bearer') {
+    return null;
+  }
+
+  const token = auth.slice(separatorIndex + 1).trim();
+  return token || null;
+};
+
 const getRequestContentLength = (req: Request): number | null => {
   const contentLength = req.headers['content-length'];
   const rawContentLength = Array.isArray(contentLength) ? contentLength[0] : contentLength;
@@ -593,17 +608,16 @@ export function createMetrics(): PrometheusMetrics {
   const metricsHandler: RequestHandler = (req, res): void => {
     const secret = process.env.METRICS_SECRET;
     const auth = req.headers['authorization'];
-    if (!secret || !auth) {
+    const authValue = Array.isArray(auth) ? auth[0] : auth;
+    if (!secret || typeof authValue !== 'string') {
       res.status(401).end();
       return;
     }
-    const bearerToken = auth.match(/^bearer\s+(.+)$/i);
-    if (!bearerToken) {
+    const token = getBearerToken(authValue);
+    if (!token) {
       res.status(401).end();
       return;
     }
-
-    const token = bearerToken[1];
     const encode = (s: string) => new TextEncoder().encode(s);
     const expected = encode(secret);
     const actual = encode(token);

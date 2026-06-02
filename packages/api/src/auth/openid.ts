@@ -29,7 +29,10 @@ const LEGACY_ISSUER_FILTERS: Array<FilterQuery<IUser>['openidIssuer']> = [
 ];
 
 export function normalizeOpenIdIssuer(issuer: string | undefined): string | undefined {
-  const normalized = issuer?.trim().replace(/\/+$/, '');
+  let normalized = issuer?.trim();
+  while (normalized?.endsWith('/')) {
+    normalized = normalized.slice(0, -1);
+  }
   if (!normalized) return undefined;
   if (!normalized.endsWith(OPENID_DISCOVERY_PATH)) return normalized;
   return normalized.slice(0, -OPENID_DISCOVERY_PATH.length) || undefined;

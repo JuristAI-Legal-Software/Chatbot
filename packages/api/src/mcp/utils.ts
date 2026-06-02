@@ -1,7 +1,9 @@
 import { Constants } from 'librechat-data-provider';
 import type { ParsedServerConfig } from '~/mcp/types';
 
-export const mcpToolPattern = new RegExp(`^.+${Constants.mcp_delimiter}.+$`);
+const escapedMcpDelimiter = Constants.mcp_delimiter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+export const mcpToolPattern = new RegExp(`^.+${escapedMcpDelimiter}.+$`);
 
 /** Whether a server should use MCP OAuth handling. */
 export function isOAuthServer(

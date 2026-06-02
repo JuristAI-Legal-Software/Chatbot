@@ -10,6 +10,17 @@ type FileParseFn = (file: Express.Multer.File) => Promise<string>;
 const DOCUMENT_PARSER_MAX_FILE_SIZE = 15 * megabyte;
 const ODT_MAX_DECOMPRESSED_SIZE = 50 * megabyte;
 
+const XML_TEXT_ENTITIES: Record<string, string> = {
+  amp: '&',
+  quot: '"',
+  apos: "'",
+};
+
+const decodeOdtTextEntities = (value: string): string =>
+  value.replace(/&(amp|quot|apos);/g, (_, entity: keyof typeof XML_TEXT_ENTITIES) => {
+    return XML_TEXT_ENTITIES[entity];
+  });
+
 /**
  * Parses an uploaded document and extracts its text content and metadata.
  * Handled types must stay in sync with `documentParserMimeTypes` from data-provider.
@@ -149,11 +160,8 @@ async function odtToText(file: Express.Multer.File): Promise<string> {
     .replace(/<text:tab\/>/g, '\t')
     .replace(/<text:s[^>]*\/>/g, ' ')
     .replace(/<[^>]+>/g, '')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
+    .replace(/&(lt|gt);/g, '&$1;')
+    .replace(/&(amp|quot|apos);/g, (match) => decodeOdtTextEntities(match))
     .replace(/[ \t]+/g, ' ')
     .replace(/\n[ \t]+/g, '\n')
     .replace(/[ \t]+\n/g, '\n')
