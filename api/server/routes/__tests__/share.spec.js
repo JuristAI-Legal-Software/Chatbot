@@ -42,6 +42,13 @@ jest.mock('~/models', () => ({
   getSharedLink: jest.fn(),
 }));
 
+jest.mock('~/server/middleware', () => ({
+  createShareLimiters: jest.fn(() => ({
+    shareIpLimiter: (req, res, next) => next(),
+    shareUserLimiter: (req, res, next) => next(),
+  })),
+}));
+
 jest.mock('~/server/middleware/requireJwtAuth', () => (req, res, next) => next());
 
 const { RetentionMode } = require('librechat-data-provider');

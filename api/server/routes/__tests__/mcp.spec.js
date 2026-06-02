@@ -135,6 +135,10 @@ jest.mock('~/cache', () => ({
 jest.mock('~/server/middleware', () => ({
   requireJwtAuth: (req, res, next) => next(),
   canAccessMCPServerResource: () => (req, res, next) => next(),
+  createMCPOAuthLimiters: jest.fn(() => ({
+    mcpOAuthIpLimiter: (req, res, next) => next(),
+    mcpOAuthUserLimiter: (req, res, next) => next(),
+  })),
 }));
 
 jest.mock('~/server/services/Tools/mcp', () => ({
