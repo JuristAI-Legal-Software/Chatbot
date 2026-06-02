@@ -12,7 +12,6 @@
  * It also benchmarks alternative approaches (single aggregate key, MGET) against
  * the current SCAN+GET implementation.
  */
-import { expect } from '@playwright/test';
 import type { RedisClientType } from 'redis';
 import type { ParsedServerConfig } from '~/mcp/types';
 
