@@ -1,4 +1,9 @@
-export const envVarRegex = /^\${(.+)}$/;
+/**
+ * Matches a whole-string env-var placeholder `${VAR}` and captures `VAR`.
+ * Uses `[^}]+` instead of `.+` so the inner quantifier cannot backtrack
+ * against the closing `}` — fixes CodeQL `js/polynomial-redos`.
+ */
+export const envVarRegex = /^\${([^}]+)}$/;
 
 /**
  * Infrastructure env vars that must never be resolved via placeholder expansion.

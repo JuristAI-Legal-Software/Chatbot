@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Skeleton } from '@librechat/client';
 import { apiBaseUrl } from 'librechat-data-provider';
 import DialogImage from './DialogImage';
-import { cn, isSafeImageSrc } from '~/utils';
+import { cn, isSafeImageSrc, toRenderableImageUrl } from '~/utils';
 
 /** Max display height for chat images (Tailwind JIT class) */
 export const IMAGE_MAX_H = 'max-h-[45vh]' as const;
@@ -88,8 +88,7 @@ const Image = ({
     } catch (error) {
       console.error('Download failed:', error);
       const link = document.createElement('a');
-      // `safeImageUrl` was already gated by `isSafeImageSrc` (http/https/blob/data only).
-      link.href = safeImageUrl; // lgtm[js/html-constructed-from-input]
+      link.href = toRenderableImageUrl(safeImageUrl);
       link.download = altText || 'image.png';
       document.body.appendChild(link);
       link.click();
@@ -128,10 +127,9 @@ const Image = ({
         style={heightStyle}
       >
         {showSkeleton && <Skeleton className="absolute inset-0" aria-hidden="true" />}
-        {/* `safeImageUrl` was already gated by `isSafeImageSrc`. */}
         <img
           alt={altText}
-          src={safeImageUrl} // lgtm[js/html-constructed-from-input]
+          src={toRenderableImageUrl(safeImageUrl)}
           onLoad={() => paintedUrls.add(safeImageUrl)}
           className={cn(
             'relative block text-transparent',

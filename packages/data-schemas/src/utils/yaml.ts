@@ -8,8 +8,32 @@
  * accidentally truncating free-form strings like descriptions that
  * might legitimately contain `#`.
  */
+/**
+ * Linear-time scan for the first whitespace-prefixed `#` that introduces
+ * a YAML inline comment. Replaces the regex `/^(.*?)\s+#.*$/` which CodeQL
+ * flagged as polynomial due to `.*?` + `\s+` backtracking on tab/space runs.
+ */
 export function stripYamlTrailingComment(value: string): string {
   if (value.trimStart().startsWith('#')) return '';
-  const match = value.match(/^(.*?)\s+#.*$/);
-  return match ? match[1] : value;
+  let i = 0;
+  while (i < value.length) {
+    const idx = value.indexOf('#', i);
+    if (idx <= 0) {
+      return value;
+    }
+    const prev = value.charCodeAt(idx - 1);
+    if (prev === 32 || prev === 9) {
+      let end = idx - 1;
+      while (end > 0) {
+        const c = value.charCodeAt(end - 1);
+        if (c !== 32 && c !== 9) {
+          break;
+        }
+        end--;
+      }
+      return value.slice(0, end);
+    }
+    i = idx + 1;
+  }
+  return value;
 }

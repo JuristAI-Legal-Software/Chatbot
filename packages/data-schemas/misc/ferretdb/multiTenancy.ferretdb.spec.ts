@@ -131,7 +131,10 @@ async function initializeOrgDb(conn: mongoose.Connection): Promise<{
 /** Execute a psql command against the FerretDB PostgreSQL backend via docker exec */
 function psql(query: string): string {
   try {
-    const escaped = query.replace(/"/g, '\\"');
+    /* Escape backslashes first so the subsequent `"` escape produces a
+     * shell-safe value: input `\"` must become `\\\"`, not `\\"`. Closes
+     * CodeQL `js/incomplete-sanitization`. */
+    const escaped = query.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     return execSync(
       `docker exec ${PG_CONTAINER} psql -U ${PG_USER} -d postgres -t -A -c "${escaped}"`,
       { encoding: 'utf-8', timeout: 30_000 },

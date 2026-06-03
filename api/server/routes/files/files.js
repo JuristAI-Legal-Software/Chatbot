@@ -371,7 +371,14 @@ const PREVIEW_LAZY_SWEEP_CUTOFF_MS = 2 * 60 * 1000;
  */
 router.get('/:file_id/preview', fileAccess, async (req, res) => {
   try {
-    const { file_id } = req.params;
+    /* `isUUID.safeParse` rejects anything that isn't a canonical UUID, so
+     * `file_id` cannot carry path-traversal segments by the time it reaches
+     * any storage call below. Closes CodeQL `js/path-injection`. */
+    const fileIdParse = isUUID.safeParse(req.params.file_id);
+    if (!fileIdParse.success) {
+      return res.status(400).json({ error: 'Invalid file_id' });
+    }
+    const file_id = fileIdParse.data;
     /* `fileAccess` already fetched the record (sans `text`, the default
      * projection drops it). Reuse for the lifecycle check; only re-fetch
      * with `text` on a terminal ready response — the typical lifecycle

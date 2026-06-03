@@ -130,17 +130,61 @@ export function redactAllServerSecrets(
  * Normalizes a server name to match the pattern ^[a-zA-Z0-9_.-]+$
  * This is required for Azure OpenAI models with Tool Calling
  */
+/**
+ * Single-pass character-class check. Replaces `/^[a-zA-Z0-9_.-]+$/.test(...)`
+ * so CodeQL's polynomial-regex tracker stops following the underscore class.
+ */
+function isAllowedServerNameChar(code: number): boolean {
+  return (
+    (code >= 48 && code <= 57) || // 0-9
+    (code >= 65 && code <= 90) || // A-Z
+    (code >= 97 && code <= 122) || // a-z
+    code === 45 || // -
+    code === 46 || // .
+    code === 95 // _
+  );
+}
+
+function isCanonicalServerName(value: string): boolean {
+  if (value.length === 0) {
+    return false;
+  }
+  for (let i = 0; i < value.length; i++) {
+    if (!isAllowedServerNameChar(value.charCodeAt(i))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Linear trim of `_` runs from both ends. */
+function trimUnderscores(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value.charCodeAt(start) === 95) {
+    start++;
+  }
+  while (end > start && value.charCodeAt(end - 1) === 95) {
+    end--;
+  }
+  return start === 0 && end === value.length ? value : value.slice(start, end);
+}
+
 export function normalizeServerName(serverName: string): string {
-  // Check if the server name already matches the pattern
-  if (/^[a-zA-Z0-9_.-]+$/.test(serverName)) {
+  if (isCanonicalServerName(serverName)) {
     return serverName;
   }
 
-  /** Replace non-matching characters with underscores.
+  /** Replace non-matching characters with underscores via a single-pass scan.
     This preserves the general structure while ensuring compatibility.
     Trims leading/trailing underscores
     */
-  const normalized = serverName.replace(/[^a-zA-Z0-9_.-]/g, '_').replace(/^_+|_+$/g, '');
+  const replaced: string[] = new Array(serverName.length);
+  for (let i = 0; i < serverName.length; i++) {
+    const code = serverName.charCodeAt(i);
+    replaced[i] = isAllowedServerNameChar(code) ? serverName[i] : '_';
+  }
+  const normalized = trimUnderscores(replaced.join(''));
 
   // If the result is empty (e.g., all characters were non-ASCII and got trimmed),
   // generate a fallback name to ensure we always have a valid function name

@@ -1,3 +1,4 @@
+const path = require('path');
 const fs = require('fs').promises;
 const express = require('express');
 const { logger } = require('@librechat/data-schemas');
@@ -12,13 +13,16 @@ router.post('/', async (req, res) => {
   try {
     const appConfig = req.config;
     filterFile({ req, file: req.file, image: true, isAvatar: true });
-    const userId = req.user.id;
-    const { manual } = req.body;
-    const input = await fs.readFile(req.file.path);
-
-    if (!userId) {
+    const rawUserId = req.user.id;
+    if (!rawUserId) {
       throw new Error('User ID is undefined');
     }
+    /* Strip any path separators from the JWT subject before it flows into
+     * strategy.processAvatar (which uses it as a path segment). Closes
+     * CodeQL `js/path-injection`. */
+    const userId = path.basename(String(rawUserId));
+    const { manual } = req.body;
+    const input = await fs.readFile(req.file.path);
 
     const fileStrategy = getFileStrategy(appConfig, { isAvatar: true });
     const desiredFormat = appConfig.imageOutputType;

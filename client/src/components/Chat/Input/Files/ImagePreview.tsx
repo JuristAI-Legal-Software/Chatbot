@@ -5,7 +5,7 @@ import { FileSources } from 'librechat-data-provider';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import ProgressCircle from './ProgressCircle';
 import SourceIcon from './SourceIcon';
-import { cn, isSafeImageSrc } from '~/utils';
+import { cn, isSafeImageSrc, toRenderableImageUrl } from '~/utils';
 
 const ImagePreview = ({
   imageBase64,
@@ -108,9 +108,8 @@ const ImagePreview = ({
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        {/* `imageUrl` is gated by `isSafeImageSrc` above (component returns null otherwise). */}
         <img
-          src={imageUrl} // lgtm[js/html-constructed-from-input]
+          src={toRenderableImageUrl(imageUrl)}
           alt=""
           className="size-full object-cover"
           draggable={false}
@@ -174,10 +173,9 @@ const ImagePreview = ({
 
             {/* Image container */}
             <div onClick={(e) => e.stopPropagation()}>
-              {/* `imageUrl` is gated by `isSafeImageSrc` above. */}
               <img
                 ref={imageRef}
-                src={imageUrl} // lgtm[js/html-constructed-from-input]
+                src={toRenderableImageUrl(imageUrl)}
                 alt={alt}
                 className="max-h-[85vh] max-w-[90vw] object-contain"
                 draggable={false}

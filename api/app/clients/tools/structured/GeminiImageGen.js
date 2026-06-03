@@ -20,13 +20,26 @@ const { spendTokens, getFiles } = require('~/models');
  * This wraps globalThis.fetch to add a proxy dispatcher only for googleapis.com URLs
  * This is necessary because @google/genai SDK doesn't support custom fetch or httpOptions.dispatcher
  */
+/**
+ * Returns true iff the URL's hostname is exactly `googleapis.com` or a subdomain of it.
+ * Avoids the substring trap `https://evil.com/?x=googleapis.com` would slip past
+ * a naive `.includes('googleapis.com')` check (CodeQL `js/incomplete-url-substring-sanitization`).
+ */
+function isGoogleApisUrl(value) {
+  try {
+    const { hostname } = new URL(value.toString());
+    return hostname === 'googleapis.com' || hostname.endsWith('.googleapis.com');
+  } catch {
+    return false;
+  }
+}
+
 if (process.env.PROXY) {
   const originalFetch = globalThis.fetch;
   const proxyAgent = new ProxyAgent(process.env.PROXY);
 
   globalThis.fetch = function (url, options = {}) {
-    const urlString = url.toString();
-    if (urlString.includes('googleapis.com')) {
+    if (isGoogleApisUrl(url)) {
       options = { ...options, dispatcher: proxyAgent };
     }
     return originalFetch.call(this, url, options);

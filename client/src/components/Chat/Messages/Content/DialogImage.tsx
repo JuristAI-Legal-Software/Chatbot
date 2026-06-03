@@ -3,7 +3,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Button, TooltipAnchor } from '@librechat/client';
 import { X, ArrowDownToLine, PanelLeftOpen, PanelLeftClose, RotateCcw } from 'lucide-react';
 import { useLocalize } from '~/hooks';
-import { isSafeImageSrc } from '~/utils';
+import { isSafeImageSrc, toRenderableImageUrl } from '~/utils';
 
 const imageSizeCache = new Map<string, string>();
 
@@ -363,10 +363,9 @@ export default function DialogImage({
                   transformOrigin: 'center center',
                 }}
               >
-                {/* `safeSrc` is the result of `isSafeImageSrc(src) ? src : ''`. */}
                 <img
                   ref={imageRef}
-                  src={safeSrc} // lgtm[js/html-constructed-from-input]
+                  src={toRenderableImageUrl(safeSrc)}
                   alt="Image"
                   decoding="async"
                   className="block max-h-[85vh] object-contain"
