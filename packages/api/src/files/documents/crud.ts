@@ -12,14 +12,31 @@ const ODT_MAX_DECOMPRESSED_SIZE = 50 * megabyte;
 
 const XML_TEXT_ENTITIES: Record<string, string> = {
   amp: '&',
+  lt: '<',
+  gt: '>',
   quot: '"',
   apos: "'",
 };
 
 const decodeOdtTextEntities = (value: string): string =>
-  value.replace(/&(amp|quot|apos);/g, (_, entity: keyof typeof XML_TEXT_ENTITIES) => {
+  value.replace(/&(amp|lt|gt|quot|apos);/g, (_, entity: keyof typeof XML_TEXT_ENTITIES) => {
     return XML_TEXT_ENTITIES[entity];
   });
+
+/**
+ * Strip remaining XML/HTML tags. Runs to a fixed point so nested tag-like
+ * fragments (e.g. `<scr<script>ipt>`) cannot reform a tag after a single pass.
+ * Closes CodeQL "Incomplete multi-character sanitization".
+ */
+const stripTagsToFixedPoint = (value: string): string => {
+  let current = value;
+  let previous: string;
+  do {
+    previous = current;
+    current = current.replace(/<[^>]+>/g, '');
+  } while (current !== previous);
+  return current;
+};
 
 /**
  * Parses an uploaded document and extracts its text content and metadata.
@@ -153,15 +170,13 @@ async function odtToText(file: Express.Multer.File): Promise<string> {
   if (!bodyMatch) {
     return '';
   }
-  return bodyMatch[1]
+  const withBreaks = bodyMatch[1]
     .replace(/<\/text:p>/g, '\n')
     .replace(/<\/text:h>/g, '\n')
     .replace(/<text:line-break\/>/g, '\n')
     .replace(/<text:tab\/>/g, '\t')
-    .replace(/<text:s[^>]*\/>/g, ' ')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&(lt|gt);/g, '&$1;')
-    .replace(/&(amp|quot|apos);/g, (match) => decodeOdtTextEntities(match))
+    .replace(/<text:s[^>]*\/>/g, ' ');
+  return decodeOdtTextEntities(stripTagsToFixedPoint(withBreaks))
     .replace(/[ \t]+/g, ' ')
     .replace(/\n[ \t]+/g, '\n')
     .replace(/[ \t]+\n/g, '\n')

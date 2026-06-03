@@ -1,9 +1,23 @@
 import { Constants } from 'librechat-data-provider';
 import type { ParsedServerConfig } from '~/mcp/types';
 
-const escapedMcpDelimiter = Constants.mcp_delimiter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-export const mcpToolPattern = new RegExp(`^.+${escapedMcpDelimiter}.+$`);
+/**
+ * Linear-time check for MCP tool names (`<prefix><mcp_delimiter><suffix>`).
+ * Replaces the prior `new RegExp(\`^.+${'${'}escapedMcpDelimiter${'}'}.+$\`)`
+ * which CodeQL flagged as polynomial: `^.+X.+$` can backtrack on long inputs.
+ *
+ * Exposed as an object with `.test()` to preserve the previous call sites.
+ */
+const mcpDelimiter = Constants.mcp_delimiter;
+export const mcpToolPattern = {
+  test(value: string): boolean {
+    if (typeof value !== 'string') {
+      return false;
+    }
+    const idx = value.indexOf(mcpDelimiter);
+    return idx > 0 && idx + mcpDelimiter.length < value.length;
+  },
+};
 
 /** Whether a server should use MCP OAuth handling. */
 export function isOAuthServer(

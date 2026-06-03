@@ -287,10 +287,41 @@ export const replaceArtifactContent = (
   }
 
   const absoluteIndex = artifact.start + searchStart + relativeIndex;
-  return replaceRange(
+  const replaced = replaceRange(
     originalText,
     absoluteIndex,
     absoluteIndex + originalTrimmed.length,
     updated,
-  ).replace(/\n+(?=```\n:::)/g, '\n');
+  );
+  return collapseNewlinesBeforeArtifactSuffix(replaced);
+};
+
+const ARTIFACT_SUFFIX = '```\n:::';
+
+/**
+ * Collapses runs of `\n` immediately preceding `\`\`\`\n:::` into a single `\n`.
+ * Equivalent to `/\n+(?=\`\`\`\n:::)/g` but implemented with substring scans to
+ * avoid the polynomial-regex surface flagged by CodeQL.
+ */
+const collapseNewlinesBeforeArtifactSuffix = (text: string): string => {
+  let idx = text.indexOf(ARTIFACT_SUFFIX);
+  if (idx === -1) {
+    return text;
+  }
+  const out: string[] = [];
+  let cursor = 0;
+  while (idx !== -1) {
+    let runStart = idx;
+    while (runStart > cursor && text.charCodeAt(runStart - 1) === 10) {
+      runStart--;
+    }
+    out.push(text.slice(cursor, runStart));
+    if (runStart < idx) {
+      out.push('\n');
+    }
+    cursor = idx;
+    idx = text.indexOf(ARTIFACT_SUFFIX, cursor + ARTIFACT_SUFFIX.length);
+  }
+  out.push(text.slice(cursor));
+  return out.join('');
 };

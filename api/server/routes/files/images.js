@@ -46,11 +46,12 @@ router.post('/', async (req, res) => {
     const message = resolveUploadErrorMessage(error);
 
     try {
-      const filepath = path.join(
-        appConfig.paths.imageOutput,
-        req.user.id,
-        path.basename(req.file.filename),
-      );
+      /* Strip path separators from every segment before joining so a malformed
+       * JWT subject or filename cannot escape the per-user image directory.
+       * Closes CodeQL `js/path-injection` (req.user.id flows into path.join). */
+      const safeUserDir = path.basename(String(req.user.id));
+      const safeFilename = path.basename(String(req.file.filename));
+      const filepath = path.join(appConfig.paths.imageOutput, safeUserDir, safeFilename);
       await fs.unlink(filepath);
     } catch (error) {
       logger.error('[/files/images] Error deleting file:', error);

@@ -317,10 +317,17 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-const UNRESOLVED_ENV_VAR_PLACEHOLDER = /\$\{[^}]+\}/;
-
+/**
+ * Detects an unresolved `${VAR}` placeholder via two indexOf scans.
+ * Avoids the ReDoS surface CodeQL infers from `/\$\{[^}]+\}/`.
+ */
 function hasUnresolvedPlaceholder(value: string): boolean {
-  return UNRESOLVED_ENV_VAR_PLACEHOLDER.test(value);
+  const open = value.indexOf('${');
+  if (open === -1) {
+    return false;
+  }
+  const close = value.indexOf('}', open + 2);
+  return close > open + 2;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

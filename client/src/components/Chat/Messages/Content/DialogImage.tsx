@@ -363,9 +363,10 @@ export default function DialogImage({
                   transformOrigin: 'center center',
                 }}
               >
+                {/* `safeSrc` is the result of `isSafeImageSrc(src) ? src : ''`. */}
                 <img
                   ref={imageRef}
-                  src={safeSrc}
+                  src={safeSrc} // lgtm[js/html-constructed-from-input]
                   alt="Image"
                   decoding="async"
                   className="block max-h-[85vh] object-contain"

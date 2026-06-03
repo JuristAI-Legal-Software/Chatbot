@@ -47,17 +47,32 @@ export function shouldUseSecureCookie(): boolean {
   return isProduction && !isLocalhost;
 }
 
-/** Generates an HMAC-based token for OAuth CSRF protection */
+/**
+ * Generates an HMAC-SHA256 *tag* over an OAuth flow identifier for CSRF binding.
+ *
+ * NOTE on CodeQL `js/insufficient-password-hash`: the input here is a
+ * server-generated flow ID, not a user password. HMAC-SHA256 is the correct
+ * primitive for MAC tagging — bcrypt/scrypt/argon2 are not appropriate here
+ * (they're for password storage). Suppression is intentional.
+ */
 export function generateOAuthCsrfToken(flowId: string, secret?: string): string {
   const key = secret || process.env.JWT_SECRET;
   if (!key) {
     throw new Error('JWT_SECRET is required for OAuth CSRF token generation');
   }
+  // lgtm[js/insufficient-password-hash]
   return crypto.createHmac('sha256', key).update(flowId).digest('hex').slice(0, 32);
 }
 
-/** Sets a SameSite=Lax CSRF cookie bound to a specific OAuth flow */
+/**
+ * Sets a SameSite=Lax CSRF cookie bound to a specific OAuth flow.
+ *
+ * CodeQL `js/clear-text-storage-of-sensitive-data`: false positive — the cookie
+ * stores an HMAC tag derived from the flow ID, not a credential. The cookie is
+ * httpOnly + Secure (in prod) + SameSite=Lax, exactly per OWASP CSRF guidance.
+ */
 export function setOAuthCsrfCookie(res: Response, flowId: string, cookiePath: string): void {
+  // lgtm[js/clear-text-storage-of-sensitive-data]
   res.cookie(OAUTH_CSRF_COOKIE, generateOAuthCsrfToken(flowId), {
     httpOnly: true,
     secure: shouldUseSecureCookie(),
@@ -101,8 +116,14 @@ export function setOAuthSession(req: Request, res: Response, next: NextFunction)
   next();
 }
 
-/** Sets a SameSite=Lax session cookie that binds the browser to the authenticated userId */
+/**
+ * Sets a SameSite=Lax session cookie that binds the browser to the authenticated userId.
+ *
+ * CodeQL `js/clear-text-storage-of-sensitive-data`: false positive — same reasoning
+ * as `setOAuthCsrfCookie`. The cookie stores an HMAC tag, not the user ID directly.
+ */
 export function setOAuthSessionCookie(res: Response, userId: string): void {
+  // lgtm[js/clear-text-storage-of-sensitive-data]
   res.cookie(OAUTH_SESSION_COOKIE, generateOAuthCsrfToken(userId), {
     httpOnly: true,
     secure: shouldUseSecureCookie(),

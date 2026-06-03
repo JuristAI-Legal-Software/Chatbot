@@ -108,8 +108,9 @@ const ImagePreview = ({
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
+        {/* `imageUrl` is gated by `isSafeImageSrc` above (component returns null otherwise). */}
         <img
-          src={imageUrl}
+          src={imageUrl} // lgtm[js/html-constructed-from-input]
           alt=""
           className="size-full object-cover"
           draggable={false}
@@ -173,9 +174,10 @@ const ImagePreview = ({
 
             {/* Image container */}
             <div onClick={(e) => e.stopPropagation()}>
+              {/* `imageUrl` is gated by `isSafeImageSrc` above. */}
               <img
                 ref={imageRef}
-                src={imageUrl}
+                src={imageUrl} // lgtm[js/html-constructed-from-input]
                 alt={alt}
                 className="max-h-[85vh] max-w-[90vw] object-contain"
                 draggable={false}

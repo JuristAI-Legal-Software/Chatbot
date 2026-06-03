@@ -73,7 +73,7 @@ const checkMCPCreate = generateCheckAccess({
  * Get all MCP tools available to the user
  * Returns only MCP tools, completely decoupled from regular LibreChat tools
  */
-router.get('/tools', requireJwtAuth, async (req, res) => {
+router.get('/tools', requireJwtAuth, mcpOAuthIpLimiter, mcpOAuthUserLimiter, async (req, res) => {
   return getMCPTools(req, res);
 });
 
@@ -414,37 +414,43 @@ router.get('/:serverName/oauth/callback', mcpOAuthIpLimiter, async (req, res) =>
  * Get OAuth tokens for a completed flow
  * This is primarily for user-level OAuth flows
  */
-router.get('/oauth/tokens/:flowId', requireJwtAuth, async (req, res) => {
-  try {
-    const { flowId } = req.params;
-    const user = req.user;
+router.get(
+  '/oauth/tokens/:flowId',
+  requireJwtAuth,
+  mcpOAuthIpLimiter,
+  mcpOAuthUserLimiter,
+  async (req, res) => {
+    try {
+      const { flowId } = req.params;
+      const user = req.user;
 
-    if (!user?.id) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      if (!user?.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      if (!flowId.startsWith(`${user.id}:`) && !flowId.startsWith('system:')) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const flowsCache = getLogStores(CacheKeys.FLOWS);
+      const flowManager = getFlowStateManager(flowsCache);
+
+      const flowState = await flowManager.getFlowState(flowId, 'mcp_oauth');
+      if (!flowState) {
+        return res.status(404).json({ error: 'Flow not found' });
+      }
+
+      if (flowState.status !== 'COMPLETED') {
+        return res.status(400).json({ error: 'Flow not completed' });
+      }
+
+      res.json({ tokens: flowState.result });
+    } catch (error) {
+      logger.error('[MCP OAuth] Failed to get tokens', error);
+      res.status(500).json({ error: 'Failed to get tokens' });
     }
-
-    if (!flowId.startsWith(`${user.id}:`) && !flowId.startsWith('system:')) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const flowsCache = getLogStores(CacheKeys.FLOWS);
-    const flowManager = getFlowStateManager(flowsCache);
-
-    const flowState = await flowManager.getFlowState(flowId, 'mcp_oauth');
-    if (!flowState) {
-      return res.status(404).json({ error: 'Flow not found' });
-    }
-
-    if (flowState.status !== 'COMPLETED') {
-      return res.status(400).json({ error: 'Flow not completed' });
-    }
-
-    res.json({ tokens: flowState.result });
-  } catch (error) {
-    logger.error('[MCP OAuth] Failed to get tokens', error);
-    res.status(500).json({ error: 'Failed to get tokens' });
-  }
-});
+  },
+);
 
 /**
  * Set CSRF binding cookie for OAuth flows initiated outside of HTTP request/response
@@ -458,22 +464,22 @@ router.post(
   mcpOAuthUserLimiter,
   setOAuthSession,
   async (req, res) => {
-  try {
-    const { serverName } = req.params;
-    const user = req.user;
+    try {
+      const { serverName } = req.params;
+      const user = req.user;
 
-    if (!user?.id) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      if (!user?.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      const flowId = MCPOAuthHandler.generateFlowId(user.id, serverName);
+      setOAuthCsrfCookie(res, flowId, OAUTH_CSRF_COOKIE_PATH);
+
+      res.json({ success: true });
+    } catch (error) {
+      logger.error('[MCP OAuth] Failed to set CSRF binding cookie', error);
+      res.status(500).json({ error: 'Failed to bind OAuth flow' });
     }
-
-    const flowId = MCPOAuthHandler.generateFlowId(user.id, serverName);
-    setOAuthCsrfCookie(res, flowId, OAUTH_CSRF_COOKIE_PATH);
-
-    res.json({ success: true });
-  } catch (error) {
-    logger.error('[MCP OAuth] Failed to set CSRF binding cookie', error);
-    res.status(500).json({ error: 'Failed to bind OAuth flow' });
-  }
   },
 );
 
@@ -481,38 +487,44 @@ router.post(
  * Check OAuth flow status
  * This endpoint can be used to poll the status of an OAuth flow
  */
-router.get('/oauth/status/:flowId', requireJwtAuth, async (req, res) => {
-  try {
-    const { flowId } = req.params;
-    const user = req.user;
+router.get(
+  '/oauth/status/:flowId',
+  requireJwtAuth,
+  mcpOAuthIpLimiter,
+  mcpOAuthUserLimiter,
+  async (req, res) => {
+    try {
+      const { flowId } = req.params;
+      const user = req.user;
 
-    if (!user?.id) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      if (!user?.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      if (!flowId.startsWith(`${user.id}:`) && !flowId.startsWith('system:')) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const flowsCache = getLogStores(CacheKeys.FLOWS);
+      const flowManager = getFlowStateManager(flowsCache);
+
+      const flowState = await flowManager.getFlowState(flowId, 'mcp_oauth');
+      if (!flowState) {
+        return res.status(404).json({ error: 'Flow not found' });
+      }
+
+      res.json({
+        status: flowState.status,
+        completed: flowState.status === 'COMPLETED',
+        failed: flowState.status === 'FAILED',
+        error: flowState.error,
+      });
+    } catch (error) {
+      logger.error('[MCP OAuth] Failed to get flow status', error);
+      res.status(500).json({ error: 'Failed to get flow status' });
     }
-
-    if (!flowId.startsWith(`${user.id}:`) && !flowId.startsWith('system:')) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const flowsCache = getLogStores(CacheKeys.FLOWS);
-    const flowManager = getFlowStateManager(flowsCache);
-
-    const flowState = await flowManager.getFlowState(flowId, 'mcp_oauth');
-    if (!flowState) {
-      return res.status(404).json({ error: 'Flow not found' });
-    }
-
-    res.json({
-      status: flowState.status,
-      completed: flowState.status === 'COMPLETED',
-      failed: flowState.status === 'FAILED',
-      error: flowState.error,
-    });
-  } catch (error) {
-    logger.error('[MCP OAuth] Failed to get flow status', error);
-    res.status(500).json({ error: 'Failed to get flow status' });
-  }
-});
+  },
+);
 
 /**
  * Cancel OAuth flow
@@ -524,41 +536,41 @@ router.post(
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
   async (req, res) => {
-  try {
-    const { serverName } = req.params;
-    const user = req.user;
+    try {
+      const { serverName } = req.params;
+      const user = req.user;
 
-    if (!user?.id) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
+      if (!user?.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
 
-    logger.info(`[MCP OAuth Cancel] Cancelling OAuth flow for ${serverName} by user ${user.id}`);
+      logger.info(`[MCP OAuth Cancel] Cancelling OAuth flow for ${serverName} by user ${user.id}`);
 
-    const flowsCache = getLogStores(CacheKeys.FLOWS);
-    const flowManager = getFlowStateManager(flowsCache);
-    const flowId = MCPOAuthHandler.generateFlowId(user.id, serverName);
-    const flowState = await flowManager.getFlowState(flowId, 'mcp_oauth');
+      const flowsCache = getLogStores(CacheKeys.FLOWS);
+      const flowManager = getFlowStateManager(flowsCache);
+      const flowId = MCPOAuthHandler.generateFlowId(user.id, serverName);
+      const flowState = await flowManager.getFlowState(flowId, 'mcp_oauth');
 
-    if (!flowState) {
-      logger.debug(`[MCP OAuth Cancel] No active flow found for ${serverName}`);
-      return res.json({
+      if (!flowState) {
+        logger.debug(`[MCP OAuth Cancel] No active flow found for ${serverName}`);
+        return res.json({
+          success: true,
+          message: 'No active OAuth flow to cancel',
+        });
+      }
+
+      await flowManager.failFlow(flowId, 'mcp_oauth', 'User cancelled OAuth flow');
+
+      logger.info(`[MCP OAuth Cancel] Successfully cancelled OAuth flow for ${serverName}`);
+
+      res.json({
         success: true,
-        message: 'No active OAuth flow to cancel',
+        message: `OAuth flow for ${serverName} cancelled successfully`,
       });
+    } catch (error) {
+      logger.error('[MCP OAuth Cancel] Failed to cancel OAuth flow', error);
+      res.status(500).json({ error: 'Failed to cancel OAuth flow' });
     }
-
-    await flowManager.failFlow(flowId, 'mcp_oauth', 'User cancelled OAuth flow');
-
-    logger.info(`[MCP OAuth Cancel] Successfully cancelled OAuth flow for ${serverName}`);
-
-    res.json({
-      success: true,
-      message: `OAuth flow for ${serverName} cancelled successfully`,
-    });
-  } catch (error) {
-    logger.error('[MCP OAuth Cancel] Failed to cancel OAuth flow', error);
-    res.status(500).json({ error: 'Failed to cancel OAuth flow' });
-  }
   },
 );
 

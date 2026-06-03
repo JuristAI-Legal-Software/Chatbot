@@ -62,7 +62,7 @@ if (allowSharedLinks) {
 /**
  * Shared links
  */
-router.get('/', requireJwtAuth, async (req, res) => {
+router.get('/', requireJwtAuth, shareIpLimiter, shareUserLimiter, async (req, res) => {
   try {
     const params = {
       pageParam: req.query.cursor,
@@ -99,46 +99,58 @@ router.get('/', requireJwtAuth, async (req, res) => {
   }
 });
 
-router.get('/link/:conversationId', requireJwtAuth, async (req, res) => {
-  try {
-    const share = await getSharedLink(req.user.id, req.params.conversationId);
+router.get(
+  '/link/:conversationId',
+  requireJwtAuth,
+  shareIpLimiter,
+  shareUserLimiter,
+  async (req, res) => {
+    try {
+      const share = await getSharedLink(req.user.id, req.params.conversationId);
 
-    return res.status(200).json({
-      success: share.success,
-      shareId: share.shareId,
-      targetMessageId: share.targetMessageId,
-      conversationId: req.params.conversationId,
-    });
-  } catch (error) {
-    logger.error('Error getting shared link:', error);
-    res.status(500).json({ message: 'Error getting shared link' });
-  }
-});
-
-router.post('/:conversationId', requireJwtAuth, shareIpLimiter, shareUserLimiter, async (req, res) => {
-  try {
-    const { targetMessageId } = req.body;
-    const expiredAt = await resolveSharedLinkExpiration(req, req.params.conversationId);
-    if (expiredAt != null && !isActiveExpirationDate(expiredAt)) {
-      return res.status(404).end();
+      return res.status(200).json({
+        success: share.success,
+        shareId: share.shareId,
+        targetMessageId: share.targetMessageId,
+        conversationId: req.params.conversationId,
+      });
+    } catch (error) {
+      logger.error('Error getting shared link:', error);
+      res.status(500).json({ message: 'Error getting shared link' });
     }
+  },
+);
 
-    const created = await createSharedLink(
-      req.user.id,
-      req.params.conversationId,
-      targetMessageId,
-      expiredAt,
-    );
-    if (created) {
-      res.status(200).json(created);
-    } else {
-      res.status(404).end();
+router.post(
+  '/:conversationId',
+  requireJwtAuth,
+  shareIpLimiter,
+  shareUserLimiter,
+  async (req, res) => {
+    try {
+      const { targetMessageId } = req.body;
+      const expiredAt = await resolveSharedLinkExpiration(req, req.params.conversationId);
+      if (expiredAt != null && !isActiveExpirationDate(expiredAt)) {
+        return res.status(404).end();
+      }
+
+      const created = await createSharedLink(
+        req.user.id,
+        req.params.conversationId,
+        targetMessageId,
+        expiredAt,
+      );
+      if (created) {
+        res.status(200).json(created);
+      } else {
+        res.status(404).end();
+      }
+    } catch (error) {
+      logger.error('Error creating shared link:', error);
+      res.status(500).json({ message: 'Error creating shared link' });
     }
-  } catch (error) {
-    logger.error('Error creating shared link:', error);
-    res.status(500).json({ message: 'Error creating shared link' });
-  }
-});
+  },
+);
 
 router.patch('/:shareId', requireJwtAuth, shareIpLimiter, shareUserLimiter, async (req, res) => {
   try {

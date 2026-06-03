@@ -11,6 +11,18 @@ import type * as t from '~/types';
 import { sanitizeModelName, constructAzureURL } from '~/utils/azure';
 import { isEnabled } from '~/utils/common';
 
+/**
+ * Tests whether a model name is a `gpt-4o*search*` variant.
+ * Implemented as two indexOf checks to avoid the ReDoS surface of `/gpt-4o.*search/`.
+ */
+function isGpt4oSearchModel(model: string): boolean {
+  const gpt4oIdx = model.indexOf('gpt-4o');
+  if (gpt4oIdx === -1) {
+    return false;
+  }
+  return model.indexOf('search', gpt4oIdx + 6) !== -1;
+}
+
 type OpenAILLMConfig = Omit<Partial<t.OAIClientOptions>, 'verbosity'> &
   Omit<Partial<t.OpenAIParameters>, 'verbosity'> &
   Omit<Partial<AzureOpenAIInput>, 'verbosity'> & {
@@ -520,7 +532,7 @@ export function getOpenAILLMConfig({
         delete llmConfig[param as keyof t.OAIClientOptions];
       }
     });
-  } else if (modelOptions.model && /gpt-4o.*search/.test(modelOptions.model as string)) {
+  } else if (modelOptions.model && isGpt4oSearchModel(modelOptions.model as string)) {
     /**
      * Note: OpenAI Web Search models do not support any known parameters besides `max_tokens`
      */

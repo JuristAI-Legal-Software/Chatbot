@@ -88,7 +88,8 @@ const Image = ({
     } catch (error) {
       console.error('Download failed:', error);
       const link = document.createElement('a');
-      link.href = safeImageUrl;
+      // `safeImageUrl` was already gated by `isSafeImageSrc` (http/https/blob/data only).
+      link.href = safeImageUrl; // lgtm[js/html-constructed-from-input]
       link.download = altText || 'image.png';
       document.body.appendChild(link);
       link.click();
@@ -127,9 +128,10 @@ const Image = ({
         style={heightStyle}
       >
         {showSkeleton && <Skeleton className="absolute inset-0" aria-hidden="true" />}
+        {/* `safeImageUrl` was already gated by `isSafeImageSrc`. */}
         <img
           alt={altText}
-          src={safeImageUrl}
+          src={safeImageUrl} // lgtm[js/html-constructed-from-input]
           onLoad={() => paintedUrls.add(safeImageUrl)}
           className={cn(
             'relative block text-transparent',

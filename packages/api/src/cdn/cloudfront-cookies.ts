@@ -10,6 +10,15 @@ import { getCloudFrontConfig } from './cloudfront';
 
 const DEFAULT_COOKIE_EXPIRY = 1800;
 
+/** Linear-time trailing-slash stripper. Avoids ReDoS surface of `\/+$`. */
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end--;
+  }
+  return end === value.length ? value : value.slice(0, end);
+}
+
 const REQUIRED_CF_COOKIES = [
   'CloudFront-Policy',
   'CloudFront-Signature',
@@ -438,7 +447,7 @@ export function setCloudFrontCookies(
     const expiresAtMs = expiresAtEpoch * 1000;
     const expiresAt = new Date(expiresAtMs);
 
-    const cleanDomain = config.domain.replace(/\/+$/, '');
+    const cleanDomain = stripTrailingSlashes(config.domain);
     const includeRegionInPath = config.includeRegionInPath ?? false;
     const effectiveScope = getEffectiveCloudFrontScope(scope, includeRegionInPath);
     const policyScopes = getPolicyScopes(cleanDomain, effectiveScope, includeRegionInPath);

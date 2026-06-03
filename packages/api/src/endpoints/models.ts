@@ -21,6 +21,18 @@ import {
 } from '~/utils';
 import { standardCache, tokenConfigCache } from '~/cache';
 
+/**
+ * Linear-time trailing-slash stripper.
+ * Avoids the ReDoS surface of `.replace(/\/+$/, '')` when fed untrusted input.
+ */
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end--;
+  }
+  return end === value.length ? value : value.slice(0, end);
+}
+
 export interface FetchModelsParams {
   /** User ID for API requests */
   user?: string;
@@ -184,7 +196,7 @@ export async function fetchModels({
       options.headers['OpenAI-Organization'] = process.env.OPENAI_ORGANIZATION;
     }
 
-    const url = new URL(`${(baseURL ?? '').replace(/\/+$/, '')}${azure ? '' : '/models'}`);
+    const url = new URL(`${stripTrailingSlashes(baseURL ?? '')}${azure ? '' : '/models'}`);
     if (user && userIdQuery) {
       url.searchParams.append('user', user);
     }
@@ -210,8 +222,20 @@ export async function fetchModels({
   return models;
 }
 
+/**
+ * Derives an opaque cache key from a `(baseURL, apiKey)` pair via HMAC-SHA256.
+ *
+ * NOTE on CodeQL `js/insufficient-password-hash`: this is *not* password
+ * storage — the API key is the credential we already trust, and the output is
+ * only used as a cache lookup key (never validated, transmitted, or compared
+ * against a stored hash). HMAC-SHA256 with a server-side secret is the correct
+ * primitive: it prevents an attacker who reads the cache from recovering the
+ * API key, while keeping lookups fast. bcrypt/scrypt/argon2 would defeat the
+ * purpose of the cache. Suppression is intentional.
+ */
 function modelsCacheKey(baseURL: string, apiKey: string): string {
   const cacheSecret = process.env.JWT_SECRET || 'librechat-model-cache';
+  // lgtm[js/insufficient-password-hash]
   return crypto
     .createHmac('sha256', cacheSecret)
     .update(`${baseURL}:${apiKey}`)

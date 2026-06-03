@@ -28,6 +28,24 @@ import {
   resolveStoredS3Key,
 } from '~/storage/s3/crud';
 
+/** Linear-time trailing-slash stripper. Avoids ReDoS surface of `\/+$`. */
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end--;
+  }
+  return end === value.length ? value : value.slice(0, end);
+}
+
+/** Linear-time leading-slash stripper. Avoids ReDoS surface of `^\/+`. */
+function stripLeadingSlashes(value: string): string {
+  let start = 0;
+  while (start < value.length && value.charCodeAt(start) === 47) {
+    start++;
+  }
+  return start === 0 ? value : value.slice(start);
+}
+
 let _cloudFrontClient: CloudFrontClient | null = null;
 
 function getOrCreateCloudFrontClient(): CloudFrontClient {
@@ -82,8 +100,8 @@ function buildCloudFrontUrl(s3Key: string): string {
   if (!config?.domain) {
     throw new Error('[buildCloudFrontUrl] CloudFront not initialized.');
   }
-  const cleanDomain = config.domain.replace(/\/+$/, '');
-  const cleanKey = s3Key.replace(/^\/+/, '');
+  const cleanDomain = stripTrailingSlashes(config.domain);
+  const cleanKey = stripLeadingSlashes(s3Key);
   return `${cleanDomain}/${cleanKey}`;
 }
 
