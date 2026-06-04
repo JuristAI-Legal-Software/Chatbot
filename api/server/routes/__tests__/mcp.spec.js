@@ -138,6 +138,7 @@ jest.mock('~/server/middleware', () => ({
   createMCPOAuthLimiters: jest.fn(() => ({
     mcpOAuthIpLimiter: (req, res, next) => next(),
     mcpOAuthUserLimiter: (req, res, next) => next(),
+    mcpOAuthCallbackLimiter: (req, res, next) => next(),
   })),
 }));
 
