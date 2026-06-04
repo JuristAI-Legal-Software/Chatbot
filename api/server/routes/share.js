@@ -41,7 +41,9 @@ if (allowSharedLinks) {
   const allowSharedLinksPublic = isEnabled(process.env.ALLOW_SHARED_LINKS_PUBLIC);
   router.get(
     '/:shareId',
+    shareIpLimiter,
     allowSharedLinksPublic ? (req, res, next) => next() : requireJwtAuth,
+    allowSharedLinksPublic ? (req, res, next) => next() : shareUserLimiter,
     async (req, res) => {
       try {
         const share = await getSharedMessages(req.params.shareId);

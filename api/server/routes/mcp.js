@@ -53,7 +53,8 @@ const { getLogStores } = require('~/cache');
 const db = require('~/models');
 
 const router = Router();
-const { mcpOAuthIpLimiter, mcpOAuthUserLimiter } = createMCPOAuthLimiters();
+const { mcpOAuthIpLimiter, mcpOAuthUserLimiter, mcpOAuthCallbackLimiter } =
+  createMCPOAuthLimiters();
 
 const OAUTH_CSRF_COOKIE_PATH = '/api/mcp';
 const mcpProtectedRoute = [requireJwtAuth, mcpOAuthIpLimiter, mcpOAuthUserLimiter];
@@ -153,11 +154,15 @@ router.get(
  * OAuth callback handler
  * This handles the OAuth callback after the user has authorized the application
  */
-router.get('/:serverName/oauth/callback', mcpOAuthIpLimiter, async (req, res) => {
-  const basePath = getBasePath();
-  try {
-    const { serverName } = req.params;
-    const { code, state, error: oauthError } = req.query;
+router.get(
+  '/:serverName/oauth/callback',
+  mcpOAuthIpLimiter,
+  mcpOAuthCallbackLimiter,
+  async (req, res) => {
+    const basePath = getBasePath();
+    try {
+      const { serverName } = req.params;
+      const { code, state, error: oauthError } = req.query;
 
     logger.debug('[MCP OAuth] Callback received', {
       serverName,
@@ -405,11 +410,12 @@ router.get('/:serverName/oauth/callback', mcpOAuthIpLimiter, async (req, res) =>
     /** Redirect to success page with flowId and serverName */
     const redirectUrl = `${basePath}/oauth/success?serverName=${encodeURIComponent(serverName)}`;
     res.redirect(redirectUrl);
-  } catch (error) {
-    logger.error('[MCP OAuth] OAuth callback error', error);
-    res.redirect(`${basePath}/oauth/error?error=callback_failed`);
-  }
-});
+    } catch (error) {
+      logger.error('[MCP OAuth] OAuth callback error', error);
+      res.redirect(`${basePath}/oauth/error?error=callback_failed`);
+    }
+  },
+);
 
 /**
  * Get OAuth tokens for a completed flow

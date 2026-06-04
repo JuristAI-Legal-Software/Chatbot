@@ -24,7 +24,6 @@ const domains = {
 };
 
 router.use(logHeaders);
-router.use(loginLimiter);
 
 const oauthHandler = createOAuthHandler();
 
@@ -43,6 +42,7 @@ router.get('/error', (req, res) => {
  */
 router.get(
   '/google',
+  loginLimiter,
   passport.authenticate('google', {
     scope: ['openid', 'profile', 'email'],
     session: false,
@@ -51,6 +51,7 @@ router.get(
 
 router.get(
   '/google/callback',
+  loginLimiter,
   passport.authenticate('google', {
     failureRedirect: `${domains.client}/oauth/error`,
     failureMessage: true,
@@ -67,6 +68,7 @@ router.get(
  */
 router.get(
   '/facebook',
+  loginLimiter,
   passport.authenticate('facebook', {
     scope: ['public_profile'],
     profileFields: ['id', 'email', 'name'],
@@ -76,6 +78,7 @@ router.get(
 
 router.get(
   '/facebook/callback',
+  loginLimiter,
   passport.authenticate('facebook', {
     failureRedirect: `${domains.client}/oauth/error`,
     failureMessage: true,
@@ -91,7 +94,7 @@ router.get(
 /**
  * OpenID Routes
  */
-router.get('/openid', (req, res, next) => {
+router.get('/openid', loginLimiter, (req, res, next) => {
   return passport.authenticate('openid', {
     session: false,
     state: randomState(),
@@ -100,6 +103,7 @@ router.get('/openid', (req, res, next) => {
 
 router.get(
   '/openid/callback',
+  loginLimiter,
   passport.authenticate('openid', {
     failureRedirect: `${domains.client}/oauth/error`,
     failureMessage: true,
@@ -115,6 +119,7 @@ router.get(
  */
 router.get(
   '/github',
+  loginLimiter,
   passport.authenticate('github', {
     scope: ['user:email', 'read:user'],
     session: false,
@@ -123,6 +128,7 @@ router.get(
 
 router.get(
   '/github/callback',
+  loginLimiter,
   passport.authenticate('github', {
     failureRedirect: `${domains.client}/oauth/error`,
     failureMessage: true,
@@ -139,6 +145,7 @@ router.get(
  */
 router.get(
   '/discord',
+  loginLimiter,
   passport.authenticate('discord', {
     scope: ['identify', 'email'],
     session: false,
@@ -147,6 +154,7 @@ router.get(
 
 router.get(
   '/discord/callback',
+  loginLimiter,
   passport.authenticate('discord', {
     failureRedirect: `${domains.client}/oauth/error`,
     failureMessage: true,
@@ -163,6 +171,7 @@ router.get(
  */
 router.get(
   '/apple',
+  loginLimiter,
   passport.authenticate('apple', {
     session: false,
   }),
@@ -170,6 +179,7 @@ router.get(
 
 router.post(
   '/apple/callback',
+  loginLimiter,
   passport.authenticate('apple', {
     failureRedirect: `${domains.client}/oauth/error`,
     failureMessage: true,
@@ -185,6 +195,7 @@ router.post(
  */
 router.get(
   '/saml',
+  loginLimiter,
   passport.authenticate('saml', {
     session: false,
   }),
@@ -192,6 +203,7 @@ router.get(
 
 router.post(
   '/saml/callback',
+  loginLimiter,
   passport.authenticate('saml', {
     failureRedirect: `${domains.client}/oauth/error`,
     failureMessage: true,

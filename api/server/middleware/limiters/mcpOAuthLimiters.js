@@ -69,7 +69,20 @@ const createMCPOAuthLimiters = () => {
     store: limiterCache('mcp_oauth_user_limiter'),
   });
 
-  return { mcpOAuthIpLimiter, mcpOAuthUserLimiter };
+  const mcpOAuthCallbackLimiter = rateLimit({
+    windowMs: mcpOAuthIpWindowMs,
+    max: mcpOAuthIpMax,
+    handler: createMCPOAuthHandler(),
+    keyGenerator: function (req) {
+      if (typeof req.query?.state === 'string' && req.query.state.length > 0) {
+        return req.query.state;
+      }
+      return removePorts(req);
+    },
+    store: limiterCache('mcp_oauth_callback_limiter'),
+  });
+
+  return { mcpOAuthIpLimiter, mcpOAuthUserLimiter, mcpOAuthCallbackLimiter };
 };
 
 module.exports = { createMCPOAuthLimiters };
