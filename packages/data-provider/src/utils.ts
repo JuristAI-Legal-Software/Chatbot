@@ -46,6 +46,14 @@ export function extractEnvVariable(value: string) {
   }
 
   const trimmed = value.trim();
+  const whitespaceSeparatedTokens = trimmed.split(/\s+/);
+  const isPlaceholderList =
+    whitespaceSeparatedTokens.length > 1 &&
+    whitespaceSeparatedTokens.every((token) => envVarRegex.test(token));
+
+  if (isPlaceholderList) {
+    return trimmed;
+  }
 
   const singleMatch = trimmed.match(envVarRegex);
   if (singleMatch) {
