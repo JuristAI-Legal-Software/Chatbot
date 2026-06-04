@@ -56,6 +56,7 @@ const router = Router();
 const { mcpOAuthIpLimiter, mcpOAuthUserLimiter } = createMCPOAuthLimiters();
 
 const OAUTH_CSRF_COOKIE_PATH = '/api/mcp';
+const mcpProtectedRoute = [requireJwtAuth, mcpOAuthIpLimiter, mcpOAuthUserLimiter];
 
 const checkMCPUsePermissions = generateCheckAccess({
   permissionType: PermissionTypes.MCP_SERVERS,
@@ -661,7 +662,7 @@ router.post(
  * Get connection status for all MCP servers
  * This endpoint returns all app level and user-scoped connection statuses from MCPManager without disconnecting idle connections
  */
-router.get('/connection/status', requireJwtAuth, async (req, res) => {
+router.get('/connection/status', ...mcpProtectedRoute, async (req, res) => {
   try {
     const user = req.user;
 
@@ -710,7 +711,7 @@ router.get('/connection/status', requireJwtAuth, async (req, res) => {
  * Get connection status for a single MCP server
  * This endpoint returns the connection status for a specific server for a given user
  */
-router.get('/connection/status/:serverName', requireJwtAuth, async (req, res) => {
+router.get('/connection/status/:serverName', ...mcpProtectedRoute, async (req, res) => {
   try {
     const user = req.user;
     const { serverName } = req.params;
@@ -758,7 +759,11 @@ router.get('/connection/status/:serverName', requireJwtAuth, async (req, res) =>
  * Check which authentication values exist for a specific MCP server
  * This endpoint returns only boolean flags indicating if values are set, not the actual values
  */
-router.get('/:serverName/auth-values', requireJwtAuth, checkMCPUsePermissions, async (req, res) => {
+router.get(
+  '/:serverName/auth-values',
+  ...mcpProtectedRoute,
+  checkMCPUsePermissions,
+  async (req, res) => {
   try {
     const { serverName } = req.params;
     const user = req.user;
@@ -809,7 +814,8 @@ router.get('/:serverName/auth-values', requireJwtAuth, checkMCPUsePermissions, a
     );
     res.status(500).json({ error: 'Failed to check auth value flags' });
   }
-});
+  },
+);
 
 async function getOAuthHeaders(serverName, userId, configServers) {
   const serverConfig = await getMCPServersRegistry().getServerConfig(
@@ -833,7 +839,7 @@ MCP Server CRUD Routes (User-Managed MCP Servers)
  * @param {string} [req.query.search] - Search query for title/description
  * @returns {MCPServerListResponse} 200 - Success response - application/json
  */
-router.get('/servers', requireJwtAuth, checkMCPUsePermissions, getMCPServersList);
+router.get('/servers', ...mcpProtectedRoute, checkMCPUsePermissions, getMCPServersList);
 
 /**
  * Create a new MCP server
@@ -841,7 +847,7 @@ router.get('/servers', requireJwtAuth, checkMCPUsePermissions, getMCPServersList
  * @param {MCPServerCreateParams} req.body - The MCP server creation parameters.
  * @returns {MCPServer} 201 - Success response - application/json
  */
-router.post('/servers', requireJwtAuth, checkMCPCreate, createMCPServerController);
+router.post('/servers', ...mcpProtectedRoute, checkMCPCreate, createMCPServerController);
 
 /**
  * Get single MCP server by ID
@@ -851,7 +857,7 @@ router.post('/servers', requireJwtAuth, checkMCPCreate, createMCPServerControlle
  */
 router.get(
   '/servers/:serverName',
-  requireJwtAuth,
+  ...mcpProtectedRoute,
   checkMCPUsePermissions,
   canAccessMCPServerResource({
     requiredPermission: PermissionBits.VIEW,
@@ -869,7 +875,7 @@ router.get(
  */
 router.patch(
   '/servers/:serverName',
-  requireJwtAuth,
+  ...mcpProtectedRoute,
   checkMCPCreate,
   canAccessMCPServerResource({
     requiredPermission: PermissionBits.EDIT,
@@ -886,7 +892,7 @@ router.patch(
  */
 router.delete(
   '/servers/:serverName',
-  requireJwtAuth,
+  ...mcpProtectedRoute,
   checkMCPCreate,
   canAccessMCPServerResource({
     requiredPermission: PermissionBits.DELETE,

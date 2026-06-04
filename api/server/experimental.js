@@ -23,6 +23,7 @@ const {
 } = require('@librechat/api');
 const { connectDb, indexSync } = require('~/db');
 const initializeOAuthReconnectManager = require('./services/initializeOAuthReconnectManager');
+const { capabilityContextMiddleware } = require('./middleware/roles/capabilities');
 const createValidateImageRequest = require('./middleware/validateImageRequest');
 const { startExpiredFileSweep } = require('./services/Files/process');
 const { jwtLogin, ldapLogin, passportLogin } = require('~/strategies');
@@ -370,9 +371,12 @@ if (cluster.isMaster) {
       await configureSocialLogins(app);
     }
 
+    /** Match the main server: capability checks rely on a per-request cache before routes run. */
+    app.use(capabilityContextMiddleware);
+
     /** Routes */
-    app.use('/oauth', routes.oauth);
-    app.use('/api/auth', routes.auth);
+    app.use('/oauth', preAuthTenantMiddleware, routes.oauth);
+    app.use('/api/auth', preAuthTenantMiddleware, routes.auth);
     app.use('/api/admin', routes.adminAuth);
     app.use('/api/actions', routes.actions);
     app.use('/api/keys', routes.keys);
@@ -392,7 +396,7 @@ if (cluster.isMaster) {
     app.use('/api/assistants', routes.assistants);
     app.use('/api/files', await routes.files.initialize());
     app.use('/images/', createValidateImageRequest(appConfig.secureImageLinks), routes.staticRoute);
-    app.use('/api/share', routes.share);
+    app.use('/api/share', preAuthTenantMiddleware, routes.share);
     app.use('/api/roles', routes.roles);
     app.use('/api/agents', routes.agents);
     app.use('/api/banner', routes.banner);

@@ -371,14 +371,10 @@ const PREVIEW_LAZY_SWEEP_CUTOFF_MS = 2 * 60 * 1000;
  */
 router.get('/:file_id/preview', fileAccess, async (req, res) => {
   try {
-    /* `isUUID.safeParse` rejects anything that isn't a canonical UUID, so
-     * `file_id` cannot carry path-traversal segments by the time it reaches
-     * any storage call below. Closes CodeQL `js/path-injection`. */
-    const fileIdParse = isUUID.safeParse(req.params.file_id);
-    if (!fileIdParse.success) {
-      return res.status(400).json({ error: 'Invalid file_id' });
-    }
-    const file_id = fileIdParse.data;
+    /* `fileAccess` already resolved the authorized DB record, so use its
+     * canonical id for follow-up reads/writes rather than re-validating the
+     * raw route param and accidentally rejecting legacy/non-UUID records. */
+    const file_id = req.fileAccess.file.file_id;
     /* `fileAccess` already fetched the record (sans `text`, the default
      * projection drops it). Reuse for the lifecycle check; only re-fetch
      * with `text` on a terminal ready response — the typical lifecycle
