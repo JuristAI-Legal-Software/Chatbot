@@ -1,6 +1,6 @@
 import type { Model, Types } from 'mongoose';
 import type { IAgentCategory } from '~/types';
-import { tenantSafeBulkWrite } from '~/utils/tenantBulkWrite';
+import { tenantSafeBulkWrite, type TenantBulkWriteResult } from '~/utils/tenantBulkWrite';
 
 export function createAgentCategoryMethods(mongoose: typeof import('mongoose')) {
   /**
@@ -57,7 +57,7 @@ export function createAgentCategoryMethods(mongoose: typeof import('mongoose')) 
       order?: number;
       custom?: boolean;
     }>,
-  ): Promise<import('mongoose').mongo.BulkWriteResult> {
+  ): Promise<TenantBulkWriteResult> {
     const AgentCategory = mongoose.models.AgentCategory as Model<IAgentCategory>;
 
     const operations = categories.map((category, index) => ({

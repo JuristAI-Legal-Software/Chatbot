@@ -1,9 +1,10 @@
 import type { AnyBulkWriteOperation, Model, MongooseBulkWriteOptions } from 'mongoose';
-import type { BulkWriteResult } from 'mongodb';
 import { getTenantId, SYSTEM_TENANT_ID } from '~/config/tenantContext';
 import logger from '~/config/winston';
 
 let _strictMode: boolean | undefined;
+
+export type TenantBulkWriteResult = Awaited<ReturnType<Model<unknown>['bulkWrite']>>;
 
 function isStrict(): boolean {
   return (_strictMode ??= process.env.TENANT_ISOLATION_STRICT === 'true');
@@ -40,7 +41,7 @@ export async function tenantSafeBulkWrite<T>(
   model: Model<T>,
   ops: AnyBulkWriteOperation[],
   options?: MongooseBulkWriteOptions,
-): Promise<BulkWriteResult> {
+): Promise<TenantBulkWriteResult> {
   const tenantId = getTenantId();
 
   // Strip tenantId from update documents unconditionally — application code
@@ -73,7 +74,7 @@ const EMPTY_BULK_RESULT = Object.freeze({
   upsertedCount: 0,
   upsertedIds: {},
   insertedIds: {},
-}) as unknown as BulkWriteResult;
+}) as TenantBulkWriteResult;
 
 /** Strips tenantId from update documents. Returns null if the op becomes empty. */
 function sanitizeBulkOp(op: AnyBulkWriteOperation): AnyBulkWriteOperation | null {
