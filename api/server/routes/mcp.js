@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const { logger, getTenantId, tenantStorage } = require('@librechat/data-schemas');
+const { Providers } = require('@librechat/agents');
 const {
   CacheKeys,
   Constants,
@@ -39,6 +40,7 @@ const {
 const {
   getServerConnectionStatus,
   resolveConfigServers,
+  resolveAllMcpConfigs,
   getMCPSetupData,
 } = require('~/server/services/MCP');
 const {
@@ -49,6 +51,7 @@ const {
 const { getUserPluginAuthValue } = require('~/server/services/PluginService');
 const { updateMCPServerTools } = require('~/server/services/Config/mcp');
 const { reinitMCPServer } = require('~/server/services/Tools/mcp');
+const { getGraphApiToken } = require('~/server/services/GraphTokenService');
 const { getLogStores } = require('~/cache');
 const db = require('~/models');
 
@@ -71,12 +74,206 @@ const checkMCPCreate = generateCheckAccess({
   getRoleByName: db.getRoleByName,
 });
 
+function isE2EMCPExecutionEnabled() {
+  return process.env.NODE_ENV === 'CI' && process.env.E2E_ENABLE_MCP_E2E_EXEC === 'true';
+}
+
+function parseE2EBoolean(value, defaultValue = false) {
+  if (value == null) {
+    return defaultValue;
+  }
+  return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+}
+
+function classifyToolSafety(toolName) {
+  if (/^(get|list|search|find|fetch|read|lookup|query|check|validate|preview|inspect|resolve|count|status)/i.test(toolName)) {
+    return 'read';
+  }
+
+  if (/^(create|update|delete|remove|add|set|submit|send|write|store|save|upload|cancel|approve|reject|archive|rename|publish|sync|trigger|run|execute)/i.test(toolName)) {
+    return 'mutation';
+  }
+
+  return 'unknown';
+}
+
+function classifyExecutionError(error) {
+  const message = error?.message ?? String(error);
+  if (/OAuth|authentication|401|Unauthorized/i.test(message)) {
+    return 'oauth_required';
+  }
+  if (/required user-provided variable|not set/i.test(message)) {
+    return 'missing_user_vars';
+  }
+  if (/validation|invalid|required/i.test(message)) {
+    return 'validation_error';
+  }
+  return 'execution_error';
+}
+
 /**
  * Get all MCP tools available to the user
  * Returns only MCP tools, completely decoupled from regular LibreChat tools
  */
 router.get('/tools', requireJwtAuth, mcpOAuthIpLimiter, mcpOAuthUserLimiter, async (req, res) => {
   return getMCPTools(req, res);
+});
+
+router.get('/e2e/inventory', ...mcpProtectedRoute, async (req, res) => {
+  if (!isE2EMCPExecutionEnabled()) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  try {
+    const user = createSafeUser(req.user);
+    if (!user.id) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const exactNames = String(req.query.serverNames ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const matchPattern = String(req.query.serverMatch ?? '').trim();
+    const serverRegex = matchPattern ? new RegExp(matchPattern, 'i') : null;
+    const mcpConfig = await resolveAllMcpConfigs(user.id, req.user);
+    const { appConnections, userConnections, oauthServers } = await getMCPSetupData(user.id, {
+      role: req.user.role,
+      tenantId: getTenantId(),
+    });
+    const mcpManager = getMCPManager();
+    const servers = {};
+
+    for (const [serverName, serverConfig] of Object.entries(mcpConfig)) {
+      if (exactNames.length > 0 && !exactNames.includes(serverName)) {
+        continue;
+      }
+      if (serverRegex && !serverRegex.test(serverName)) {
+        continue;
+      }
+
+      const toolFunctions = (await mcpManager.getServerToolFunctions(user.id, serverName)) ?? {};
+      servers[serverName] = {
+        connection: await getServerConnectionStatus(
+          user.id,
+          serverName,
+          serverConfig,
+          appConnections,
+          userConnections,
+          oauthServers,
+        ),
+        requiresOAuth: oauthServers.has(serverName),
+        customUserVars: Object.keys(serverConfig.customUserVars ?? {}),
+        toolCount: Object.keys(toolFunctions).length,
+        tools: Object.entries(toolFunctions).map(([pluginKey, toolData]) => {
+          const rawToolName = pluginKey.includes(Constants.mcp_delimiter)
+            ? pluginKey.split(Constants.mcp_delimiter)[0]
+            : pluginKey;
+          return {
+            name: rawToolName,
+            pluginKey,
+            description: toolData.function?.description ?? '',
+            schema: toolData.function?.parameters ?? null,
+            safety: classifyToolSafety(rawToolName),
+          };
+        }),
+      };
+    }
+
+    return res.json({ servers });
+  } catch (error) {
+    logger.error('[MCP E2E Inventory] Failed to build MCP inventory', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/e2e/execute', ...mcpProtectedRoute, async (req, res) => {
+  if (!isE2EMCPExecutionEnabled()) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  try {
+    const user = createSafeUser(req.user);
+    const { serverName, toolName, args, allowMutatingTools } = req.body ?? {};
+    if (!user.id) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+    if (!serverName || !toolName) {
+      return res.status(400).json({ error: 'serverName and toolName are required' });
+    }
+
+    const safety = classifyToolSafety(toolName);
+    if (safety === 'mutation' && !parseE2EBoolean(allowMutatingTools, false)) {
+      return res.json({
+        ok: false,
+        classification: 'skipped_mutation',
+        error: `Tool "${toolName}" looks mutating and allowMutatingTools was false.`,
+      });
+    }
+
+    const configServers = await resolveConfigServers(req);
+    const serverConfig = await getMCPServersRegistry().getServerConfig(serverName, user.id, configServers);
+    if (!serverConfig) {
+      return res.status(404).json({ error: `MCP server "${serverName}" not found` });
+    }
+
+    let userMCPAuthMap;
+    if (serverConfig.customUserVars && typeof serverConfig.customUserVars === 'object') {
+      userMCPAuthMap = await getUserMCPAuthMap({
+        userId: user.id,
+        servers: [serverName],
+        findPluginAuthsByKeys: db.findPluginAuthsByKeys,
+      });
+    }
+
+    const reinitResult = await reinitMCPServer({
+      user,
+      serverName,
+      configServers,
+      userMCPAuthMap,
+      connectionTimeout: Time.THIRTY_SECONDS,
+    });
+    if (reinitResult?.success === false && reinitResult.oauthRequired !== true) {
+      return res.json({
+        ok: false,
+        classification: classifyExecutionError(new Error(reinitResult.message)),
+        error: reinitResult.message,
+      });
+    }
+
+    const flowManager = getFlowStateManager(getLogStores(CacheKeys.FLOWS));
+    const customUserVars = userMCPAuthMap?.[`${Constants.mcp_prefix}${serverName}`];
+    const result = await getMCPManager().callTool({
+      user,
+      serverName,
+      serverConfig,
+      toolName,
+      provider: Providers.OPENAI,
+      toolArguments: args ?? {},
+      customUserVars,
+      flowManager,
+      tokenMethods: {
+        findToken: db.findToken,
+        createToken: db.createToken,
+        updateToken: db.updateToken,
+        deleteTokens: db.deleteTokens,
+      },
+      graphTokenResolver: getGraphApiToken,
+    });
+
+    return res.json({
+      ok: true,
+      classification: 'executed',
+      result,
+    });
+  } catch (error) {
+    logger.error('[MCP E2E Execute] Failed to execute MCP tool', error);
+    return res.json({
+      ok: false,
+      classification: classifyExecutionError(error),
+      error: error?.message ?? String(error),
+    });
+  }
 });
 
 /**

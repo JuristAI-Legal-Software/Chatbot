@@ -1,0 +1,15 @@
+{
+  "djangoServer.search_case": {
+    "args": {
+      "query": "test"
+    }
+  },
+  "juristai.list_matter_types": {
+    "args": {}
+  },
+  "search_case": {
+    "args": {
+      "query": "test"
+    }
+  }
+}

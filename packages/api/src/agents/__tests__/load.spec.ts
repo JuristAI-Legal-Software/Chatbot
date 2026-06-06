@@ -169,6 +169,95 @@ describe('loadAgent', () => {
     expect(result!.version).toBe(1);
   });
 
+  test('should apply runtime tool overrides to a saved agent without mutating persisted config', async () => {
+    const userId = new mongoose.Types.ObjectId();
+    const agentId = `agent_${uuidv4()}`;
+
+    mockGetMCPServerTools.mockImplementation(async (_lookupUserId: string, server: string) => {
+      if (server === 'runtime-server') {
+        return { lookup_mcp_runtime_server: {} };
+      }
+      return null;
+    });
+
+    await createAgent({
+      id: agentId,
+      name: 'Saved Agent',
+      provider: 'openai',
+      model: 'gpt-4',
+      author: userId,
+      tools: ['calculator'],
+    });
+
+    const mockReq = {
+      user: { id: userId.toString() },
+      body: {
+        ephemeralAgent: {
+          web_search: true,
+          execute_code: true,
+          mcp: ['runtime-server'],
+        },
+      },
+    };
+
+    const result = await loadAgent(
+      {
+        req: mockReq,
+        agent_id: agentId,
+        endpoint: 'openai',
+        model_parameters: { model: 'gpt-4' } as unknown as AgentModelParameters,
+      },
+      deps,
+    );
+
+    expect(result?.tools).toEqual(
+      expect.arrayContaining([
+        'calculator',
+        'web_search',
+        'execute_code',
+        'lookup_mcp_runtime_server',
+      ]),
+    );
+
+    const persisted = await getAgent({ id: agentId });
+    expect(persisted?.tools).toEqual(['calculator']);
+  });
+
+  test('should not remove saved tools when runtime overrides are false', async () => {
+    const userId = new mongoose.Types.ObjectId();
+    const agentId = `agent_${uuidv4()}`;
+
+    await createAgent({
+      id: agentId,
+      name: 'Saved Agent',
+      provider: 'openai',
+      model: 'gpt-4',
+      author: userId,
+      tools: ['web_search'],
+    });
+
+    const mockReq = {
+      user: { id: userId.toString() },
+      body: {
+        ephemeralAgent: {
+          web_search: false,
+        },
+      },
+    };
+
+    const result = await loadAgent(
+      {
+        req: mockReq,
+        agent_id: agentId,
+        endpoint: 'openai',
+        model_parameters: { model: 'gpt-4' } as unknown as AgentModelParameters,
+      },
+      deps,
+    );
+
+    expect(result?.tools).toEqual(['web_search']);
+  });
+
   test('should return agent even when user is not author (permissions checked at route level)', async () => {
     const authorId = new mongoose.Types.ObjectId();
     const userId = new mongoose.Types.ObjectId();

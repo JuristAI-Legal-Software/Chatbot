@@ -13,6 +13,7 @@ import type {
   UpsertSkillFileInput,
 } from '@librechat/data-schemas';
 import { resolveRequestTenantId } from '~/middleware/tenant';
+import type { ServerRequest as BaseServerRequest } from '~/types/http';
 
 /** Security limits for zip processing. */
 const MAX_ZIP_BYTES = 50 * 1024 * 1024; // 50 MB compressed
@@ -194,17 +195,16 @@ export interface ImportSkillDeps {
   }) => Promise<unknown>;
 }
 
-interface ServerRequest extends Request {
+type ServerRequest = BaseServerRequest & {
   tenantId?: string;
-  user: {
-    id: string;
+  user: NonNullable<BaseServerRequest['user']> & {
     _id: Types.ObjectId;
     name?: string;
     username?: string;
     tenantId?: string;
   };
   file?: Express.Multer.File;
-}
+};
 
 /**
  * `POST /api/skills/import`

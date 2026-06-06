@@ -1,3 +1,9 @@
+const esModules = [
+  'uuid',
+  '@langchain[\\\\/]langgraph',
+  '@langchain[\\\\/]langgraph-checkpoint',
+].join('|');
+
 export default {
   collectCoverageFrom: ['src/**/*.{js,jsx,ts,tsx}', '!<rootDir>/node_modules/'],
   coveragePathIgnorePatterns: ['/node_modules/', '/dist/'],
@@ -12,9 +18,7 @@ export default {
   ],
   coverageReporters: ['text', 'cobertura'],
   testResultsProcessor: 'jest-junit',
-  transformIgnorePatterns: [
-    'node_modules/(?!(@langchain/langgraph-checkpoint/node_modules/uuid))',
-  ],
+  transformIgnorePatterns: [`[/\\\\]node_modules[/\\\\](?!(${esModules})([/\\\\]|$))`],
   transform: {
     '\\.[jt]sx?$': [
       'babel-jest',

@@ -41,6 +41,45 @@ export interface LoadAgentParams {
   model_parameters?: AgentModelParameters & { model?: string };
 }
 
+async function buildRuntimeTools({
+  ephemeralAgent,
+  userId,
+  deps,
+}: {
+  ephemeralAgent?: TEphemeralAgent;
+  userId: string;
+  deps: LoadAgentDeps;
+}): Promise<string[]> {
+  const tools: string[] = [];
+  if (ephemeralAgent?.execute_code === true) {
+    tools.push(Tools.execute_code);
+  }
+  if (ephemeralAgent?.file_search === true) {
+    tools.push(Tools.file_search);
+  }
+  if (ephemeralAgent?.web_search === true) {
+    tools.push(Tools.web_search);
+  }
+
+  const mcpServers = new Set<string>(ephemeralAgent?.mcp);
+  const addedServers = new Set<string>();
+  for (const mcpServer of mcpServers) {
+    if (addedServers.has(mcpServer)) {
+      continue;
+    }
+    const serverTools = await deps.getMCPServerTools(userId, mcpServer);
+    if (!serverTools) {
+      tools.push(`${mcp_all}${mcp_delimiter}${mcpServer}`);
+      addedServers.add(mcpServer);
+      continue;
+    }
+    tools.push(...Object.keys(serverTools));
+    addedServers.add(mcpServer);
+  }
+
+  return tools;
+}
+
 /**
  * Load an ephemeral agent based on the request parameters.
  */
@@ -55,40 +94,19 @@ export async function loadEphemeralAgent(
     modelSpec = modelSpecs?.list?.find((s) => s.name === spec) ?? null;
   }
   const ephemeralAgent: TEphemeralAgent | undefined = req.body?.ephemeralAgent;
-  const mcpServers = new Set<string>(ephemeralAgent?.mcp);
   const userId = req.user?.id ?? '';
-  if (modelSpec?.mcpServers) {
-    for (const mcpServer of modelSpec.mcpServers) {
-      mcpServers.add(mcpServer);
-    }
-  }
-  const tools: string[] = [];
-  if (ephemeralAgent?.execute_code === true || modelSpec?.executeCode === true) {
-    tools.push(Tools.execute_code);
-  }
-  if (ephemeralAgent?.file_search === true || modelSpec?.fileSearch === true) {
-    tools.push(Tools.file_search);
-  }
-  if (ephemeralAgent?.web_search === true || modelSpec?.webSearch === true) {
-    tools.push(Tools.web_search);
-  }
-
-  const addedServers = new Set<string>();
-  if (mcpServers.size > 0) {
-    for (const mcpServer of mcpServers) {
-      if (addedServers.has(mcpServer)) {
-        continue;
-      }
-      const serverTools = await deps.getMCPServerTools(userId, mcpServer);
-      if (!serverTools) {
-        tools.push(`${mcp_all}${mcp_delimiter}${mcpServer}`);
-        addedServers.add(mcpServer);
-        continue;
-      }
-      tools.push(...Object.keys(serverTools));
-      addedServers.add(mcpServer);
-    }
-  }
+  const mergedEphemeralAgent: TEphemeralAgent = {
+    ...ephemeralAgent,
+    mcp: [...new Set([...(ephemeralAgent?.mcp ?? []), ...(modelSpec?.mcpServers ?? [])])],
+    execute_code: ephemeralAgent?.execute_code === true || modelSpec?.executeCode === true,
+    file_search: ephemeralAgent?.file_search === true || modelSpec?.fileSearch === true,
+    web_search: ephemeralAgent?.web_search === true || modelSpec?.webSearch === true,
+  };
+  const tools = await buildRuntimeTools({
+    ephemeralAgent: mergedEphemeralAgent,
+    userId,
+    deps,
+  });
 
   const requestPromptPrefix = req.body?.promptPrefix;
   const { promptPrefix: modelPromptPrefix, ...safeModelParameters } =
@@ -132,8 +150,8 @@ export async function loadEphemeralAgent(
     tools,
   };
 
-  if (ephemeralAgent?.artifacts) {
-    result.artifacts = ephemeralAgent.artifacts;
+  if (mergedEphemeralAgent.artifacts) {
+    result.artifacts = mergedEphemeralAgent.artifacts;
   }
   return result as Agent;
 }
@@ -158,6 +176,21 @@ export async function loadAgent(
 
   if (!agent) {
     return null;
+  }
+
+  const runtimeAgent = req.body?.ephemeralAgent;
+  if (runtimeAgent != null) {
+    const runtimeTools = await buildRuntimeTools({
+      ephemeralAgent: runtimeAgent,
+      userId: req.user?.id ?? '',
+      deps,
+    });
+    if (runtimeTools.length > 0) {
+      agent.tools = [...new Set([...(agent.tools ?? []), ...runtimeTools])];
+    }
+    if (runtimeAgent.artifacts) {
+      agent.artifacts = runtimeAgent.artifacts;
+    }
   }
 
   // Set version count from versions array length

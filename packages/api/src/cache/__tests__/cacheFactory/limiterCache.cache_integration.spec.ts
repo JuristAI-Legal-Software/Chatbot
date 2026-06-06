@@ -77,7 +77,10 @@ describe('limiterCache', () => {
     expect(value).toBe('1');
 
     // INCR operation
-    const incremented = await testStore!.sendCommand({ command: ['INCR', testKey], isReadOnly: false });
+    const incremented = await testStore!.sendCommand({
+      command: ['INCR', testKey],
+      isReadOnly: false,
+    });
     expect(incremented).toBe(2);
 
     // Verify increment worked with ioredis
@@ -85,7 +88,10 @@ describe('limiterCache', () => {
     expect(incrementedValue).toBe('2');
 
     // TTL operation
-    const ttl = (await testStore!.sendCommand({ command: ['TTL', testKey], isReadOnly: true })) as number;
+    const ttl = (await testStore!.sendCommand({
+      command: ['TTL', testKey],
+      isReadOnly: true,
+    })) as number;
     expect(ttl).toBeGreaterThan(0);
     expect(ttl).toBeLessThanOrEqual(60);
 
@@ -94,7 +100,10 @@ describe('limiterCache', () => {
     expect(deleted).toBe(1);
 
     // Verify deletion
-    const afterDelete = await testStore!.sendCommand({ command: ['GET', testKey], isReadOnly: true });
+    const afterDelete = await testStore!.sendCommand({
+      command: ['GET', testKey],
+      isReadOnly: true,
+    });
     expect(afterDelete).toBeNull();
     const directAfterDelete = await ioredisClient!.get(testKey);
     expect(directAfterDelete).toBeNull();

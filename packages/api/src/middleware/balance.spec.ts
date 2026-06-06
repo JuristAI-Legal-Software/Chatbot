@@ -15,6 +15,16 @@ jest.mock('@librechat/data-schemas', () => ({
 let mongoServer: MongoMemoryServer;
 let Balance: mongoose.Model<IBalance>;
 
+type MockBalanceRequest = Partial<ServerRequest> & {
+  user?: {
+    _id: string | mongoose.Types.ObjectId;
+    id: string;
+    email: string;
+    role?: string;
+    tenantId?: string;
+  };
+};
+
 const findBalanceByUser = (userId: string) => Balance.findOne({ user: userId }).lean<IBalance>();
 
 const upsertBalanceFields = (userId: string, fields: IBalanceUpdate) =>
@@ -43,9 +53,9 @@ beforeEach(async () => {
 });
 
 describe('createSetBalanceConfig', () => {
-  const createMockRequest = (userId: string | mongoose.Types.ObjectId): Partial<ServerRequest> => ({
+  const createMockRequest = (userId: string | mongoose.Types.ObjectId): MockBalanceRequest => ({
     user: {
-      _id: userId,
+      _id: userId as string | mongoose.Types.ObjectId,
       id: userId.toString(),
       email: 'test@example.com',
     },

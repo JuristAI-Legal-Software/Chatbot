@@ -42,12 +42,7 @@ export interface ApiKeyHandlerDependencies {
   } | null>;
 }
 
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    _id: Types.ObjectId;
-  };
-}
+type AuthenticatedRequest = Request;
 
 export function createApiKeyHandlers(deps: ApiKeyHandlerDependencies) {
   async function createApiKey(req: AuthenticatedRequest, res: Response) {
