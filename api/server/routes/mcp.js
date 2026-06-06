@@ -281,7 +281,9 @@ router.get(
           flowId,
           serverName,
         });
-        return res.redirect(`${basePath}/oauth/success?serverName=${encodeURIComponent(serverName)}`);
+        return res.redirect(
+          `${basePath}/oauth/success?serverName=${encodeURIComponent(serverName)}`,
+        );
       }
 
       logger.debug('[MCP OAuth] Completing OAuth flow');
