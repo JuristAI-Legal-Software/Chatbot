@@ -226,7 +226,7 @@ async function getJwksClient(oidcConfig: EnabledOidcConfig): Promise<jwksRsa.Jwk
 
 function getVerifyOptions(oidcConfig: EnabledOidcConfig): VerifyOptions {
   const normalizedIssuer = normalizeOpenIdIssuer(oidcConfig.issuer);
-  const issuer =
+  const issuer: string | [string, ...string[]] =
     normalizedIssuer && normalizedIssuer !== oidcConfig.issuer
       ? [oidcConfig.issuer, normalizedIssuer]
       : oidcConfig.issuer;

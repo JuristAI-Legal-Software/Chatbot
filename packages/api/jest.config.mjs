@@ -12,6 +12,9 @@ export default {
   ],
   coverageReporters: ['text', 'cobertura'],
   testResultsProcessor: 'jest-junit',
+  transformIgnorePatterns: [
+    'node_modules/(?!(@langchain/langgraph-checkpoint/node_modules/uuid))',
+  ],
   transform: {
     '\\.[jt]sx?$': [
       'babel-jest',

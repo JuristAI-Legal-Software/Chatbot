@@ -27,6 +27,12 @@
     "transpileOnly": true,
     "esm": true
   },
-  "exclude": ["node_modules", "dist", "types"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "types",
+    "src/**/*.manual.spec.*",
+    "src/storage/s3/__tests__/crud.test.ts"
+  ],
   "include": ["src/**/*", "types/index.d.ts", "types/react-query/index.d.ts"]
 }

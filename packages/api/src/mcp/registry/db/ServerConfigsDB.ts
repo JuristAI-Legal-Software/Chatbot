@@ -423,7 +423,7 @@ export class ServerConfigsDB implements IServerConfigsRepositoryInterface {
       parsedConfigs[s.serverName] = directParsed[i];
     });
 
-    const agentOnlyServerNames = agentMCPServerNames.filter((name) => !directServerNames.has(name));
+    const agentOnlyServerNames = agentMCPServerNames.filter((name: string) => !directServerNames.has(name));
 
     if (agentOnlyServerNames.length > 0) {
       const agentServers = await this._dbMethods.getListMCPServersByNames({

@@ -59,8 +59,8 @@ describe('limiterCache', () => {
 
     const testKey = 'user:123';
 
-    // SET operation
-    await testStore!.sendCommand('SET', testKey, '1', 'EX', '60');
+    // SET operation — rate-limit-redis v4 sendCommand uses SendCommandClusterDetails
+    await testStore!.sendCommand({ command: ['SET', testKey, '1', 'EX', '60'], isReadOnly: false });
 
     // Verify the key was created WITHOUT prefix using ioredis
     // Note: Using call method since get method seems to have issues in test environment
@@ -73,11 +73,11 @@ describe('limiterCache', () => {
     expect(directValue).toBe('1');
 
     // GET operation
-    const value = await testStore!.sendCommand('GET', testKey);
+    const value = await testStore!.sendCommand({ command: ['GET', testKey], isReadOnly: true });
     expect(value).toBe('1');
 
     // INCR operation
-    const incremented = await testStore!.sendCommand('INCR', testKey);
+    const incremented = await testStore!.sendCommand({ command: ['INCR', testKey], isReadOnly: false });
     expect(incremented).toBe(2);
 
     // Verify increment worked with ioredis
@@ -85,21 +85,23 @@ describe('limiterCache', () => {
     expect(incrementedValue).toBe('2');
 
     // TTL operation
-    const ttl = (await testStore!.sendCommand('TTL', testKey)) as number;
+    const ttl = (await testStore!.sendCommand({ command: ['TTL', testKey], isReadOnly: true })) as number;
     expect(ttl).toBeGreaterThan(0);
     expect(ttl).toBeLessThanOrEqual(60);
 
     // DEL operation
-    const deleted = await testStore!.sendCommand('DEL', testKey);
+    const deleted = await testStore!.sendCommand({ command: ['DEL', testKey], isReadOnly: false });
     expect(deleted).toBe(1);
 
     // Verify deletion
-    const afterDelete = await testStore!.sendCommand('GET', testKey);
+    const afterDelete = await testStore!.sendCommand({ command: ['GET', testKey], isReadOnly: true });
     expect(afterDelete).toBeNull();
     const directAfterDelete = await ioredisClient!.get(testKey);
     expect(directAfterDelete).toBeNull();
 
     // Test error handling
-    await expect(testStore!.sendCommand('INVALID_COMMAND')).rejects.toThrow();
+    await expect(
+      testStore!.sendCommand({ command: ['INVALID_COMMAND'], isReadOnly: false }),
+    ).rejects.toThrow();
   });
 });
