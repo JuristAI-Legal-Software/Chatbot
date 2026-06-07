@@ -1,0 +1,8 @@
+{
+  "search_case": {
+    "prompt": "Use the \"search_case\" tool from the JuristAI MCP server to run a tiny read-only search for \"test\" and summarize the result in one sentence."
+  },
+  "juristai.search_case": {
+    "prompt": "Use only the \"search_case\" tool from the \"juristai\" MCP server. Run the smallest safe search you can for \"test\" and tell me whether it worked."
+  }
+}

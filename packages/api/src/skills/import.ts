@@ -3,7 +3,7 @@ import path from 'path';
 import JSZip from 'jszip';
 import { ResourceType, AccessRoleIds, PrincipalType } from 'librechat-data-provider';
 import { logger, stripYamlTrailingComment } from '@librechat/data-schemas';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import type { Types } from 'mongoose';
 import type {
   ISkill,
@@ -171,7 +171,7 @@ export interface ImportSkillDeps {
   deleteSkill: (id: string) => Promise<{ deleted: boolean }>;
   upsertSkillFile: (row: UpsertSkillFileInput) => Promise<ISkillFile & { _id: Types.ObjectId }>;
   saveBuffer: (
-    req: Request,
+    req: ServerRequest,
     params: {
       userId: string;
       buffer: Buffer;
@@ -182,7 +182,7 @@ export interface ImportSkillDeps {
     },
   ) => Promise<{ filepath: string; source: string; storageKey?: string; storageRegion?: string }>;
   deleteFile?: (
-    req: Request,
+    req: ServerRequest,
     file: { filepath: string; source: string; [key: string]: unknown },
   ) => Promise<void>;
   grantPermission: (params: {

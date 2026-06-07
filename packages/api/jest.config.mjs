@@ -1,5 +1,6 @@
 const esModules = [
   'uuid',
+  '@mistralai[\\\\/]mistralai',
   '@langchain[\\\\/]langgraph',
   '@langchain[\\\\/]langgraph-checkpoint',
 ].join('|');

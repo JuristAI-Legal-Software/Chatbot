@@ -39,6 +39,7 @@ describe('Environment Variable Extraction (MCP)', () => {
   beforeEach(() => {
     process.env = {
       ...originalEnv,
+      PATH: '/test/system/path',
       TEST_API_KEY: 'test-api-key-value',
       ANOTHER_SECRET: 'another-secret-value',
     };

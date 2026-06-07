@@ -1,3 +1,5 @@
+process.env.LOG_TO_FILE = 'false';
+
 /**
  * `undici` (transitive dep of `@librechat/agents` and others) references
  * `globalThis.File` from `node:buffer`. Node 20+ exposes it as a global;

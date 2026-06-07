@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { logger, balanceSchema } from '@librechat/data-schemas';
-import type { NextFunction, Request as ServerRequest, Response as ServerResponse } from 'express';
+import type { NextFunction, Request as ExpressRequest, Response as ServerResponse } from 'express';
 import type { IBalance, IBalanceUpdate } from '@librechat/data-schemas';
 import { createSetBalanceConfig } from './balance';
 
@@ -15,7 +15,7 @@ jest.mock('@librechat/data-schemas', () => ({
 let mongoServer: MongoMemoryServer;
 let Balance: mongoose.Model<IBalance>;
 
-type MockBalanceRequest = Partial<ServerRequest> & {
+type MockBalanceRequest = Omit<Partial<ExpressRequest>, 'user'> & {
   user?: {
     _id: string | mongoose.Types.ObjectId;
     id: string;
@@ -90,7 +90,7 @@ describe('createSetBalanceConfig', () => {
       const req = createMockRequest(userId);
       const res = createMockResponse();
 
-      await middleware(req as ServerRequest, res as ServerResponse, mockNext);
+      await middleware(req as ExpressRequest, res as ServerResponse, mockNext);
 
       expect(getAppConfig).toHaveBeenCalled();
       expect(mockNext).toHaveBeenCalled();
@@ -122,7 +122,7 @@ describe('createSetBalanceConfig', () => {
       const req = createMockRequest(userId);
       const res = createMockResponse();
 
-      await middleware(req as ServerRequest, res as ServerResponse, mockNext);
+      await middleware(req as ExpressRequest, res as ServerResponse, mockNext);
 
       expect(mockNext).toHaveBeenCalled();
 
@@ -148,7 +148,7 @@ describe('createSetBalanceConfig', () => {
       const req = createMockRequest(userId);
       const res = createMockResponse();
 
-      await middleware(req as ServerRequest, res as ServerResponse, mockNext);
+      await middleware(req as ExpressRequest, res as ServerResponse, mockNext);
 
       expect(mockNext).toHaveBeenCalled();
 
@@ -178,7 +178,7 @@ describe('createSetBalanceConfig', () => {
       const req = createMockRequest(userId);
       const res = createMockResponse();
 
-      await middleware(req as ServerRequest, res as ServerResponse, mockNext);
+      await middleware(req as ExpressRequest, res as ServerResponse, mockNext);
 
       expect(mockNext).toHaveBeenCalled();
 
@@ -205,7 +205,7 @@ describe('createSetBalanceConfig', () => {
         upsertBalanceFields,
       });
 
-      const req = {} as ServerRequest;
+      const req = {} as ExpressRequest;
       const res = createMockResponse();
 
       await middleware(req, res as ServerResponse, mockNext);
@@ -251,7 +251,7 @@ describe('createSetBalanceConfig', () => {
       const res = createMockResponse();
 
       const beforeTime = new Date();
-      await middleware(req as ServerRequest, res as ServerResponse, mockNext);
+      await middleware(req as ExpressRequest, res as ServerResponse, mockNext);
       const afterTime = new Date();
 
       expect(mockNext).toHaveBeenCalled();
@@ -303,7 +303,7 @@ describe('createSetBalanceConfig', () => {
       const req = createMockRequest(userId);
       const res = createMockResponse();
 
-      await middleware(req as ServerRequest, res as ServerResponse, mockNext);
+      await middleware(req as ExpressRequest, res as ServerResponse, mockNext);
 
       expect(mockNext).toHaveBeenCalled();
 
@@ -348,7 +348,7 @@ describe('createSetBalanceConfig', () => {
       const req = createMockRequest(userId);
       const res = createMockResponse();
 
-      await middleware(req as ServerRequest, res as ServerResponse, mockNext);
+      await middleware(req as ExpressRequest, res as ServerResponse, mockNext);
 
       expect(mockNext).toHaveBeenCalled();
 
@@ -380,7 +380,7 @@ describe('createSetBalanceConfig', () => {
       const req = createMockRequest(userId);
       const res = createMockResponse();
 
-      await middleware(req as ServerRequest, res as ServerResponse, mockNext);
+      await middleware(req as ExpressRequest, res as ServerResponse, mockNext);
 
       expect(mockNext).toHaveBeenCalled();
 
@@ -411,7 +411,7 @@ describe('createSetBalanceConfig', () => {
         tenantId: 'tenant-a',
       } as typeof req.user;
 
-      await middleware(req as ServerRequest, createMockResponse() as ServerResponse, mockNext);
+      await middleware(req as ExpressRequest, createMockResponse() as ServerResponse, mockNext);
 
       expect(getAppConfig).toHaveBeenCalledWith({
         role: 'USER',
@@ -455,7 +455,7 @@ describe('createSetBalanceConfig', () => {
       const req = createMockRequest(userId);
       const res = createMockResponse();
 
-      await middleware(req as ServerRequest, res as ServerResponse, mockNext);
+      await middleware(req as ExpressRequest, res as ServerResponse, mockNext);
 
       const balanceRecord = await Balance.findOne({ user: userId });
       expect(balanceRecord?.tokenCredits).toBe(500); // Should not change
@@ -501,7 +501,7 @@ describe('createSetBalanceConfig', () => {
         upsertBalanceFields: upsertSpy,
       });
 
-      await spiedMiddleware(req as ServerRequest, res as ServerResponse, mockNext);
+      await spiedMiddleware(req as ExpressRequest, res as ServerResponse, mockNext);
 
       expect(mockNext).toHaveBeenCalled();
       expect(upsertSpy).not.toHaveBeenCalled();
@@ -533,7 +533,7 @@ describe('createSetBalanceConfig', () => {
       const req = createMockRequest(userId);
       const res = createMockResponse();
 
-      await middleware(req as ServerRequest, res as ServerResponse, mockNext);
+      await middleware(req as ExpressRequest, res as ServerResponse, mockNext);
 
       const balanceRecord = await Balance.findOne({ user: userId });
       expect(balanceRecord?.tokenCredits).toBe(2000);
@@ -566,7 +566,7 @@ describe('createSetBalanceConfig', () => {
       const req = createMockRequest(userId);
       const res = createMockResponse();
 
-      await middleware(req as ServerRequest, res as ServerResponse, mockNext);
+      await middleware(req as ExpressRequest, res as ServerResponse, mockNext);
 
       expect(logger.error).toHaveBeenCalledWith('Error setting user balance:', dbError);
       expect(mockNext).toHaveBeenCalledWith(dbError);
@@ -586,7 +586,7 @@ describe('createSetBalanceConfig', () => {
       const req = createMockRequest(userId);
       const res = createMockResponse();
 
-      await middleware(req as ServerRequest, res as ServerResponse, mockNext);
+      await middleware(req as ExpressRequest, res as ServerResponse, mockNext);
 
       expect(logger.error).toHaveBeenCalledWith('Error setting user balance:', configError);
       expect(mockNext).toHaveBeenCalledWith(configError);
@@ -617,7 +617,7 @@ describe('createSetBalanceConfig', () => {
       const req = createMockRequest(userId);
       const res = createMockResponse();
 
-      await middleware(req as ServerRequest, res as ServerResponse, mockNext);
+      await middleware(req as ExpressRequest, res as ServerResponse, mockNext);
 
       expect(mockNext).toHaveBeenCalled();
 
@@ -657,8 +657,8 @@ describe('createSetBalanceConfig', () => {
 
       // Run middleware concurrently
       await Promise.all([
-        middleware(req as ServerRequest, res1 as ServerResponse, mockNext1),
-        middleware(req as ServerRequest, res2 as ServerResponse, mockNext2),
+        middleware(req as ExpressRequest, res1 as ServerResponse, mockNext1),
+        middleware(req as ExpressRequest, res2 as ServerResponse, mockNext2),
       ]);
 
       expect(mockNext1).toHaveBeenCalled();
@@ -698,7 +698,7 @@ describe('createSetBalanceConfig', () => {
         const req = createMockRequest(userId);
         const res = createMockResponse();
 
-        await middleware(req as ServerRequest, res as ServerResponse, mockNext);
+        await middleware(req as ExpressRequest, res as ServerResponse, mockNext);
 
         const balanceRecord = await Balance.findOne({ user: userId });
         expect(balanceRecord?.refillIntervalUnit).toBe(unit);

@@ -1,7 +1,6 @@
 import fs from 'fs';
 import { Readable } from 'stream';
 import { mockClient } from 'aws-sdk-client-mock';
-import { sdkStreamMixin } from '@smithy/util-stream';
 import { FileSources } from 'librechat-data-provider';
 import {
   S3Client,
@@ -74,8 +73,7 @@ describe('S3 CRUD', () => {
     const stream = new Readable();
     stream.push('test content');
     stream.push(null);
-    const sdkStream = sdkStreamMixin(stream);
-    s3Mock.on(GetObjectCommand).resolves({ Body: sdkStream });
+    s3Mock.on(GetObjectCommand).resolves({ Body: stream as unknown as Readable });
 
     jest.clearAllMocks();
   });

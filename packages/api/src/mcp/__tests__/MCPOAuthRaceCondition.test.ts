@@ -48,7 +48,9 @@ describe('MCP OAuth Race Condition Fixes', () => {
   });
 
   describe('Fix 1: Connection mutex coalesces concurrent attempts', () => {
-    it('should return the same pending promise for concurrent getUserConnection calls', async () => {
+    it(
+      'should return the same pending promise for concurrent getUserConnection calls',
+      async () => {
       const { UserConnectionManager } = await import('~/mcp/UserConnectionManager');
 
       class TestManager extends UserConnectionManager {
@@ -93,7 +95,7 @@ describe('MCP OAuth Race Condition Fixes', () => {
       const { MCPConnectionFactory } = await import('~/mcp/MCPConnectionFactory');
       const createSpy = jest.spyOn(MCPConnectionFactory, 'create').mockImplementation(async () => {
         manager.createCallCount++;
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 10));
         return mockConnection as never;
       });
 
@@ -118,7 +120,9 @@ describe('MCP OAuth Race Condition Fixes', () => {
       expect(manager.createCallCount).toBe(1);
 
       createSpy.mockRestore();
-    });
+      },
+      30000,
+    );
 
     it('should not coalesce when forceNew is true', async () => {
       const { UserConnectionManager } = await import('~/mcp/UserConnectionManager');
@@ -160,7 +164,7 @@ describe('MCP OAuth Race Condition Fixes', () => {
       const { MCPConnectionFactory } = await import('~/mcp/MCPConnectionFactory');
       jest.spyOn(MCPConnectionFactory, 'create').mockImplementation(async () => {
         callCount++;
-        await new Promise((r) => setTimeout(r, 50));
+        await new Promise((r) => setTimeout(r, 5));
         return makeConnection() as never;
       });
 

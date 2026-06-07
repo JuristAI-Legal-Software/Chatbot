@@ -84,7 +84,6 @@ export function getBaseE2EEnv(): Record<string, string> {
     DOMAIN_CLIENT: process.env.E2E_DOMAIN_CLIENT ?? baseURL,
     DOMAIN_SERVER: process.env.E2E_DOMAIN_SERVER ?? baseURL,
     E2E_RUNTIME_ENV_PATH: getRuntimeEnvPath(),
-    E2E_ENABLE_MCP_E2E_EXEC: process.env.E2E_ENABLE_MCP_E2E_EXEC ?? 'true',
     E2E_USE_MEMORY_MONGO: process.env.E2E_USE_MEMORY_MONGO ?? 'auto',
     NO_INDEX: process.env.NO_INDEX ?? 'true',
     OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? 'user_provided',
