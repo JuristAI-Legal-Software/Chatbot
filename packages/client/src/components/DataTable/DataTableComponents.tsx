@@ -113,7 +113,7 @@ const TableRowComponent = <TData extends Record<string, unknown>>(
 
 type ForwardTableRowComponentType = <TData extends Record<string, unknown>>(
   props: TableRowComponentProps<TData> & React.RefAttributes<HTMLTableRowElement>,
-) => JSX.Element;
+) => React.JSX.Element;
 
 const ForwardTableRowComponent = forwardRef(TableRowComponent) as ForwardTableRowComponentType;
 
@@ -125,7 +125,7 @@ interface GenericRowProps {
 }
 
 export const MemoizedTableRow = memo(
-  ForwardTableRowComponent as (props: GenericRowProps) => JSX.Element,
+  ForwardTableRowComponent as (props: GenericRowProps) => React.JSX.Element,
   (prev: GenericRowProps, next: GenericRowProps) =>
     prev.row.original === next.row.original && prev.selected === next.selected,
 );

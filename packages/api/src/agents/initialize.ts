@@ -51,9 +51,28 @@ import type { TFilterFilesByAgentAccess } from './resources';
  */
 const DEFAULT_RESERVE_RATIO = 0.05;
 const temporalSpecialVarRegex = /{{\s*(current_date|current_datetime|iso_datetime)\s*}}/i;
+const LIVE_TOOL_DATA_POLICY_KEY = '__live_tool_data_policy';
 
 function hasTemporalSpecialVars(text: string): boolean {
   return temporalSpecialVarRegex.test(text);
+}
+
+function buildLiveToolDataPolicy(hasDeferredTools: boolean): string {
+  const lines = [
+    'For questions about the user\'s account, connected systems, uploaded files, or any other live/current data that available tools can access, do not answer from memory or prior chat context alone.',
+    'Call the relevant tool first and treat the tool result as the authoritative source before responding.',
+    'If no suitable tool is available or the tool call fails, say that plainly instead of pretending you checked.',
+  ];
+
+  if (hasDeferredTools) {
+    lines.splice(
+      2,
+      0,
+      'If the relevant tool is not currently visible because tool loading is deferred, call `tool_search` first, then execute the discovered tool.',
+    );
+  }
+
+  return lines.join('\n');
 }
 
 function appendAdditionalInstructions(agent: Agent, text?: string | null): void {
@@ -998,6 +1017,13 @@ export async function initializeAgent(
   const agentMaxContextNum = Number(agentMaxContextTokens) || DEFAULT_MAX_CONTEXT_TOKENS;
   const maxOutputTokensNum = Number(maxOutputTokens) || 0;
   const baseContextTokens = Math.max(0, agentMaxContextNum - maxOutputTokensNum);
+  const effectiveToolContextMap = toolContextMap ?? {};
+
+  if ((structuredTools?.length ?? 0) > 0 || (toolDefinitions?.length ?? 0) > 0) {
+    effectiveToolContextMap[LIVE_TOOL_DATA_POLICY_KEY] = buildLiveToolDataPolicy(
+      hasDeferredTools === true,
+    );
+  }
 
   const toMongoFiles = (files: Array<TFile | undefined> | undefined): IMongoFile[] =>
     (files ?? []).filter((a): a is TFile => a != null).map((a) => a as unknown as IMongoFile);
@@ -1043,7 +1069,7 @@ export async function initializeAgent(
     attachments: compatibilityAttachments,
     requestAttachments,
     agentContextAttachments,
-    toolContextMap: toolContextMap ?? {},
+    toolContextMap: effectiveToolContextMap,
     dynamicToolContextMap: dynamicToolContextMap ?? {},
     useLegacyContent: !!options.useLegacyContent,
     tools: (tools ?? []) as GenericTool[] & string[],

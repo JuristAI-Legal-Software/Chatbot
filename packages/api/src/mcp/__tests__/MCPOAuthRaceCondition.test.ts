@@ -48,9 +48,7 @@ describe('MCP OAuth Race Condition Fixes', () => {
   });
 
   describe('Fix 1: Connection mutex coalesces concurrent attempts', () => {
-    it(
-      'should return the same pending promise for concurrent getUserConnection calls',
-      async () => {
+    it('should return the same pending promise for concurrent getUserConnection calls', async () => {
       const { UserConnectionManager } = await import('~/mcp/UserConnectionManager');
 
       class TestManager extends UserConnectionManager {
@@ -120,9 +118,7 @@ describe('MCP OAuth Race Condition Fixes', () => {
       expect(manager.createCallCount).toBe(1);
 
       createSpy.mockRestore();
-      },
-      30000,
-    );
+    }, 30000);
 
     it('should not coalesce when forceNew is true', async () => {
       const { UserConnectionManager } = await import('~/mcp/UserConnectionManager');
