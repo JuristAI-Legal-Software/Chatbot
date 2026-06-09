@@ -19,6 +19,19 @@ describe('RedisEventTransport Integration Tests', () => {
   let ioredisClient: Redis | Cluster | null = null;
   const testPrefix = 'EventTransport-Integration-Test';
 
+  const waitForCondition = async (
+    condition: () => boolean,
+    { timeoutMs = 2000, intervalMs = 10 } = {},
+  ) => {
+    const start = Date.now();
+    while (!condition()) {
+      if (Date.now() - start >= timeoutMs) {
+        throw new Error(`Timed out waiting for condition after ${timeoutMs}ms`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  };
+
   beforeAll(async () => {
     originalEnv = { ...process.env };
 
@@ -84,8 +97,7 @@ describe('RedisEventTransport Integration Tests', () => {
       await transport.emitChunk(streamId, { type: 'text', text: ' World' });
       await transport.emitDone(streamId, { finished: true });
 
-      // Wait for events to propagate (increased for CI)
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await waitForCondition(() => receivedChunks.length === 2 && doneEvent != null);
 
       expect(receivedChunks.length).toBe(2);
       expect(doneEvent).toEqual({ finished: true });
@@ -124,8 +136,7 @@ describe('RedisEventTransport Integration Tests', () => {
       // Emit from transport 1 (producer on different instance)
       await transport1.emitChunk(streamId, { data: 'from-instance-1' });
 
-      // Wait for cross-instance delivery
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await waitForCondition(() => instance2Chunks.length === 1);
 
       // Transport 2 should receive the event
       expect(instance2Chunks.length).toBe(1);
@@ -167,7 +178,9 @@ describe('RedisEventTransport Integration Tests', () => {
 
       await transport.emitChunk(streamId, { data: 'broadcast' });
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await waitForCondition(
+        () => subscriber1Chunks.length === 1 && subscriber2Chunks.length === 1,
+      );
 
       // Both should receive
       expect(subscriber1Chunks.length).toBe(1);
@@ -206,8 +219,7 @@ describe('RedisEventTransport Integration Tests', () => {
         await transport.emitChunk(streamId, { index: i });
       }
 
-      // Wait for all events to propagate
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await waitForCondition(() => receivedEvents.length === 20);
 
       // Verify all events arrived in correct order
       expect(receivedEvents.length).toBe(20);
@@ -263,7 +275,7 @@ describe('RedisEventTransport Integration Tests', () => {
         });
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await waitForCondition(() => receivedArgs.length === argChunks.length);
 
       // Verify chunks arrived in correct order - this was the bug we fixed
       expect(receivedArgs).toEqual(argChunks);
@@ -305,7 +317,7 @@ describe('RedisEventTransport Integration Tests', () => {
         await transport.emitChunk(streamId2, { index: i * 10 });
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await waitForCondition(() => stream1Events.length === 10 && stream2Events.length === 10);
 
       // Each stream should have its own ordered events
       expect(stream1Events).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
@@ -606,7 +618,7 @@ describe('RedisEventTransport Integration Tests', () => {
 
       // First subscriber
       const sub1 = transport.subscribe(streamId, { onChunk: () => {} });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await sub1.ready;
 
       // Now there's a subscriber - isFirstSubscriber returns true when count is 1
       expect(transport.getSubscriberCount(streamId)).toBe(1);
@@ -614,12 +626,12 @@ describe('RedisEventTransport Integration Tests', () => {
 
       // Second subscriber - not first anymore
       const sub2temp = transport.subscribe(streamId, { onChunk: () => {} });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await sub2temp.ready;
       expect(transport.isFirstSubscriber(streamId)).toBe(false);
       sub2temp.unsubscribe();
 
       const sub2 = transport.subscribe(streamId, { onChunk: () => {} });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await sub2.ready;
 
       expect(transport.getSubscriberCount(streamId)).toBe(2);
 
@@ -650,21 +662,17 @@ describe('RedisEventTransport Integration Tests', () => {
       const sub1 = transport.subscribe(streamId, { onChunk: () => {} });
       const sub2 = transport.subscribe(streamId, { onChunk: () => {} });
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await Promise.all([sub1.ready, sub2.ready]);
 
       // Unsubscribe first
       sub1.unsubscribe();
-      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Still have one subscriber
       expect(allLeftCalled).toBe(false);
 
       // Unsubscribe last
       sub2.unsubscribe();
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      // Now all left
-      expect(allLeftCalled).toBe(true);
+      await waitForCondition(() => allLeftCalled === true);
 
       transport.destroy();
       subscriber.disconnect();
@@ -686,18 +694,18 @@ describe('RedisEventTransport Integration Tests', () => {
       const streamId = `error-${Date.now()}`;
       let receivedError: string | null = null;
 
-      transport.subscribe(streamId, {
+      const subscription = transport.subscribe(streamId, {
         onChunk: () => {},
         onError: (err) => {
           receivedError = err;
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await subscription.ready;
 
       await transport.emitError(streamId, 'Test error message');
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await waitForCondition(() => receivedError === 'Test error message');
 
       expect(receivedError).toBe('Test error message');
 
@@ -722,18 +730,16 @@ describe('RedisEventTransport Integration Tests', () => {
       let abortReceived = false;
 
       // Register abort callback
-      transport.onAbort(streamId, () => {
+      const ready = transport.onAbort(streamId, () => {
         abortReceived = true;
       });
 
-      // Wait for subscription to be established
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await ready;
 
       // Emit abort
       transport.emitAbort(streamId);
 
-      // Wait for signal to propagate
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await waitForCondition(() => abortReceived === true);
 
       expect(abortReceived).toBe(true);
 
@@ -760,18 +766,16 @@ describe('RedisEventTransport Integration Tests', () => {
       let instance1AbortReceived = false;
 
       // Instance 1 registers abort callback (simulates server running generation)
-      transport1.onAbort(streamId, () => {
+      const ready = transport1.onAbort(streamId, () => {
         instance1AbortReceived = true;
       });
 
-      // Wait for subscription
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await ready;
 
       // Instance 2 emits abort (simulates server receiving abort request)
       transport2.emitAbort(streamId);
 
-      // Wait for cross-instance delivery
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await waitForCondition(() => instance1AbortReceived === true);
 
       // Instance 1 should receive abort signal
       expect(instance1AbortReceived).toBe(true);
@@ -798,18 +802,18 @@ describe('RedisEventTransport Integration Tests', () => {
       let callback2Called = false;
 
       // Multiple abort callbacks
-      transport.onAbort(streamId, () => {
+      const ready1 = transport.onAbort(streamId, () => {
         callback1Called = true;
       });
-      transport.onAbort(streamId, () => {
+      const ready2 = transport.onAbort(streamId, () => {
         callback2Called = true;
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await Promise.all([ready1, ready2]);
 
       transport.emitAbort(streamId);
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await waitForCondition(() => callback1Called === true && callback2Called === true);
 
       expect(callback1Called).toBe(true);
       expect(callback2Called).toBe(true);
@@ -832,11 +836,11 @@ describe('RedisEventTransport Integration Tests', () => {
       const streamId = `abort-cleanup-${Date.now()}`;
       let abortReceived = false;
 
-      transport.onAbort(streamId, () => {
+      const ready = transport.onAbort(streamId, () => {
         abortReceived = true;
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await ready;
 
       // Cleanup the stream
       transport.cleanup(streamId);
@@ -844,7 +848,7 @@ describe('RedisEventTransport Integration Tests', () => {
       // Emit abort after cleanup
       transport.emitAbort(streamId);
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Should NOT receive abort since stream was cleaned up
       expect(abortReceived).toBe(false);
@@ -924,8 +928,8 @@ describe('RedisEventTransport Integration Tests', () => {
 
       const streamId = `cleanup-${Date.now()}`;
 
-      transport.subscribe(streamId, { onChunk: () => {} });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      const subscription = transport.subscribe(streamId, { onChunk: () => {} });
+      await subscription.ready;
 
       expect(transport.getSubscriberCount(streamId)).toBe(1);
 

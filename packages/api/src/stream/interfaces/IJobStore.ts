@@ -348,7 +348,7 @@ export interface IEventTransport {
    * Called when abort is triggered from any replica.
    * Optional - only implemented in Redis transport.
    */
-  onAbort?(streamId: string, callback: () => void): void;
+  onAbort?(streamId: string, callback: () => void): void | Promise<void>;
 
   /** Get subscriber count for a stream */
   getSubscriberCount(streamId: string): number;

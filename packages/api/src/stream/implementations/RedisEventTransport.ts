@@ -624,7 +624,7 @@ export class RedisEventTransport implements IEventTransport {
    * @param streamId - The stream identifier
    * @param callback - Called when abort signal is received
    */
-  onAbort(streamId: string, callback: () => void): void {
+  onAbort(streamId: string, callback: () => void): Promise<void> | void {
     const channel = CHANNELS.events(streamId);
     let state = this.streams.get(streamId);
 
@@ -654,7 +654,10 @@ export class RedisEventTransport implements IEventTransport {
           logger.error(`[RedisEventTransport] Failed to subscribe to ${channel}:`, err);
         });
       this.channelSubscriptions.set(channel, ready);
+      return ready;
     }
+
+    return this.channelSubscriptions.get(channel);
   }
 
   /**
