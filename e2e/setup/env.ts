@@ -84,6 +84,8 @@ export function getBaseE2EEnv(): Record<string, string> {
     HOST: process.env.E2E_HOST ?? host,
     PORT: process.env.E2E_PORT ?? port,
     MONGO_URI: process.env.MONGO_URI ?? DEFAULT_MONGO_URI,
+    MCP_JURISTAI_DJANGO_URL:
+      process.env.MCP_JURISTAI_DJANGO_URL ?? 'http://127.0.0.1:8001/mcp',
     DOMAIN_CLIENT: process.env.E2E_DOMAIN_CLIENT ?? baseURL,
     DOMAIN_SERVER: process.env.E2E_DOMAIN_SERVER ?? baseURL,
     E2E_RUNTIME_ENV_PATH: getRuntimeEnvPath(),

@@ -7,11 +7,18 @@ const { getBasePath } = require('@librechat/api');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 
 function generateTestCsrfToken(flowId) {
+  const token = crypto
+    .scryptSync(String(flowId), process.env.JWT_SECRET, 16, {
+      N: 1 << 14,
+      r: 8,
+      p: 1,
+      maxmem: 32 * 1024 * 1024,
+    })
+    .toString('hex');
   return crypto
-    .createHmac('sha256', process.env.JWT_SECRET)
-    .update(flowId)
-    .digest('hex')
-    .slice(0, 32);
+    .createHash('sha256')
+    .update(Buffer.from(token, 'utf8'))
+    .digest('base64url');
 }
 
 const mockRegistryInstance = {
