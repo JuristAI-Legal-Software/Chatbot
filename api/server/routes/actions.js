@@ -27,21 +27,27 @@ const OAUTH_CSRF_COOKIE_PATH = '/api/actions';
  *
  * @route POST /actions/:action_id/oauth/bind
  */
-router.post('/:action_id/oauth/bind', loginLimiter, requireJwtAuth, setOAuthSession, async (req, res) => {
-  try {
-    const { action_id } = req.params;
-    const user = req.user;
-    if (!user?.id) {
-      return res.status(401).json({ error: 'User not authenticated' });
+router.post(
+  '/:action_id/oauth/bind',
+  loginLimiter,
+  requireJwtAuth,
+  setOAuthSession,
+  async (req, res) => {
+    try {
+      const { action_id } = req.params;
+      const user = req.user;
+      if (!user?.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+      const flowId = `${user.id}:${action_id}`;
+      setOAuthCsrfCookie(res, flowId, OAUTH_CSRF_COOKIE_PATH);
+      res.json({ success: true });
+    } catch (error) {
+      logger.error('[Action OAuth] Failed to set CSRF binding cookie', error);
+      res.status(500).json({ error: 'Failed to bind OAuth flow' });
     }
-    const flowId = `${user.id}:${action_id}`;
-    setOAuthCsrfCookie(res, flowId, OAUTH_CSRF_COOKIE_PATH);
-    res.json({ success: true });
-  } catch (error) {
-    logger.error('[Action OAuth] Failed to set CSRF binding cookie', error);
-    res.status(500).json({ error: 'Failed to bind OAuth flow' });
-  }
-});
+  },
+);
 
 /**
  * Handles the OAuth callback and exchanges the authorization code for tokens.

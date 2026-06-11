@@ -59,7 +59,7 @@ function hasTemporalSpecialVars(text: string): boolean {
 
 function buildLiveToolDataPolicy(hasDeferredTools: boolean): string {
   const lines = [
-    'For questions about the user\'s account, connected systems, uploaded files, or any other live/current data that available tools can access, do not answer from memory or prior chat context alone.',
+    "For questions about the user's account, connected systems, uploaded files, or any other live/current data that available tools can access, do not answer from memory or prior chat context alone.",
     'Call the relevant tool first and treat the tool result as the authoritative source before responding.',
     'If no suitable tool is available or the tool call fails, say that plainly instead of pretending you checked.',
   ];

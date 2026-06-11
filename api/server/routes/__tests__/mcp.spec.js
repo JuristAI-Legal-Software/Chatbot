@@ -15,10 +15,7 @@ function generateTestCsrfToken(flowId) {
       maxmem: 32 * 1024 * 1024,
     })
     .toString('hex');
-  return crypto
-    .createHash('sha256')
-    .update(Buffer.from(token, 'utf8'))
-    .digest('base64url');
+  return crypto.createHash('sha256').update(Buffer.from(token, 'utf8')).digest('base64url');
 }
 
 const mockRegistryInstance = {

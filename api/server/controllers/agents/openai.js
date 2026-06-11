@@ -708,7 +708,7 @@ const OpenAIChatCompletionController = async (req, res) => {
           conversationId,
         },
         requestHeaders: {
-          authorization: req.headers.authorization,
+          authorization: req.headers?.authorization,
         },
         ...(userMCPAuthMap != null && { userMCPAuthMap }),
       },

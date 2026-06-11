@@ -218,7 +218,7 @@ function processRequestHeaderPlaceholders(
     const headerValue = requestHeaders[field];
     const replacementValue = Array.isArray(headerValue)
       ? headerValue.join(', ')
-      : headerValue ?? '';
+      : (headerValue ?? '');
     value = value.replace(new RegExp(placeholder, 'g'), replacementValue);
   }
 
@@ -389,7 +389,14 @@ export function processMCPEnv(params: {
     const processedArgs: string[] = [];
     for (const originalValue of newObj.args) {
       processedArgs.push(
-        processSingleValue({ originalValue, customUserVars, user, body, requestHeaders, dbSourced }),
+        processSingleValue({
+          originalValue,
+          customUserVars,
+          user,
+          body,
+          requestHeaders,
+          dbSourced,
+        }),
       );
     }
     newObj.args = processedArgs;

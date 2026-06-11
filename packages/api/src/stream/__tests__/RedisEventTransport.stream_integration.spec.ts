@@ -1105,24 +1105,25 @@ describe('RedisEventTransport Integration Tests', () => {
       const receivedChunks: unknown[] = [];
       let doneEvent: unknown = null;
 
-      transport.subscribe(streamId, {
+      const subscription = transport.subscribe(streamId, {
         onChunk: (event) => receivedChunks.push(event),
         onDone: (event) => {
           doneEvent = event;
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await subscription.ready;
 
       // These should NOT throw
       await transport.emitChunk(streamId, { text: 'hello' });
       await transport.emitDone(streamId, { finished: true });
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await waitForCondition(() => receivedChunks.length === 1 && doneEvent != null);
 
       expect(receivedChunks.length).toBe(1);
       expect(doneEvent).toEqual({ finished: true });
 
+      subscription.unsubscribe();
       transport.destroy();
       subscriber.disconnect();
     });
