@@ -8,6 +8,7 @@ const GENERATED_CREDS_KEY = crypto.randomBytes(32).toString('hex');
 const GENERATED_CREDS_IV = crypto.randomBytes(16).toString('hex');
 const GENERATED_JWT_SECRET = crypto.randomBytes(32).toString('hex');
 const GENERATED_JWT_REFRESH_SECRET = crypto.randomBytes(32).toString('hex');
+const DEFAULT_MCP_JURISTAI_DJANGO_URL = 'http://127.0.0.1:8001/mcp';
 const PASSTHROUGH_ENV_KEYS = [
   'APPDATA',
   'CI',
@@ -51,6 +52,15 @@ export function getRuntimeEnvPath() {
   return process.env.E2E_RUNTIME_ENV_PATH ?? DEFAULT_RUNTIME_ENV_PATH;
 }
 
+export function getDjangoHubBaseURL() {
+  const value = process.env.DJANGO_API_BASE_URL?.trim();
+  return value ? value : undefined;
+}
+
+export function getMCPJuristAIDjangoURL() {
+  return process.env.MCP_JURISTAI_DJANGO_URL ?? DEFAULT_MCP_JURISTAI_DJANGO_URL;
+}
+
 function getPassthroughEnv(): Record<string, string> {
   const env: Record<string, string> = {};
   const passthroughKeys = [
@@ -84,8 +94,7 @@ export function getBaseE2EEnv(): Record<string, string> {
     HOST: process.env.E2E_HOST ?? host,
     PORT: process.env.E2E_PORT ?? port,
     MONGO_URI: process.env.MONGO_URI ?? DEFAULT_MONGO_URI,
-    MCP_JURISTAI_DJANGO_URL:
-      process.env.MCP_JURISTAI_DJANGO_URL ?? 'http://127.0.0.1:8001/mcp',
+    MCP_JURISTAI_DJANGO_URL: getMCPJuristAIDjangoURL(),
     DOMAIN_CLIENT: process.env.E2E_DOMAIN_CLIENT ?? baseURL,
     DOMAIN_SERVER: process.env.E2E_DOMAIN_SERVER ?? baseURL,
     E2E_RUNTIME_ENV_PATH: getRuntimeEnvPath(),

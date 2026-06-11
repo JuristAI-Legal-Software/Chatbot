@@ -271,6 +271,7 @@ Please follow these instructions when using tools from the respective MCP server
     options,
     tokenMethods,
     requestBody,
+    requestHeaders,
     flowManager,
     oauthStart,
     oauthEnd,

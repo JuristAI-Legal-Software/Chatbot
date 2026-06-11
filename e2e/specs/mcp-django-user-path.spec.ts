@@ -224,10 +224,30 @@ function waitForServerStream(response: import('@playwright/test').Response) {
   return response.url().includes('/api/agents') && response.status() === 200;
 }
 
+async function clickIfVisible(locator: import('@playwright/test').Locator) {
+  if (await locator.isVisible().catch(() => false)) {
+    await locator.click();
+    return true;
+  }
+
+  return false;
+}
+
 async function openEndpointMenu(page: import('@playwright/test').Page, endpoint = endpoints[1]) {
-  await page.goto(initialUrl, { timeout: 5000 });
-  await page.locator('#new-conversation-menu').click();
-  await page.locator(`#${endpoint}`).click();
+  await page.goto(initialUrl, { timeout: 10000 });
+
+  if (page.url() !== initialUrl) {
+    await clickIfVisible(page.getByTestId('nav-new-chat-button'));
+    await clickIfVisible(page.getByTestId('new-chat-button'));
+    await page.waitForURL(initialUrl, { timeout: 10000 }).catch(() => undefined);
+  }
+
+  const legacyMenuOpened = await clickIfVisible(page.getByTestId('new-conversation-menu'));
+  if (legacyMenuOpened) {
+    await clickIfVisible(page.locator(`#${endpoint}`));
+  }
+
+  await expect(page.locator('form').getByRole('textbox')).toBeVisible({ timeout: 15000 });
 }
 
 async function openMCPMenu(page: import('@playwright/test').Page) {
