@@ -222,26 +222,20 @@ export async function fetchModels({
   return models;
 }
 
+const CACHE_KEY_LENGTH_BYTES = 16;
+const SCRYPT_OPTS = { N: 1 << 14, r: 8, p: 1, maxmem: 32 * 1024 * 1024 } as const;
+
 /**
- * Derives an opaque cache key from a `(baseURL, apiKey)` pair via HMAC-SHA256.
+ * Derives an opaque cache key from a `(baseURL, apiKey)` pair via scrypt.
  *
- * Why HMAC, not bcrypt/scrypt/argon2 (CodeQL `js/insufficient-password-hash`
- * false positive): the output is a cache lookup key, never validated or
- * stored as a credential. Slow KDFs would add 50ms+ to every model lookup
- * without buying security — the API key is the credential we already trust.
- *
- * The inputs are routed through `Buffer.from(...)` so CodeQL's password-source
- * tracker doesn't follow `apiKey` into the HMAC sink.
+ * This is deterministic like a hash, but uses a password-hard KDF so CodeQL
+ * does not flag the API-key-derived cache key as `js/insufficient-password-hash`.
+ * The derived value is only used as an internal cache key.
  */
 function modelsCacheKey(baseURL: string, apiKey: string): string {
   const cacheSecret = process.env.JWT_SECRET || 'librechat-model-cache';
-  const signingKeyBytes = Buffer.from(cacheSecret, 'utf8');
-  const messageBytes = Buffer.from(`${baseURL}:${apiKey}`, 'utf8');
-  return crypto
-    .createHmac('sha256', signingKeyBytes)
-    .update(messageBytes)
-    .digest('hex')
-    .slice(0, 32);
+  const salt = `${cacheSecret}:${baseURL}`;
+  return crypto.scryptSync(apiKey, salt, CACHE_KEY_LENGTH_BYTES, SCRYPT_OPTS).toString('hex');
 }
 
 /** Options for fetching OpenAI models */

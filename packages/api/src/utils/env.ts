@@ -115,6 +115,7 @@ export function createSafeUser(
  * These are common fields from the request body that are safe to expose in headers.
  */
 const ALLOWED_BODY_FIELDS = ['conversationId', 'parentMessageId', 'messageId'] as const;
+const ALLOWED_REQUEST_HEADER_FIELDS = ['authorization'] as const;
 
 /**
  * Processes a string value to replace user field placeholders.
@@ -200,6 +201,30 @@ function processBodyPlaceholders(value: string, body: RequestBody): string {
   return value;
 }
 
+function processRequestHeaderPlaceholders(
+  value: string,
+  requestHeaders?: Record<string, string | string[] | undefined>,
+): string {
+  if (typeof value !== 'string' || !requestHeaders) {
+    return value;
+  }
+
+  for (const field of ALLOWED_REQUEST_HEADER_FIELDS) {
+    const placeholder = `{{LIBRECHAT_REQUEST_${field.toUpperCase()}}}`;
+    if (!value.includes(placeholder)) {
+      continue;
+    }
+
+    const headerValue = requestHeaders[field];
+    const replacementValue = Array.isArray(headerValue)
+      ? headerValue.join(', ')
+      : headerValue ?? '';
+    value = value.replace(new RegExp(placeholder, 'g'), replacementValue);
+  }
+
+  return value;
+}
+
 /**
  * Processes a single string value by replacing various types of placeholders
  *
@@ -215,6 +240,7 @@ function processSingleValue({
   customUserVars,
   user,
   body = undefined,
+  requestHeaders = undefined,
   isHeader = false,
   dbSourced = false,
 }: {
@@ -222,6 +248,7 @@ function processSingleValue({
   customUserVars?: Record<string, string>;
   user?: Partial<IUser>;
   body?: RequestBody;
+  requestHeaders?: Record<string, string | string[] | undefined>;
   isHeader?: boolean;
   /** When true, only resolve customUserVars — skip env vars, user/OpenID/body placeholders */
   dbSourced?: boolean;
@@ -268,6 +295,10 @@ function processSingleValue({
     value = processBodyPlaceholders(value, body);
   }
 
+  if (requestHeaders) {
+    value = processRequestHeaderPlaceholders(value, requestHeaders);
+  }
+
   return value;
 }
 
@@ -292,10 +323,11 @@ export function processMCPEnv(params: {
   user?: Partial<IUser>;
   customUserVars?: Record<string, string>;
   body?: RequestBody;
+  requestHeaders?: Record<string, string | string[] | undefined>;
   /** When true, only resolve customUserVars — skip env vars, user/OpenID/body placeholders (for DB-stored servers) */
   dbSourced?: boolean;
 }): MCPOptions {
-  const { options, user, customUserVars, body } = params;
+  const { options, user, customUserVars, body, requestHeaders } = params;
 
   if (options === null || options === undefined) {
     return options;
@@ -344,6 +376,7 @@ export function processMCPEnv(params: {
       processedEnv[key] = processSingleValue({
         user,
         body,
+        requestHeaders,
         dbSourced,
         originalValue,
         customUserVars,
@@ -356,7 +389,7 @@ export function processMCPEnv(params: {
     const processedArgs: string[] = [];
     for (const originalValue of newObj.args) {
       processedArgs.push(
-        processSingleValue({ originalValue, customUserVars, user, body, dbSourced }),
+        processSingleValue({ originalValue, customUserVars, user, body, requestHeaders, dbSourced }),
       );
     }
     newObj.args = processedArgs;
@@ -370,6 +403,7 @@ export function processMCPEnv(params: {
       processedHeaders[key] = processSingleValue({
         user,
         body,
+        requestHeaders,
         dbSourced,
         originalValue,
         customUserVars,
@@ -384,6 +418,7 @@ export function processMCPEnv(params: {
     newObj.url = processSingleValue({
       user,
       body,
+      requestHeaders,
       dbSourced,
       customUserVars,
       originalValue: newObj.url,
@@ -405,6 +440,7 @@ export function processMCPEnv(params: {
         processedOAuth[key] = processSingleValue({
           user,
           body,
+          requestHeaders,
           dbSourced,
           originalValue,
           customUserVars,
@@ -431,6 +467,7 @@ function processValue(
     customUserVars?: Record<string, string>;
     user?: IUser;
     body?: RequestBody;
+    requestHeaders?: Record<string, string | string[] | undefined>;
   },
 ): unknown {
   if (typeof value === 'string') {
@@ -439,6 +476,7 @@ function processValue(
       customUserVars: options.customUserVars,
       user: options.user,
       body: options.body,
+      requestHeaders: options.requestHeaders,
     });
   }
 
@@ -472,9 +510,10 @@ export function resolveNestedObject<T = unknown>(options?: {
   obj: T | undefined;
   user?: Partial<IUser> | { id: string };
   body?: RequestBody;
+  requestHeaders?: Record<string, string | string[] | undefined>;
   customUserVars?: Record<string, string>;
 }): T {
-  const { obj, user, body, customUserVars } = options ?? {};
+  const { obj, user, body, requestHeaders, customUserVars } = options ?? {};
 
   if (!obj) {
     return obj as T;
@@ -484,6 +523,7 @@ export function resolveNestedObject<T = unknown>(options?: {
     customUserVars,
     user: user as IUser,
     body,
+    requestHeaders,
   }) as T;
 }
 
@@ -502,9 +542,10 @@ export function resolveHeaders(options?: {
   headers: Record<string, string> | undefined;
   user?: Partial<IUser> | { id: string };
   body?: RequestBody;
+  requestHeaders?: Record<string, string | string[] | undefined>;
   customUserVars?: Record<string, string>;
 }) {
-  const { headers, user, body, customUserVars } = options ?? {};
+  const { headers, user, body, requestHeaders, customUserVars } = options ?? {};
   const inputHeaders = headers ?? {};
 
   const resolvedHeaders: Record<string, string> = { ...inputHeaders };
@@ -516,6 +557,7 @@ export function resolveHeaders(options?: {
         customUserVars,
         user: user as IUser,
         body,
+        requestHeaders,
         isHeader: true, // Important: Enable header encoding
       });
     });

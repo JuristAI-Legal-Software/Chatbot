@@ -195,6 +195,7 @@ export class MCPConnectionFactory {
     this.serverConfig = processMCPEnv({
       user: options?.user,
       body: options?.requestBody,
+      requestHeaders: options?.requestHeaders,
       dbSourced: basic.dbSourced,
       options: basic.serverConfig,
       customUserVars: options?.customUserVars,

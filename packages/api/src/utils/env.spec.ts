@@ -526,6 +526,21 @@ describe('resolveHeaders', () => {
     expect(result['X-Conversation']).toBe('conv-123');
   });
 
+  it('should process LIBRECHAT_REQUEST_AUTHORIZATION placeholders', () => {
+    const headers = {
+      Authorization: '{{LIBRECHAT_REQUEST_AUTHORIZATION}}',
+    };
+
+    const result = resolveHeaders({
+      headers,
+      requestHeaders: {
+        authorization: 'Bearer test-jwt-token',
+      },
+    });
+
+    expect(result.Authorization).toBe('Bearer test-jwt-token');
+  });
+
   it('should not resolve env vars introduced via LIBRECHAT_BODY placeholders', () => {
     const body = {
       conversationId: '${TEST_API_KEY}',
@@ -1210,6 +1225,31 @@ describe('processMCPEnv', () => {
       headers: {
         'X-Parent-Message': 'parent-456',
         'X-Message-Id': 'msg-789',
+      },
+    });
+  });
+
+  it('should process request authorization placeholders in MCP headers', () => {
+    const options: MCPOptions = {
+      type: 'streamable-http',
+      url: 'https://api.example.com',
+      headers: {
+        Authorization: '{{LIBRECHAT_REQUEST_AUTHORIZATION}}',
+      },
+    };
+
+    const result = processMCPEnv({
+      options,
+      requestHeaders: {
+        authorization: 'Bearer test-jwt-token',
+      },
+    });
+
+    expect(result).toEqual({
+      type: 'streamable-http',
+      url: 'https://api.example.com',
+      headers: {
+        Authorization: 'Bearer test-jwt-token',
       },
     });
   });

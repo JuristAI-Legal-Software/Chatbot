@@ -75,6 +75,7 @@ export abstract class UserConnectionManager {
       flowManager,
       customUserVars,
       requestBody,
+      requestHeaders,
       tokenMethods,
       oauthStart,
       oauthEnd,
@@ -180,6 +181,7 @@ export abstract class UserConnectionManager {
           oauthEnd: oauthEnd,
           returnOnOAuth: returnOnOAuth,
           requestBody: requestBody,
+          requestHeaders,
           connectionTimeout: connectionTimeout,
         };
       } else {
@@ -187,6 +189,7 @@ export abstract class UserConnectionManager {
           user,
           customUserVars,
           requestBody,
+          requestHeaders,
           connectionTimeout,
         };
       }

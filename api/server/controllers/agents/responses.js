@@ -716,6 +716,9 @@ const createResponse = async (req, res) => {
             messageId: responseId,
             conversationId,
           },
+          requestHeaders: {
+            authorization: req.headers.authorization,
+          },
           ...(userMCPAuthMap != null && { userMCPAuthMap }),
         },
         signal: abortController.signal,
@@ -888,6 +891,9 @@ const createResponse = async (req, res) => {
           requestBody: {
             messageId: responseId,
             conversationId,
+          },
+          requestHeaders: {
+            authorization: req.headers.authorization,
           },
           ...(userMCPAuthMap != null && { userMCPAuthMap }),
         },

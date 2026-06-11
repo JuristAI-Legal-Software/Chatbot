@@ -191,6 +191,7 @@ export interface UserConnectionContext {
   user?: IUser;
   customUserVars?: Record<string, string>;
   requestBody?: RequestBody;
+  requestHeaders?: Record<string, string | string[] | undefined>;
   connectionTimeout?: number;
 }
 
@@ -226,6 +227,7 @@ export interface ToolDiscoveryOptions {
   oauthStart?: (authURL: string) => Promise<void>;
   customUserVars?: Record<string, string>;
   requestBody?: RequestBody;
+  requestHeaders?: Record<string, string | string[] | undefined>;
   connectionTimeout?: number;
   /** Pre-resolved config-source servers for tenant-scoped lookup */
   configServers?: Record<string, ParsedServerConfig>;

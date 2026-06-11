@@ -46,6 +46,10 @@ type PromptOverride = {
 
 type PromptOverrides = Record<string, PromptOverride>;
 
+type RefreshTokenResponse = {
+  token?: string;
+};
+
 type ToolOutcome =
   | 'invoked_expected_tool'
   | 'invoked_expected_tool_but_failed'
@@ -106,6 +110,106 @@ async function safeJson<T>(response: { json(): Promise<unknown>; text(): Promise
   }
 }
 
+async function fetchSessionJson<T>(page: import('@playwright/test').Page, url: string) {
+  return page.evaluate(async (targetUrl) => {
+    const response = await fetch(targetUrl, {
+      credentials: 'include',
+      headers: {
+        accept: 'application/json',
+      },
+    });
+
+    const text = await response.text();
+    let json: unknown;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = undefined;
+    }
+
+    return {
+      json,
+      ok: response.ok,
+      status: response.status,
+      text,
+    };
+  }, url) as Promise<{ json?: T; ok: boolean; status: number; text: string }>;
+}
+
+async function postSessionJson<T>(page: import('@playwright/test').Page, url: string) {
+  return page.evaluate(async (targetUrl) => {
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        accept: 'application/json',
+      },
+    });
+
+    const text = await response.text();
+    let json: unknown;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = undefined;
+    }
+
+    return {
+      json,
+      ok: response.ok,
+      status: response.status,
+      text,
+    };
+  }, url) as Promise<{ json?: T; ok: boolean; status: number; text: string }>;
+}
+
+async function getAccessToken(page: import('@playwright/test').Page) {
+  const refreshResponse = await postSessionJson<RefreshTokenResponse>(
+    page,
+    'http://localhost:3080/api/auth/refresh',
+  );
+  expect(
+    refreshResponse.ok,
+    `POST /api/auth/refresh bootstrap failed with ${refreshResponse.status}: ${refreshResponse.text}`,
+  ).toBeTruthy();
+  expect(refreshResponse.json?.token, `No access token returned from refresh: ${refreshResponse.text}`).toBeTruthy();
+  return refreshResponse.json?.token as string;
+}
+
+async function fetchAuthorizedJson<T>(
+  page: import('@playwright/test').Page,
+  url: string,
+  accessToken: string,
+) {
+  return page.evaluate(
+    async ({ accessToken: token, targetUrl }) => {
+      const response = await fetch(targetUrl, {
+        credentials: 'include',
+        headers: {
+          accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const text = await response.text();
+      let json: unknown;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = undefined;
+      }
+
+      return {
+        json,
+        ok: response.ok,
+        status: response.status,
+        text,
+      };
+    },
+    { accessToken, targetUrl: url },
+  ) as Promise<{ json?: T; ok: boolean; status: number; text: string }>;
+}
+
 async function loadPromptOverrides() {
   const overridesPath = process.env.E2E_MCP_USER_PROMPTS_PATH;
   if (!overridesPath) {
@@ -114,16 +218,6 @@ async function loadPromptOverrides() {
 
   const raw = await fs.readFile(overridesPath, 'utf8');
   return JSON.parse(raw) as PromptOverrides;
-}
-
-async function clearConvos(page: import('@playwright/test').Page) {
-  await page.goto(initialUrl, { timeout: 5000 });
-  await page.getByRole('button', { name: 'test' }).click();
-  await page.getByText('Settings').click();
-  await page.getByTestId('clear-convos-initial').click();
-  await page.getByTestId('clear-convos-confirm').click();
-  await page.waitForSelector('[data-testid="convo-icon"]', { state: 'detached' });
-  await page.getByRole('button', { name: 'Close' }).click();
 }
 
 function waitForServerStream(response: import('@playwright/test').Response) {
@@ -226,18 +320,6 @@ function stringifyResult(result: unknown) {
 }
 
 test.describe('Django MCP user path', () => {
-  let beforeAfterAllPage: import('@playwright/test').Page;
-
-  test.beforeAll(async ({ browser }) => {
-    const context = await browser.newContext();
-    beforeAfterAllPage = await context.newPage();
-    await clearConvos(beforeAfterAllPage);
-  });
-
-  test.afterAll(async () => {
-    await beforeAfterAllPage?.close();
-  });
-
   test('drives Django/JuristAI MCP tools through normal chat usage', async ({ page }, testInfo) => {
     test.setTimeout(480000);
 
@@ -249,15 +331,25 @@ test.describe('Django MCP user path', () => {
     const promptOverrides = await loadPromptOverrides();
     const matcher = new RegExp(serverMatch, 'i');
 
-    const [toolsResponse, serverConfigResponse] = await Promise.all([
-      page.request.get('http://localhost:3080/api/mcp/tools'),
-      page.request.get('http://localhost:3080/api/mcp/servers'),
-    ]);
-    expect(toolsResponse.ok()).toBeTruthy();
-    expect(serverConfigResponse.ok()).toBeTruthy();
+    await page.goto(initialUrl, { timeout: 10000 });
+    const accessToken = await getAccessToken(page);
 
-    const toolsData = await safeJson<MCPToolsResponse>(toolsResponse);
-    const serverConfigs = await safeJson<MCPServersConfigResponse>(serverConfigResponse);
+    const [toolsResponse, serverConfigResponse] = await Promise.all([
+      fetchAuthorizedJson<MCPToolsResponse>(page, 'http://localhost:3080/api/mcp/tools', accessToken),
+      fetchAuthorizedJson<MCPServersConfigResponse>(
+        page,
+        'http://localhost:3080/api/mcp/servers',
+        accessToken,
+      ),
+    ]);
+    expect(toolsResponse.ok, `GET /api/mcp/tools failed with ${toolsResponse.status}: ${toolsResponse.text}`).toBeTruthy();
+    expect(
+      serverConfigResponse.ok,
+      `GET /api/mcp/servers failed with ${serverConfigResponse.status}: ${serverConfigResponse.text}`,
+    ).toBeTruthy();
+
+    const toolsData = (toolsResponse.json ?? {}) as MCPToolsResponse;
+    const serverConfigs = (serverConfigResponse.json ?? {}) as MCPServersConfigResponse;
 
     const selectedServers = Object.entries(toolsData.servers).filter(([serverName, serverData]) => {
       if (!serverData.tools.length) {
@@ -329,11 +421,16 @@ test.describe('Django MCP user path', () => {
         await submitPrompt(page, prompt);
 
         const conversationId = await getConversationId(page);
-        const toolCallsResponse = await page.request.get(
+        const toolCallsResponse = await fetchAuthorizedJson<ToolCallResult[]>(
+          page,
           `http://localhost:3080/api/agents/tools/calls?conversationId=${encodeURIComponent(conversationId)}`,
+          accessToken,
         );
-        expect(toolCallsResponse.ok()).toBeTruthy();
-        const toolCalls = await safeJson<ToolCallResult[]>(toolCallsResponse);
+        expect(
+          toolCallsResponse.ok,
+          `GET /api/agents/tools/calls failed with ${toolCallsResponse.status}: ${toolCallsResponse.text}`,
+        ).toBeTruthy();
+        const toolCalls = (toolCallsResponse.json ?? []) as ToolCallResult[];
 
         const expectedToolId = tool.pluginKey;
         const expectedCalls = toolCalls.filter((call) => call.toolId === expectedToolId);

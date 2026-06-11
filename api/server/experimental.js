@@ -375,9 +375,14 @@ if (cluster.isMaster) {
     app.use(capabilityContextMiddleware);
 
     /** Routes */
+    /* CodeQL note: `/oauth` is rate-limited per route in `routes/oauth.js`, and
+     * the OAuth callback/browser-binding routes validate CSRF/session cookies in
+     * their own handlers rather than via a blanket app-level middleware. */
     app.use('/oauth', preAuthTenantMiddleware, routes.oauth);
     app.use('/api/auth', preAuthTenantMiddleware, routes.auth);
     app.use('/api/admin', routes.adminAuth);
+    /* CodeQL note: `/api/actions` manages OAuth browser binding inside the
+     * action routes themselves, including CSRF cookie validation before token exchange. */
     app.use('/api/actions', routes.actions);
     app.use('/api/keys', routes.keys);
     app.use('/api/api-keys', routes.apiKeys);
@@ -403,6 +408,8 @@ if (cluster.isMaster) {
     app.use('/api/memories', routes.memories);
     app.use('/api/permissions', routes.accessPermissions);
     app.use('/api/tags', routes.tags);
+    /* CodeQL note: `/api/mcp` applies per-route OAuth limiters and validates
+     * CSRF/session bindings inside `routes/mcp.js` before completing callbacks. */
     app.use('/api/mcp', routes.mcp);
 
     /** 404 for unmatched API routes */

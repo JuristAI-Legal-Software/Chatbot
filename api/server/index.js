@@ -184,6 +184,9 @@ const startServer = async () => {
 
   /* Pre-auth tenant context for unauthenticated routes that need tenant scoping.
    * The reverse proxy / auth gateway sets `X-Tenant-Id` header for multi-tenant deployments. */
+  /* CodeQL note: `/oauth` is rate-limited per route in `routes/oauth.js`, and
+   * the OAuth callback/browser-binding routes validate CSRF/session cookies in
+   * their own handlers rather than via a blanket app-level middleware. */
   app.use('/oauth', preAuthTenantMiddleware, routes.oauth);
   /* API Endpoints */
   app.use('/api/auth', preAuthTenantMiddleware, routes.auth);
@@ -193,6 +196,8 @@ const startServer = async () => {
   app.use('/api/admin/groups', routes.adminGroups);
   app.use('/api/admin/roles', routes.adminRoles);
   app.use('/api/admin/users', routes.adminUsers);
+  /* CodeQL note: `/api/actions` manages OAuth browser binding inside the
+   * action routes themselves, including CSRF cookie validation before token exchange. */
   app.use('/api/actions', routes.actions);
   app.use('/api/keys', routes.keys);
   app.use('/api/api-keys', routes.apiKeys);
@@ -219,6 +224,8 @@ const startServer = async () => {
   app.use('/api/permissions', routes.accessPermissions);
 
   app.use('/api/tags', routes.tags);
+  /* CodeQL note: `/api/mcp` applies per-route OAuth limiters and validates
+   * CSRF/session bindings inside `routes/mcp.js` before completing callbacks. */
   app.use('/api/mcp', routes.mcp);
 
   app.use('/metrics', metricsRouter);

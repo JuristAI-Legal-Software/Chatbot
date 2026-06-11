@@ -707,6 +707,9 @@ const OpenAIChatCompletionController = async (req, res) => {
           messageId: responseId,
           conversationId,
         },
+        requestHeaders: {
+          authorization: req.headers.authorization,
+        },
         ...(userMCPAuthMap != null && { userMCPAuthMap }),
       },
       recursionLimit: resolveRecursionLimit(agentsEConfig, agent),

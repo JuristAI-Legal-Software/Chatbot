@@ -849,6 +849,9 @@ class AgentClient extends BaseClient {
             conversationId: this.conversationId,
             parentMessageId: this.parentMessageId,
           },
+          requestHeaders: {
+            authorization: this.options.req?.headers?.authorization,
+          },
           user: createSafeUser(this.options.req.user),
         },
         recursionLimit: resolveRecursionLimit(agentsEConfig, this.options.agent),
@@ -1315,6 +1318,9 @@ class AgentClient extends BaseClient {
           messageId: this.responseMessageId,
           conversationId: this.conversationId,
           parentMessageId: this.parentMessageId,
+        },
+        requestHeaders: {
+          authorization: this.options.req?.headers?.authorization,
         },
       });
     }

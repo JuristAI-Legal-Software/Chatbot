@@ -10,6 +10,7 @@ const {
   filterFile,
 } = require('~/server/services/Files/process');
 const { checkPermission } = require('~/server/services/PermissionService');
+const { assertSinglePathSegment } = require('~/server/utils/pathSafety');
 const db = require('~/models');
 
 const router = express.Router();
@@ -46,11 +47,8 @@ router.post('/', async (req, res) => {
     const message = resolveUploadErrorMessage(error);
 
     try {
-      /* Strip path separators from every segment before joining so a malformed
-       * JWT subject or filename cannot escape the per-user image directory.
-       * Closes CodeQL `js/path-injection` (req.user.id flows into path.join). */
-      const safeUserDir = path.basename(String(req.user.id));
-      const safeFilename = path.basename(String(req.file.filename));
+      const safeUserDir = assertSinglePathSegment('userId', req.user.id);
+      const safeFilename = assertSinglePathSegment('filename', req.file.filename);
       const filepath = path.join(appConfig.paths.imageOutput, safeUserDir, safeFilename);
       await fs.unlink(filepath);
     } catch (error) {

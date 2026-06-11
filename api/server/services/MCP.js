@@ -676,6 +676,7 @@ function createToolInstance({
         },
         user: config?.configurable?.user,
         requestBody: config?.configurable?.requestBody,
+        requestHeaders: config?.configurable?.requestHeaders,
         customUserVars,
         flowManager,
         tokenMethods: {

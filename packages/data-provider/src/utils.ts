@@ -5,6 +5,55 @@
  */
 export const envVarRegex = /^\${([^}]+)}$/;
 
+function parseWholePlaceholder(value: string): string | null {
+  if (!value.startsWith('${') || !value.endsWith('}')) {
+    return null;
+  }
+
+  const varName = value.slice(2, -1);
+  if (!varName || varName.includes('}')) {
+    return null;
+  }
+
+  return varName;
+}
+
+function isPlaceholderToken(value: string): boolean {
+  return parseWholePlaceholder(value) != null;
+}
+
+function replaceInlinePlaceholders(value: string): string {
+  let result = '';
+  let cursor = 0;
+
+  while (cursor < value.length) {
+    const openIndex = value.indexOf('${', cursor);
+    if (openIndex === -1) {
+      result += value.slice(cursor);
+      break;
+    }
+
+    result += value.slice(cursor, openIndex);
+    const closeIndex = value.indexOf('}', openIndex + 2);
+    if (closeIndex === -1) {
+      result += value.slice(openIndex);
+      break;
+    }
+
+    const fullMatch = value.slice(openIndex, closeIndex + 1);
+    const varName = parseWholePlaceholder(fullMatch);
+    if (!varName || isSensitiveEnvVar(varName)) {
+      result += fullMatch;
+    } else {
+      result += process.env[varName] || fullMatch;
+    }
+
+    cursor = closeIndex + 1;
+  }
+
+  return result;
+}
+
 /**
  * Infrastructure env vars that must never be resolved via placeholder expansion.
  * These are internal secrets whose exposure would compromise the system —
@@ -35,8 +84,7 @@ export function extractVariableName(value: string): string | null {
     return null;
   }
 
-  const match = value.trim().match(envVarRegex);
-  return match ? match[1] : null;
+  return parseWholePlaceholder(value.trim());
 }
 
 /** Extracts the value of an environment variable from a string. */
@@ -48,45 +96,21 @@ export function extractEnvVariable(value: string) {
   const trimmed = value.trim();
   const whitespaceSeparatedTokens = trimmed.split(/\s+/);
   const isPlaceholderList =
-    whitespaceSeparatedTokens.length > 1 &&
-    whitespaceSeparatedTokens.every((token) => envVarRegex.test(token));
+    whitespaceSeparatedTokens.length > 1 && whitespaceSeparatedTokens.every(isPlaceholderToken);
 
   if (isPlaceholderList) {
     return trimmed;
   }
 
-  const singleMatch = trimmed.match(envVarRegex);
-  if (singleMatch) {
-    const varName = singleMatch[1];
+  const varName = parseWholePlaceholder(trimmed);
+  if (varName) {
     if (isSensitiveEnvVar(varName)) {
       return trimmed;
     }
     return process.env[varName] || trimmed;
   }
 
-  const regex = /\${([^}]+)}/g;
-  let result = trimmed;
-
-  const matches = [];
-  let match;
-  while ((match = regex.exec(trimmed)) !== null) {
-    matches.push({
-      fullMatch: match[0],
-      varName: match[1],
-      index: match.index,
-    });
-  }
-
-  for (let i = matches.length - 1; i >= 0; i--) {
-    const { fullMatch, varName, index } = matches[i];
-    if (isSensitiveEnvVar(varName)) {
-      continue;
-    }
-    const envValue = process.env[varName] || fullMatch;
-    result = result.substring(0, index) + envValue + result.substring(index + fullMatch.length);
-  }
-
-  return result;
+  return replaceInlinePlaceholders(trimmed);
 }
 
 /**

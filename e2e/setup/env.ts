@@ -11,6 +11,9 @@ const GENERATED_JWT_REFRESH_SECRET = crypto.randomBytes(32).toString('hex');
 const PASSTHROUGH_ENV_KEYS = [
   'APPDATA',
   'CI',
+  'DJANGO_API_BASE_URL',
+  'MCP_JURISTAI_DJANGO_URL',
+  'MCP_SERVER_SECRET',
   'FORCE_COLOR',
   'HOME',
   'LOCALAPPDATA',

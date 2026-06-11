@@ -1,10 +1,10 @@
-const path = require('path');
 const fs = require('fs').promises;
 const express = require('express');
 const { logger } = require('@librechat/data-schemas');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { resizeAvatar } = require('~/server/services/Files/images/avatar');
 const { getFileStrategy } = require('~/server/utils/getFileStrategy');
+const { assertSinglePathSegment } = require('~/server/utils/pathSafety');
 const { filterFile } = require('~/server/services/Files/process');
 
 const router = express.Router();
@@ -17,10 +17,9 @@ router.post('/', async (req, res) => {
     if (!rawUserId) {
       throw new Error('User ID is undefined');
     }
-    /* Strip any path separators from the JWT subject before it flows into
-     * strategy.processAvatar (which uses it as a path segment). Closes
-     * CodeQL `js/path-injection`. */
-    const userId = path.basename(String(rawUserId));
+    /* Reject unsafe path characters before the user id flows into
+     * strategy.processAvatar, which persists it as a storage path segment. */
+    const userId = assertSinglePathSegment('userId', rawUserId);
     const { manual } = req.body;
     const input = await fs.readFile(req.file.path);
 

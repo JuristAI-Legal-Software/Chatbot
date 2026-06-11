@@ -123,6 +123,7 @@ export class MCPManager extends UserConnectionManager {
         user: args.user,
         customUserVars: args.customUserVars,
         requestBody: args.requestBody,
+        requestHeaders: args.requestHeaders,
         connectionTimeout: args.connectionTimeout,
       });
       return {
@@ -146,6 +147,7 @@ export class MCPManager extends UserConnectionManager {
       oauthStart: args.oauthStart,
       customUserVars: args.customUserVars,
       requestBody: args.requestBody,
+      requestHeaders: args.requestHeaders,
       connectionTimeout: args.connectionTimeout,
     });
 
@@ -284,6 +286,7 @@ Please follow these instructions when using tools from the respective MCP server
     toolArguments?: Record<string, unknown>;
     options?: RequestOptions;
     requestBody?: RequestBody;
+    requestHeaders?: Record<string, string | string[] | undefined>;
     tokenMethods?: TokenMethods;
     customUserVars?: Record<string, string>;
     flowManager: FlowStateManager<MCPOAuthTokens | null>;
@@ -342,6 +345,7 @@ Please follow these instructions when using tools from the respective MCP server
       const currentOptions = processMCPEnv({
         user,
         body: requestBody,
+        requestHeaders,
         dbSourced: isDbSourced,
         options: graphProcessedConfig,
         customUserVars,
