@@ -81,7 +81,7 @@ export function getOAuthCookieBindingValue(subject: string, secret?: string): st
 }
 
 function getCookieBindingValue(subject: string): string {
-  return generateOAuthCsrfToken(subject);
+  return getOAuthCookieBindingValue(subject);
 }
 
 /**
