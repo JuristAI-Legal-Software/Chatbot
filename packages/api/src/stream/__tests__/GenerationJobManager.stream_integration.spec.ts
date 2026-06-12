@@ -65,6 +65,12 @@ describe('GenerationJobManager Integration Tests', () => {
   });
 
   afterEach(async () => {
+    try {
+      await GenerationJobManager.destroy();
+    } catch {
+      // Ignore teardown errors from partially initialized tests
+    }
+
     // Clean up module state
     jest.resetModules();
 
@@ -2026,7 +2032,7 @@ describe('GenerationJobManager Integration Tests', () => {
       }
 
       subB?.unsubscribe();
-      replicaBJobStore.destroy();
+      await replicaBJobStore.destroy();
       await replicaA.destroy();
       await replicaB.destroy();
     });
@@ -2105,7 +2111,7 @@ describe('GenerationJobManager Integration Tests', () => {
 
       subA?.unsubscribe();
       subB?.unsubscribe();
-      replicaBJobStore.destroy();
+      await replicaBJobStore.destroy();
       await replicaA.destroy();
       await replicaB.destroy();
     });
@@ -2169,7 +2175,7 @@ describe('GenerationJobManager Integration Tests', () => {
 
       subA?.unsubscribe();
       subB?.unsubscribe();
-      replicaBJobStore.destroy();
+      await replicaBJobStore.destroy();
       await replicaA.destroy();
       await replicaB.destroy();
     });

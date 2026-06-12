@@ -48,6 +48,21 @@ describe('RedisEventTransport Integration Tests', () => {
     ioredisClient = client;
   });
 
+  afterEach(async () => {
+    if (!ioredisClient) {
+      return;
+    }
+
+    try {
+      const keys = await ioredisClient.keys(`${testPrefix}*`);
+      const streamKeys = await ioredisClient.keys(`stream:*`);
+      const allKeys = [...keys, ...streamKeys];
+      await Promise.all(allKeys.map((key) => ioredisClient!.del(key)));
+    } catch {
+      // Ignore cleanup errors between tests
+    }
+  });
+
   afterAll(async () => {
     if (ioredisClient) {
       try {
