@@ -213,6 +213,7 @@ describe('createResponse controller', () => {
         stream: false,
       },
       user: { id: 'user-123' },
+      headers: {},
       config: {
         endpoints: {
           agents: { allowedProviders: ['anthropic'] },
