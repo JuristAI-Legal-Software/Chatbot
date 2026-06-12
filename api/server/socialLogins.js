@@ -20,6 +20,13 @@ const {
 } = require('~/strategies');
 const { getLogStores } = require('~/cache');
 
+function mountAuthSessionMiddleware(app, sessionOptions) {
+  const sessionMiddleware = session(sessionOptions);
+  const passportSessionMiddleware = passport.session();
+  app.use('/oauth', sessionMiddleware, passportSessionMiddleware);
+  app.use('/api/admin/oauth', sessionMiddleware, passportSessionMiddleware);
+}
+
 /**
  * Configures OpenID Connect for the application.
  * @param {Express.Application} app - The Express application instance.
@@ -38,8 +45,7 @@ async function configureOpenId(app) {
       secure: shouldUseSecureCookie(),
     },
   };
-  app.use(session(sessionOptions));
-  app.use(passport.session());
+  mountAuthSessionMiddleware(app, sessionOptions);
 
   const config = await setupOpenId();
   if (!config) {
@@ -108,8 +114,7 @@ const configureSocialLogins = async (app) => {
         secure: shouldUseSecureCookie(),
       },
     };
-    app.use(session(sessionOptions));
-    app.use(passport.session());
+    mountAuthSessionMiddleware(app, sessionOptions);
     setupSaml();
 
     logger.info('SAML Connect configured.');

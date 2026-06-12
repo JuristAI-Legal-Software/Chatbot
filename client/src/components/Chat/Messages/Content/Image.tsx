@@ -14,6 +14,11 @@ const dimensionCache = new Map<string, { width: number; height: number }>();
 /** Tracks URLs that have been fully painted — skip skeleton on remount */
 const paintedUrls = new Set<string>();
 
+function getSafeDownloadFilename(value?: string): string {
+  const candidate = value?.trim() || 'image.png';
+  return candidate.replace(/[^\w.\- ]+/g, '_').slice(0, 120);
+}
+
 /** Test-only: resets module-level caches */
 export function _resetImageCaches(): void {
   dimensionCache.clear();
@@ -63,13 +68,15 @@ const Image = ({
     return `${baseURL}${imagePath}`;
   }, [imagePath]);
   const safeImageUrl = isSafeImageSrc(absoluteImageUrl) ? absoluteImageUrl : '';
+  const safeRenderableImageUrl = safeImageUrl ? toRenderableImageUrl(safeImageUrl) : '';
+  const safeDownloadFilename = getSafeDownloadFilename(altText);
 
-  const downloadImage = async () => {
-    if (!safeImageUrl) {
+  const downloadImage = async (): Promise<void> => {
+    if (!safeRenderableImageUrl) {
       return;
     }
     try {
-      const response = await fetch(safeImageUrl);
+      const response = await fetch(safeRenderableImageUrl);
       if (!response.ok) {
         throw new Error(`Failed to fetch image: ${response.status}`);
       }
@@ -79,7 +86,7 @@ const Image = ({
 
       const link = document.createElement('a');
       link.href = url;
-      link.download = altText || 'image.png';
+      link.download = safeDownloadFilename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -88,8 +95,8 @@ const Image = ({
     } catch (error) {
       console.error('Download failed:', error);
       const link = document.createElement('a');
-      link.href = toRenderableImageUrl(safeImageUrl);
-      link.download = altText || 'image.png';
+      link.href = safeRenderableImageUrl;
+      link.download = safeDownloadFilename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -102,7 +109,7 @@ const Image = ({
     }
   }, [safeImageUrl, width, height]);
 
-  if (!safeImageUrl) {
+  if (!safeImageUrl || !safeRenderableImageUrl) {
     return null;
   }
 
@@ -129,7 +136,7 @@ const Image = ({
         {showSkeleton && <Skeleton className="absolute inset-0" aria-hidden="true" />}
         <img
           alt={altText}
-          src={toRenderableImageUrl(safeImageUrl)}
+          src={safeRenderableImageUrl}
           onLoad={() => paintedUrls.add(safeImageUrl)}
           className={cn(
             'relative block text-transparent',

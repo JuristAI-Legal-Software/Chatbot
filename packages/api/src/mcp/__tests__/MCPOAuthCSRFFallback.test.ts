@@ -101,7 +101,7 @@ describe('OAuth Callback CSRF Fallback', () => {
   describe('CSRF cookie validation (mechanism 1)', () => {
     it('should accept valid CSRF cookie', async () => {
       const flowId = 'user1:test-server';
-      const csrfToken = getOAuthCookieBindingValue(flowId, 'test-secret-for-csrf');
+      const csrfToken = getOAuthCookieBindingValue(flowId);
       const req = makeReq({ [OAUTH_CSRF_COOKIE]: csrfToken });
       const res = makeRes();
 
@@ -122,7 +122,7 @@ describe('OAuth Callback CSRF Fallback', () => {
   describe('Session cookie validation (mechanism 2)', () => {
     it('should accept valid session cookie when CSRF is absent', async () => {
       const flowId = 'user1:test-server';
-      const sessionToken = getOAuthCookieBindingValue('user1', 'test-secret-for-csrf');
+      const sessionToken = getOAuthCookieBindingValue('user1');
       const req = makeReq({ [OAUTH_SESSION_COOKIE]: sessionToken });
       const res = makeRes();
 
@@ -211,7 +211,7 @@ describe('OAuth Callback CSRF Fallback', () => {
       const flowId = 'user1:test-server';
       await flowManager.initFlow(flowId, 'mcp_oauth', { serverName: 'test-server' });
 
-      const csrfToken = getOAuthCookieBindingValue(flowId, 'test-secret-for-csrf');
+      const csrfToken = getOAuthCookieBindingValue(flowId);
       const req = makeReq({ [OAUTH_CSRF_COOKIE]: csrfToken });
       const res = makeRes();
 
@@ -223,7 +223,7 @@ describe('OAuth Callback CSRF Fallback', () => {
       const flowId = 'user1:test-server';
       await flowManager.initFlow(flowId, 'mcp_oauth', { serverName: 'test-server' });
 
-      const sessionToken = getOAuthCookieBindingValue('user1', 'test-secret-for-csrf');
+      const sessionToken = getOAuthCookieBindingValue('user1');
       const req = makeReq({ [OAUTH_SESSION_COOKIE]: sessionToken });
       const res = makeRes();
 

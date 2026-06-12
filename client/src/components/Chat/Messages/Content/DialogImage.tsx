@@ -39,6 +39,7 @@ export default function DialogImage({
 }) {
   const localize = useLocalize();
   const safeSrc = isSafeImageSrc(src) ? src : '';
+  const safeRenderableSrc = safeSrc ? toRenderableImageUrl(safeSrc) : '';
   const [isPromptOpen, setIsPromptOpen] = useState(false);
   const [imageSize, setImageSize] = useState<string | null>(null);
 
@@ -204,11 +205,11 @@ export default function DialogImage({
   }, [resetZoom, onOpenChange, isOpen, zoom]);
 
   useEffect(() => {
-    if (isOpen && safeSrc) {
+    if (isOpen && safeRenderableSrc) {
       getImageSize(safeSrc).then(setImageSize);
       resetZoom();
     }
-  }, [isOpen, safeSrc, getImageSize, resetZoom]);
+  }, [isOpen, safeRenderableSrc, safeSrc, getImageSize, resetZoom]);
 
   useEffect(() => {
     if (zoom === 1) {
@@ -365,7 +366,7 @@ export default function DialogImage({
               >
                 <img
                   ref={imageRef}
-                  src={toRenderableImageUrl(safeSrc)}
+                  src={safeRenderableSrc}
                   alt="Image"
                   decoding="async"
                   className="block max-h-[85vh] object-contain"

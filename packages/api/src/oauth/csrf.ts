@@ -65,8 +65,19 @@ export function generateOAuthCsrfToken(flowId: string, secret?: string): string 
     .toString('hex');
 }
 
+function getOAuthBindingSigningKey(secret?: string): string {
+  const signingKey = secret || process.env.JWT_SECRET;
+  if (!signingKey) {
+    throw new Error('JWT_SECRET is required for OAuth CSRF token generation');
+  }
+  return signingKey;
+}
+
 export function getOAuthCookieBindingValue(subject: string, secret?: string): string {
-  return generateOAuthCsrfToken(subject, secret);
+  return crypto
+    .createHmac('sha256', getOAuthBindingSigningKey(secret))
+    .update(generateOAuthCsrfToken(subject, secret), 'utf8')
+    .digest('base64url');
 }
 
 function getCookieBindingValue(subject: string): string {
@@ -76,8 +87,10 @@ function getCookieBindingValue(subject: string): string {
 /**
  * Sets a SameSite=Lax CSRF cookie bound to a specific OAuth flow.
  *
- * The cookie stores the scrypt-derived opaque binding directly. The cookie is
- * httpOnly + Secure (in prod) + SameSite=Lax, exactly per OWASP CSRF guidance.
+ * The cookie stores an HMAC-wrapped binding derived from the scrypt token.
+ * This keeps the browser-visible value opaque while preserving deterministic
+ * server-side verification. The cookie is httpOnly + Secure (in prod) +
+ * SameSite=Lax, exactly per OWASP CSRF guidance.
  */
 export function setOAuthCsrfCookie(res: Response, flowId: string, cookiePath: string): void {
   res.cookie(OAUTH_CSRF_COOKIE, getCookieBindingValue(flowId), {
@@ -126,8 +139,8 @@ export function setOAuthSession(req: Request, res: Response, next: NextFunction)
 /**
  * Sets a SameSite=Lax session cookie that binds the browser to the authenticated userId.
  *
- * Same opaque binding approach as `setOAuthCsrfCookie`: the cookie stores the
- * scrypt-derived token directly.
+ * Same opaque binding approach as `setOAuthCsrfCookie`: the cookie stores an
+ * HMAC-wrapped binding, not the raw scrypt-derived token.
  */
 export function setOAuthSessionCookie(res: Response, userId: string): void {
   res.cookie(OAUTH_SESSION_COOKIE, getCookieBindingValue(userId), {

@@ -4,7 +4,10 @@ const { logger } = require('@librechat/data-schemas');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { resizeAvatar } = require('~/server/services/Files/images/avatar');
 const { getFileStrategy } = require('~/server/utils/getFileStrategy');
-const { assertSinglePathSegment } = require('~/server/utils/pathSafety');
+const {
+  assertSinglePathSegment,
+  resolvePathFromTrustedRoot,
+} = require('~/server/utils/pathSafety');
 const { filterFile } = require('~/server/services/Files/process');
 const { createFileLimiters } = require('~/server/middleware/limiters/uploadLimiters');
 
@@ -22,8 +25,16 @@ router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) =>
     /* Reject unsafe path characters before the user id flows into
      * strategy.processAvatar, which persists it as a storage path segment. */
     const userId = assertSinglePathSegment('userId', rawUserId);
+    const tempFilename = assertSinglePathSegment('filename', req.file.filename);
+    const tempUploadPath = resolvePathFromTrustedRoot(
+      'avatar upload path',
+      appConfig.paths.uploads,
+      'temp',
+      userId,
+      tempFilename,
+    );
     const { manual } = req.body;
-    const input = await fs.readFile(req.file.path);
+    const input = await fs.readFile(tempUploadPath);
 
     const fileStrategy = getFileStrategy(appConfig, { isAvatar: true });
     const desiredFormat = appConfig.imageOutputType;
@@ -48,7 +59,16 @@ router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) =>
     res.status(500).json({ message });
   } finally {
     try {
-      await fs.unlink(req.file.path);
+      const safeUserId = assertSinglePathSegment('userId', req.user?.id);
+      const safeFilename = assertSinglePathSegment('filename', req.file?.filename);
+      const tempUploadPath = resolvePathFromTrustedRoot(
+        'avatar upload path',
+        req.config.paths.uploads,
+        'temp',
+        safeUserId,
+        safeFilename,
+      );
+      await fs.unlink(tempUploadPath);
       logger.debug('[/files/images/avatar] Temp. image upload file deleted');
     } catch {
       logger.debug('[/files/images/avatar] Temp. image upload file already deleted');

@@ -76,8 +76,9 @@ const ImagePreview = ({
   }, [isModalOpen, handleOpenChange]);
 
   const imageUrl = imageBase64 ?? url ?? '';
+  const safeRenderableImageUrl = isSafeImageSrc(imageUrl) ? toRenderableImageUrl(imageUrl) : '';
 
-  if (!isSafeImageSrc(imageUrl)) {
+  if (!safeRenderableImageUrl) {
     return null;
   }
 
@@ -109,7 +110,7 @@ const ImagePreview = ({
         onMouseLeave={() => setIsHovered(false)}
       >
         <img
-          src={toRenderableImageUrl(imageUrl)}
+          src={safeRenderableImageUrl}
           alt=""
           className="size-full object-cover"
           draggable={false}
@@ -175,7 +176,7 @@ const ImagePreview = ({
             <div onClick={(e) => e.stopPropagation()}>
               <img
                 ref={imageRef}
-                src={toRenderableImageUrl(imageUrl)}
+                src={safeRenderableImageUrl}
                 alt={alt}
                 className="max-h-[85vh] max-w-[90vw] object-contain"
                 draggable={false}

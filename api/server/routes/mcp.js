@@ -44,6 +44,7 @@ const {
 const {
   requireJwtAuth,
   canAccessMCPServerResource,
+  loginLimiter,
   createMCPOAuthLimiters,
 } = require('~/server/middleware');
 const { getUserPluginAuthValue } = require('~/server/services/PluginService');
@@ -57,8 +58,6 @@ const { mcpOAuthIpLimiter, mcpOAuthUserLimiter, mcpOAuthCallbackLimiter } =
   createMCPOAuthLimiters();
 
 const OAUTH_CSRF_COOKIE_PATH = '/api/mcp';
-const mcpProtectedRoute = [requireJwtAuth, mcpOAuthIpLimiter, mcpOAuthUserLimiter];
-
 const checkMCPUsePermissions = generateCheckAccess({
   permissionType: PermissionTypes.MCP_SERVERS,
   permissions: [Permissions.USE],
@@ -85,6 +84,7 @@ router.get('/tools', requireJwtAuth, mcpOAuthIpLimiter, mcpOAuthUserLimiter, asy
  */
 router.get(
   '/:serverName/oauth/initiate',
+  loginLimiter,
   requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
@@ -156,6 +156,7 @@ router.get(
  */
 router.get(
   '/:serverName/oauth/callback',
+  loginLimiter,
   mcpOAuthIpLimiter,
   mcpOAuthCallbackLimiter,
   async (req, res) => {
@@ -425,6 +426,7 @@ router.get(
  */
 router.get(
   '/oauth/tokens/:flowId',
+  loginLimiter,
   requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
@@ -468,6 +470,7 @@ router.get(
  */
 router.post(
   '/:serverName/oauth/bind',
+  loginLimiter,
   requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
@@ -498,6 +501,7 @@ router.post(
  */
 router.get(
   '/oauth/status/:flowId',
+  loginLimiter,
   requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
@@ -541,6 +545,7 @@ router.get(
  */
 router.post(
   '/oauth/cancel/:serverName',
+  loginLimiter,
   requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
@@ -589,6 +594,7 @@ router.post(
  */
 router.post(
   '/:serverName/reinitialize',
+  loginLimiter,
   requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
@@ -670,98 +676,110 @@ router.post(
  * Get connection status for all MCP servers
  * This endpoint returns all app level and user-scoped connection statuses from MCPManager without disconnecting idle connections
  */
-router.get('/connection/status', ...mcpProtectedRoute, async (req, res) => {
-  try {
-    const user = req.user;
+router.get(
+  '/connection/status',
+  requireJwtAuth,
+  mcpOAuthIpLimiter,
+  mcpOAuthUserLimiter,
+  async (req, res) => {
+    try {
+      const user = req.user;
 
-    if (!user?.id) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
-
-    const { mcpConfig, appConnections, userConnections, oauthServers } = await getMCPSetupData(
-      user.id,
-      { role: user.role, tenantId: getTenantId() },
-    );
-    const connectionStatus = {};
-
-    for (const [serverName, config] of Object.entries(mcpConfig)) {
-      try {
-        connectionStatus[serverName] = await getServerConnectionStatus(
-          user.id,
-          serverName,
-          config,
-          appConnections,
-          userConnections,
-          oauthServers,
-        );
-      } catch (error) {
-        const message = `Failed to get status for server "${serverName}"`;
-        logger.error(`[MCP Connection Status] ${message},`, error);
-        connectionStatus[serverName] = {
-          connectionState: 'error',
-          requiresOAuth: oauthServers.has(serverName),
-          error: message,
-        };
+      if (!user?.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
       }
-    }
 
-    res.json({
-      success: true,
-      connectionStatus,
-    });
-  } catch (error) {
-    logger.error('[MCP Connection Status] Failed to get connection status', error);
-    res.status(500).json({ error: 'Failed to get connection status' });
-  }
-});
+      const { mcpConfig, appConnections, userConnections, oauthServers } = await getMCPSetupData(
+        user.id,
+        { role: user.role, tenantId: getTenantId() },
+      );
+      const connectionStatus = {};
+
+      for (const [serverName, config] of Object.entries(mcpConfig)) {
+        try {
+          connectionStatus[serverName] = await getServerConnectionStatus(
+            user.id,
+            serverName,
+            config,
+            appConnections,
+            userConnections,
+            oauthServers,
+          );
+        } catch (error) {
+          const message = `Failed to get status for server "${serverName}"`;
+          logger.error(`[MCP Connection Status] ${message},`, error);
+          connectionStatus[serverName] = {
+            connectionState: 'error',
+            requiresOAuth: oauthServers.has(serverName),
+            error: message,
+          };
+        }
+      }
+
+      res.json({
+        success: true,
+        connectionStatus,
+      });
+    } catch (error) {
+      logger.error('[MCP Connection Status] Failed to get connection status', error);
+      res.status(500).json({ error: 'Failed to get connection status' });
+    }
+  },
+);
 
 /**
  * Get connection status for a single MCP server
  * This endpoint returns the connection status for a specific server for a given user
  */
-router.get('/connection/status/:serverName', ...mcpProtectedRoute, async (req, res) => {
-  try {
-    const user = req.user;
-    const { serverName } = req.params;
+router.get(
+  '/connection/status/:serverName',
+  requireJwtAuth,
+  mcpOAuthIpLimiter,
+  mcpOAuthUserLimiter,
+  async (req, res) => {
+    try {
+      const user = req.user;
+      const { serverName } = req.params;
 
-    if (!user?.id) {
-      return res.status(401).json({ error: 'User not authenticated' });
+      if (!user?.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      const { mcpConfig, appConnections, userConnections, oauthServers } = await getMCPSetupData(
+        user.id,
+        { role: user.role, tenantId: getTenantId() },
+      );
+
+      if (!mcpConfig[serverName]) {
+        return res
+          .status(404)
+          .json({ error: `MCP server '${serverName}' not found in configuration` });
+      }
+
+      const serverStatus = await getServerConnectionStatus(
+        user.id,
+        serverName,
+        mcpConfig[serverName],
+        appConnections,
+        userConnections,
+        oauthServers,
+      );
+
+      res.json({
+        success: true,
+        serverName,
+        connectionStatus: serverStatus.connectionState,
+        requiresOAuth: serverStatus.requiresOAuth,
+      });
+    } catch (error) {
+      logger.error(
+        `[MCP Per-Server Status] Failed to get connection status for ${req.params.serverName}`,
+        error,
+      );
+      res.status(500).json({ error: 'Failed to get connection status' });
     }
-
-    const { mcpConfig, appConnections, userConnections, oauthServers } = await getMCPSetupData(
-      user.id,
-      { role: user.role, tenantId: getTenantId() },
-    );
-
-    if (!mcpConfig[serverName]) {
-      return res
-        .status(404)
-        .json({ error: `MCP server '${serverName}' not found in configuration` });
-    }
-
-    const serverStatus = await getServerConnectionStatus(
-      user.id,
-      serverName,
-      mcpConfig[serverName],
-      appConnections,
-      userConnections,
-      oauthServers,
-    );
-
-    res.json({
-      success: true,
-      serverName,
-      connectionStatus: serverStatus.connectionState,
-      requiresOAuth: serverStatus.requiresOAuth,
-    });
-  } catch (error) {
-    logger.error(
-      `[MCP Per-Server Status] Failed to get connection status for ${req.params.serverName}`,
-      error,
-    );
-    res.status(500).json({ error: 'Failed to get connection status' });
-  }
-});
+  },
+);
 
 /**
  * Check which authentication values exist for a specific MCP server
@@ -769,7 +787,9 @@ router.get('/connection/status/:serverName', ...mcpProtectedRoute, async (req, r
  */
 router.get(
   '/:serverName/auth-values',
-  ...mcpProtectedRoute,
+  requireJwtAuth,
+  mcpOAuthIpLimiter,
+  mcpOAuthUserLimiter,
   checkMCPUsePermissions,
   async (req, res) => {
     try {
@@ -847,7 +867,14 @@ MCP Server CRUD Routes (User-Managed MCP Servers)
  * @param {string} [req.query.search] - Search query for title/description
  * @returns {MCPServerListResponse} 200 - Success response - application/json
  */
-router.get('/servers', ...mcpProtectedRoute, checkMCPUsePermissions, getMCPServersList);
+router.get(
+  '/servers',
+  requireJwtAuth,
+  mcpOAuthIpLimiter,
+  mcpOAuthUserLimiter,
+  checkMCPUsePermissions,
+  getMCPServersList,
+);
 
 /**
  * Create a new MCP server
@@ -855,7 +882,14 @@ router.get('/servers', ...mcpProtectedRoute, checkMCPUsePermissions, getMCPServe
  * @param {MCPServerCreateParams} req.body - The MCP server creation parameters.
  * @returns {MCPServer} 201 - Success response - application/json
  */
-router.post('/servers', ...mcpProtectedRoute, checkMCPCreate, createMCPServerController);
+router.post(
+  '/servers',
+  requireJwtAuth,
+  mcpOAuthIpLimiter,
+  mcpOAuthUserLimiter,
+  checkMCPCreate,
+  createMCPServerController,
+);
 
 /**
  * Get single MCP server by ID
@@ -865,7 +899,9 @@ router.post('/servers', ...mcpProtectedRoute, checkMCPCreate, createMCPServerCon
  */
 router.get(
   '/servers/:serverName',
-  ...mcpProtectedRoute,
+  requireJwtAuth,
+  mcpOAuthIpLimiter,
+  mcpOAuthUserLimiter,
   checkMCPUsePermissions,
   canAccessMCPServerResource({
     requiredPermission: PermissionBits.VIEW,
@@ -883,7 +919,9 @@ router.get(
  */
 router.patch(
   '/servers/:serverName',
-  ...mcpProtectedRoute,
+  requireJwtAuth,
+  mcpOAuthIpLimiter,
+  mcpOAuthUserLimiter,
   checkMCPCreate,
   canAccessMCPServerResource({
     requiredPermission: PermissionBits.EDIT,
@@ -900,7 +938,9 @@ router.patch(
  */
 router.delete(
   '/servers/:serverName',
-  ...mcpProtectedRoute,
+  requireJwtAuth,
+  mcpOAuthIpLimiter,
+  mcpOAuthUserLimiter,
   checkMCPCreate,
   canAccessMCPServerResource({
     requiredPermission: PermissionBits.DELETE,

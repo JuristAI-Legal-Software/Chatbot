@@ -20,4 +20,19 @@ function assertSinglePathSegment(label, value) {
   return segment;
 }
 
-module.exports = { assertSinglePathSegment };
+function resolvePathFromTrustedRoot(label, rootDir, ...segments) {
+  const resolvedRoot = require('path').resolve(rootDir);
+  const resolvedPath = require('path').resolve(resolvedRoot, ...segments);
+  const relativePath = require('path').relative(resolvedRoot, resolvedPath);
+
+  if (
+    relativePath === '' ||
+    (!relativePath.startsWith('..') && !require('path').isAbsolute(relativePath))
+  ) {
+    return resolvedPath;
+  }
+
+  throw new Error(`${label} resolves outside the trusted root`);
+}
+
+module.exports = { assertSinglePathSegment, resolvePathFromTrustedRoot };

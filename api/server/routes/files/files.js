@@ -31,6 +31,10 @@ const { hasCapability } = require('~/server/middleware/roles/capabilities');
 const { checkPermission } = require('~/server/services/PermissionService');
 const { hasAccessToFilesViaAgent } = require('~/server/services/Files');
 const { cleanFileName, getContentDisposition } = require('~/server/utils/files');
+const {
+  assertSinglePathSegment,
+  resolvePathFromTrustedRoot,
+} = require('~/server/utils/pathSafety');
 const { getLogStores } = require('~/cache');
 const { Readable } = require('stream');
 const { createFileLimiters } = require('~/server/middleware/limiters/uploadLimiters');
@@ -120,7 +124,7 @@ router.get('/agent/:agent_id', fileUploadIpLimiter, fileUploadUserLimiter, async
   }
 });
 
-router.get('/config', async (req, res) => {
+router.get('/config', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
   try {
     const appConfig = req.config;
     res.status(200).json(appConfig.fileConfig);
@@ -289,56 +293,61 @@ function isValidID(str) {
   return /^[A-Za-z0-9_-]{21}$/.test(str);
 }
 
-router.get('/code/download/:session_id/:fileId', async (req, res) => {
-  try {
-    const { session_id, fileId } = req.params;
-    const logPrefix = `Session ID: ${session_id} | File ID: ${fileId} | Code output download requested by user `;
-    logger.debug(logPrefix);
+router.get(
+  '/code/download/:session_id/:fileId',
+  fileUploadIpLimiter,
+  fileUploadUserLimiter,
+  async (req, res) => {
+    try {
+      const { session_id, fileId } = req.params;
+      const logPrefix = `Session ID: ${session_id} | File ID: ${fileId} | Code output download requested by user `;
+      logger.debug(logPrefix);
 
-    if (!session_id || !fileId) {
-      return res.status(400).send('Bad request');
-    }
+      if (!session_id || !fileId) {
+        return res.status(400).send('Bad request');
+      }
 
-    if (!isValidID(session_id) || !isValidID(fileId)) {
-      logger.debug(`${logPrefix} invalid session_id or fileId`);
-      return res.status(400).send('Bad request');
-    }
+      if (!isValidID(session_id) || !isValidID(fileId)) {
+        logger.debug(`${logPrefix} invalid session_id or fileId`);
+        return res.status(400).send('Bad request');
+      }
 
-    const { getDownloadStream } = getStrategyFunctions(FileSources.execute_code);
-    if (!getDownloadStream) {
-      logger.warn(
-        `${logPrefix} has no stream method implemented for ${FileSources.execute_code} source`,
+      const { getDownloadStream } = getStrategyFunctions(FileSources.execute_code);
+      if (!getDownloadStream) {
+        logger.warn(
+          `${logPrefix} has no stream method implemented for ${FileSources.execute_code} source`,
+        );
+        return res.status(501).send('Not Implemented');
+      }
+
+      /* Code-output downloads are always user-private — `processCodeOutput`
+       * persists every code-execution artifact under
+       * `metadata.codeEnvRef.kind === 'user'` regardless of which skill
+       * the run invoked. Pass `kind: 'user'` + `id: <userId>` so codeapi's
+       * `sessionAuth` resolves the matching `<tenant>:user:<userId>`
+       * sessionKey; without these query params it 400s with
+       * "kind must be one of: skill, agent, user". */
+      /** @type {AxiosResponse<ReadableStream> | undefined} */
+      const response = await getDownloadStream(
+        `${session_id}/${fileId}`,
+        {
+          kind: 'user',
+          id: req.user.id,
+        },
+        req,
       );
-      return res.status(501).send('Not Implemented');
+      res.set(response.headers);
+      response.data.pipe(res);
+    } catch (error) {
+      /* `logAxiosError` redacts buffer/stream response bodies — without
+       * it, a stream-typed axios failure dumps the entire `Readable`'s
+       * internal state (megabytes of socket + readableState) into the
+       * log line. Plain `logger.error(error)` would do that here. */
+      logAxiosError({ message: 'Error downloading code-output file', error });
+      res.status(500).send('Error downloading file');
     }
-
-    /* Code-output downloads are always user-private — `processCodeOutput`
-     * persists every code-execution artifact under
-     * `metadata.codeEnvRef.kind === 'user'` regardless of which skill
-     * the run invoked. Pass `kind: 'user'` + `id: <userId>` so codeapi's
-     * `sessionAuth` resolves the matching `<tenant>:user:<userId>`
-     * sessionKey; without these query params it 400s with
-     * "kind must be one of: skill, agent, user". */
-    /** @type {AxiosResponse<ReadableStream> | undefined} */
-    const response = await getDownloadStream(
-      `${session_id}/${fileId}`,
-      {
-        kind: 'user',
-        id: req.user.id,
-      },
-      req,
-    );
-    res.set(response.headers);
-    response.data.pipe(res);
-  } catch (error) {
-    /* `logAxiosError` redacts buffer/stream response bodies — without
-     * it, a stream-typed axios failure dumps the entire `Readable`'s
-     * internal state (megabytes of socket + readableState) into the
-     * log line. Plain `logger.error(error)` would do that here. */
-    logAxiosError({ message: 'Error downloading code-output file', error });
-    res.status(500).send('Error downloading file');
-  }
-});
+  },
+);
 
 /* Lazy-sweep cutoff: pending records older than this are marked failed
  * on the next poll. 2min is well past the 60s render ceiling, so any
@@ -637,6 +646,15 @@ router.get(
 router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
   const metadata = req.body;
   let cleanup = true;
+  const safeUserDir = assertSinglePathSegment('userId', req.user.id);
+  const tempFilename = assertSinglePathSegment('filename', req.file.filename);
+  const tempUploadPath = resolvePathFromTrustedRoot(
+    'file upload path',
+    req.config.paths.uploads,
+    'temp',
+    safeUserDir,
+    tempFilename,
+  );
 
   try {
     filterFile({ req });
@@ -674,7 +692,7 @@ router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) =>
     logger.error('[/files] Error processing file:', error);
 
     try {
-      await fs.unlink(req.file.path);
+      await fs.unlink(tempUploadPath);
       cleanup = false;
     } catch (error) {
       logger.error('[/files] Error deleting file:', error);
@@ -683,7 +701,7 @@ router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) =>
   } finally {
     if (cleanup) {
       try {
-        await fs.unlink(req.file.path);
+        await fs.unlink(tempUploadPath);
       } catch (error) {
         logger.error('[/files] Error deleting file after file processing:', error);
       }

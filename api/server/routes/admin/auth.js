@@ -144,7 +144,7 @@ function retrievePkceChallenge(provider) {
  * OpenID Admin Routes
  * ────────────────────────────────────────────── */
 
-router.get('/oauth/openid', async (req, res, next) => {
+router.get('/oauth/openid', middleware.loginLimiter, async (req, res, next) => {
   const state = generateState();
   const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
   const stored = await storeAndStripChallenge(cache, req, state, 'openid');
@@ -162,6 +162,7 @@ router.get('/oauth/openid', async (req, res, next) => {
 
 router.get(
   '/oauth/openid/callback',
+  middleware.loginLimiter,
   (req, res, next) => {
     req.oauthState = typeof req.query.state === 'string' ? req.query.state : undefined;
     next();
@@ -183,7 +184,7 @@ router.get(
  * SAML Admin Routes
  * ────────────────────────────────────────────── */
 
-router.get('/oauth/saml', async (req, res, next) => {
+router.get('/oauth/saml', middleware.loginLimiter, async (req, res, next) => {
   const state = generateState();
   const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
   const stored = await storeAndStripChallenge(cache, req, state, 'saml');
@@ -201,6 +202,7 @@ router.get('/oauth/saml', async (req, res, next) => {
 
 router.post(
   '/oauth/saml/callback',
+  middleware.loginLimiter,
   (req, res, next) => {
     req.oauthState = typeof req.body.RelayState === 'string' ? req.body.RelayState : undefined;
     next();
@@ -222,7 +224,7 @@ router.post(
  * Google Admin Routes
  * ────────────────────────────────────────────── */
 
-router.get('/oauth/google', async (req, res, next) => {
+router.get('/oauth/google', middleware.loginLimiter, async (req, res, next) => {
   const state = generateState();
   const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
   const stored = await storeAndStripChallenge(cache, req, state, 'google');
@@ -241,6 +243,7 @@ router.get('/oauth/google', async (req, res, next) => {
 
 router.get(
   '/oauth/google/callback',
+  middleware.loginLimiter,
   (req, res, next) => {
     req.oauthState = typeof req.query.state === 'string' ? req.query.state : undefined;
     next();
@@ -262,7 +265,7 @@ router.get(
  * GitHub Admin Routes
  * ────────────────────────────────────────────── */
 
-router.get('/oauth/github', async (req, res, next) => {
+router.get('/oauth/github', middleware.loginLimiter, async (req, res, next) => {
   const state = generateState();
   const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
   const stored = await storeAndStripChallenge(cache, req, state, 'github');
@@ -281,6 +284,7 @@ router.get('/oauth/github', async (req, res, next) => {
 
 router.get(
   '/oauth/github/callback',
+  middleware.loginLimiter,
   (req, res, next) => {
     req.oauthState = typeof req.query.state === 'string' ? req.query.state : undefined;
     next();
@@ -302,7 +306,7 @@ router.get(
  * Discord Admin Routes
  * ────────────────────────────────────────────── */
 
-router.get('/oauth/discord', async (req, res, next) => {
+router.get('/oauth/discord', middleware.loginLimiter, async (req, res, next) => {
   const state = generateState();
   const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
   const stored = await storeAndStripChallenge(cache, req, state, 'discord');
@@ -321,6 +325,7 @@ router.get('/oauth/discord', async (req, res, next) => {
 
 router.get(
   '/oauth/discord/callback',
+  middleware.loginLimiter,
   (req, res, next) => {
     req.oauthState = typeof req.query.state === 'string' ? req.query.state : undefined;
     next();
@@ -342,7 +347,7 @@ router.get(
  * Facebook Admin Routes
  * ────────────────────────────────────────────── */
 
-router.get('/oauth/facebook', async (req, res, next) => {
+router.get('/oauth/facebook', middleware.loginLimiter, async (req, res, next) => {
   const state = generateState();
   const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
   const stored = await storeAndStripChallenge(cache, req, state, 'facebook');
@@ -361,6 +366,7 @@ router.get('/oauth/facebook', async (req, res, next) => {
 
 router.get(
   '/oauth/facebook/callback',
+  middleware.loginLimiter,
   (req, res, next) => {
     req.oauthState = typeof req.query.state === 'string' ? req.query.state : undefined;
     next();
@@ -382,7 +388,7 @@ router.get(
  * Apple Admin Routes (POST callback)
  * ────────────────────────────────────────────── */
 
-router.get('/oauth/apple', async (req, res, next) => {
+router.get('/oauth/apple', middleware.loginLimiter, async (req, res, next) => {
   const state = generateState();
   const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
   const stored = await storeAndStripChallenge(cache, req, state, 'apple');
@@ -400,6 +406,7 @@ router.get('/oauth/apple', async (req, res, next) => {
 
 router.post(
   '/oauth/apple/callback',
+  middleware.loginLimiter,
   (req, res, next) => {
     req.oauthState = typeof req.body.state === 'string' ? req.body.state : undefined;
     next();

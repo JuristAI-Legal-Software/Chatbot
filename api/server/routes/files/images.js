@@ -1,4 +1,3 @@
-const path = require('path');
 const fs = require('fs').promises;
 const express = require('express');
 const { logger } = require('@librechat/data-schemas');
@@ -10,7 +9,10 @@ const {
   filterFile,
 } = require('~/server/services/Files/process');
 const { checkPermission } = require('~/server/services/PermissionService');
-const { assertSinglePathSegment } = require('~/server/utils/pathSafety');
+const {
+  assertSinglePathSegment,
+  resolvePathFromTrustedRoot,
+} = require('~/server/utils/pathSafety');
 const { createFileLimiters } = require('~/server/middleware/limiters/uploadLimiters');
 const db = require('~/models');
 
@@ -20,6 +22,15 @@ const { fileUploadIpLimiter, fileUploadUserLimiter } = createFileLimiters();
 router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
   const metadata = req.body;
   const appConfig = req.config;
+  const safeUserDir = assertSinglePathSegment('userId', req.user.id);
+  const tempFilename = assertSinglePathSegment('filename', req.file.filename);
+  const tempUploadPath = resolvePathFromTrustedRoot(
+    'image upload path',
+    appConfig.paths.uploads,
+    'temp',
+    safeUserDir,
+    tempFilename,
+  );
 
   try {
     filterFile({ req, image: true });
@@ -49,9 +60,13 @@ router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) =>
     const message = resolveUploadErrorMessage(error);
 
     try {
-      const safeUserDir = assertSinglePathSegment('userId', req.user.id);
       const safeFilename = assertSinglePathSegment('filename', req.file.filename);
-      const filepath = path.join(appConfig.paths.imageOutput, safeUserDir, safeFilename);
+      const filepath = resolvePathFromTrustedRoot(
+        'image output path',
+        appConfig.paths.imageOutput,
+        safeUserDir,
+        safeFilename,
+      );
       await fs.unlink(filepath);
     } catch (error) {
       logger.error('[/files/images] Error deleting file:', error);
@@ -59,7 +74,7 @@ router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) =>
     res.status(500).json({ message });
   } finally {
     try {
-      await fs.unlink(req.file.path);
+      await fs.unlink(tempUploadPath);
       logger.debug('[/files/images] Temp. image upload file deleted');
     } catch {
       logger.debug('[/files/images] Temp. image upload file already deleted');
