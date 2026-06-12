@@ -66,21 +66,18 @@ export function generateOAuthCsrfToken(flowId: string, secret?: string): string 
 }
 
 export function getOAuthCookieBindingValue(subject: string, secret?: string): string {
-  const tokenBytes = Buffer.from(generateOAuthCsrfToken(subject, secret), 'utf8');
-  return crypto.createHash('sha256').update(tokenBytes).digest('base64url');
+  return generateOAuthCsrfToken(subject, secret);
 }
 
 function getCookieBindingValue(subject: string): string {
-  const tokenBytes = Buffer.from(generateOAuthCsrfToken(subject), 'utf8');
-  return crypto.createHash('sha256').update(tokenBytes).digest('base64url');
+  return generateOAuthCsrfToken(subject);
 }
 
 /**
  * Sets a SameSite=Lax CSRF cookie bound to a specific OAuth flow.
  *
- * The cookie stores a second-pass opaque binding derived from the deterministic
- * token, not the raw token material itself. The cookie is httpOnly + Secure
- * (in prod) + SameSite=Lax, exactly per OWASP CSRF guidance.
+ * The cookie stores the scrypt-derived opaque binding directly. The cookie is
+ * httpOnly + Secure (in prod) + SameSite=Lax, exactly per OWASP CSRF guidance.
  */
 export function setOAuthCsrfCookie(res: Response, flowId: string, cookiePath: string): void {
   res.cookie(OAUTH_CSRF_COOKIE, getCookieBindingValue(flowId), {
@@ -129,8 +126,8 @@ export function setOAuthSession(req: Request, res: Response, next: NextFunction)
 /**
  * Sets a SameSite=Lax session cookie that binds the browser to the authenticated userId.
  *
- * Same opaque binding approach as `setOAuthCsrfCookie`: the cookie stores a
- * second-pass digest, not the raw deterministic token material.
+ * Same opaque binding approach as `setOAuthCsrfCookie`: the cookie stores the
+ * scrypt-derived token directly.
  */
 export function setOAuthSessionCookie(res: Response, userId: string): void {
   res.cookie(OAUTH_SESSION_COOKIE, getCookieBindingValue(userId), {

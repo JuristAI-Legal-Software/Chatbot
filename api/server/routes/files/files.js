@@ -33,11 +33,13 @@ const { hasAccessToFilesViaAgent } = require('~/server/services/Files');
 const { cleanFileName, getContentDisposition } = require('~/server/utils/files');
 const { getLogStores } = require('~/cache');
 const { Readable } = require('stream');
+const { createFileLimiters } = require('~/server/middleware/limiters/uploadLimiters');
 const db = require('~/models');
 
 const router = express.Router();
+const { fileUploadIpLimiter, fileUploadUserLimiter } = createFileLimiters();
 
-router.get('/', async (req, res) => {
+router.get('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
   try {
     const appConfig = req.config;
     const files = await db.getFiles({ user: req.user.id });
@@ -66,7 +68,7 @@ router.get('/', async (req, res) => {
  * @param {string} agent_id - The agent ID to get files for
  * @returns {Promise<TFile[]>} Array of files attached to the agent
  */
-router.get('/agent/:agent_id', async (req, res) => {
+router.get('/agent/:agent_id', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
   try {
     const { agent_id } = req.params;
     const userId = req.user.id;
@@ -128,7 +130,7 @@ router.get('/config', async (req, res) => {
   }
 });
 
-router.delete('/', async (req, res) => {
+router.delete('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
   try {
     const { files: _files } = req.body;
 
@@ -369,57 +371,63 @@ const PREVIEW_LAZY_SWEEP_CUTOFF_MS = 2 * 60 * 1000;
  *
  * @route GET /files/:file_id/preview
  */
-router.get('/:file_id/preview', fileAccess, async (req, res) => {
-  try {
-    /* `fileAccess` already resolved the authorized DB record, so use its
-     * canonical id for follow-up reads/writes rather than re-validating the
-     * raw route param and accidentally rejecting legacy/non-UUID records. */
-    const file_id = req.fileAccess.file.file_id;
-    /* `fileAccess` already fetched the record (sans `text`, the default
-     * projection drops it). Reuse for the lifecycle check; only re-fetch
-     * with `text` on a terminal ready response — the typical lifecycle
-     * is N pending polls + 1 ready, so this avoids ~N redundant text
-     * reads per file. */
-    let file = req.fileAccess.file;
-    /* Lazy sweep: if stuck `pending` past the cutoff, mark `failed`
-     * conditional on the observed `updatedAt` (concurrent legitimate
-     * updates win). */
-    if (file.status === 'pending' && file.updatedAt instanceof Date) {
-      const ageMs = Date.now() - file.updatedAt.getTime();
-      if (ageMs > PREVIEW_LAZY_SWEEP_CUTOFF_MS) {
-        const swept = await db.updateFile(
-          { file_id, status: 'failed', previewError: 'orphaned' },
-          { status: 'pending', updatedAt: file.updatedAt },
-        );
-        if (swept) {
-          file = swept;
-          logger.info(
-            `[/files/:file_id/preview] Lazy-swept orphaned pending record ${file_id} (age ${Math.round(ageMs / 1000)}s)`,
+router.get(
+  '/:file_id/preview',
+  fileUploadIpLimiter,
+  fileUploadUserLimiter,
+  fileAccess,
+  async (req, res) => {
+    try {
+      /* `fileAccess` already resolved the authorized DB record, so use its
+       * canonical id for follow-up reads/writes rather than re-validating the
+       * raw route param and accidentally rejecting legacy/non-UUID records. */
+      const file_id = req.fileAccess.file.file_id;
+      /* `fileAccess` already fetched the record (sans `text`, the default
+       * projection drops it). Reuse for the lifecycle check; only re-fetch
+       * with `text` on a terminal ready response — the typical lifecycle
+       * is N pending polls + 1 ready, so this avoids ~N redundant text
+       * reads per file. */
+      let file = req.fileAccess.file;
+      /* Lazy sweep: if stuck `pending` past the cutoff, mark `failed`
+       * conditional on the observed `updatedAt` (concurrent legitimate
+       * updates win). */
+      if (file.status === 'pending' && file.updatedAt instanceof Date) {
+        const ageMs = Date.now() - file.updatedAt.getTime();
+        if (ageMs > PREVIEW_LAZY_SWEEP_CUTOFF_MS) {
+          const swept = await db.updateFile(
+            { file_id, status: 'failed', previewError: 'orphaned' },
+            { status: 'pending', updatedAt: file.updatedAt },
           );
+          if (swept) {
+            file = swept;
+            logger.info(
+              `[/files/:file_id/preview] Lazy-swept orphaned pending record ${file_id} (age ${Math.round(ageMs / 1000)}s)`,
+            );
+          }
         }
       }
-    }
-    /* Default to 'ready' for back-compat: legacy records pre-date the
-     * field, and non-office files never get a status set on persist. */
-    const status = file.status ?? 'ready';
-    const payload = { file_id, status };
-    if (status === 'ready') {
-      const withText = await db.findFileById(file_id);
-      if (withText?.text != null) {
-        payload.text = withText.text;
-        payload.textFormat = withText.textFormat ?? null;
+      /* Default to 'ready' for back-compat: legacy records pre-date the
+       * field, and non-office files never get a status set on persist. */
+      const status = file.status ?? 'ready';
+      const payload = { file_id, status };
+      if (status === 'ready') {
+        const withText = await db.findFileById(file_id);
+        if (withText?.text != null) {
+          payload.text = withText.text;
+          payload.textFormat = withText.textFormat ?? null;
+        }
+      } else if (status === 'failed' && file.previewError) {
+        payload.previewError = file.previewError;
       }
-    } else if (status === 'failed' && file.previewError) {
-      payload.previewError = file.previewError;
+      return res.status(200).json(payload);
+    } catch (error) {
+      logger.error('[/files/:file_id/preview] Error fetching preview status:', error);
+      return res
+        .status(500)
+        .json({ error: 'Internal Server Error', message: 'Failed to fetch preview status' });
     }
-    return res.status(200).json(payload);
-  } catch (error) {
-    logger.error('[/files/:file_id/preview] Error fetching preview status:', error);
-    return res
-      .status(500)
-      .json({ error: 'Internal Server Error', message: 'Failed to fetch preview status' });
-  }
-});
+  },
+);
 
 /**
  * Returns a strategy-managed signed URL for an already-authorized file record.
@@ -483,136 +491,150 @@ const getDownloadFileMetadata = (file) => {
   }, {});
 };
 
-router.get('/download-url/:userId/:file_id', fileAccess, async (req, res) => {
-  try {
-    const { userId, file_id } = req.params;
-    logger.debug(`File download URL requested by user ${userId}: ${file_id}`);
+router.get(
+  '/download-url/:userId/:file_id',
+  fileUploadIpLimiter,
+  fileUploadUserLimiter,
+  fileAccess,
+  async (req, res) => {
+    try {
+      const { userId, file_id } = req.params;
+      logger.debug(`File download URL requested by user ${userId}: ${file_id}`);
 
-    const file = req.fileAccess.file;
-    if (checkOpenAIStorage(file.source) && !file.model) {
-      logger.warn(
-        `File download URL requested by user ${userId} has no associated model: ${file_id}`,
-      );
-      return res.status(400).send('The model used when creating this file is not available');
-    }
-
-    const filename = cleanFileName(file.filename);
-    const downloadURL = checkOpenAIStorage(file.source)
-      ? null
-      : await getDirectDownloadURL({ req, file, customFilename: filename });
-
-    if (!downloadURL) {
-      logger.debug(
-        `File download URL requested by user ${userId} is not supported for source: ${file.source}`,
-      );
-      return res.status(501).send('Not Implemented');
-    }
-
-    res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({
-      url: downloadURL,
-      filename,
-      type: file.type || 'application/octet-stream',
-      metadata: getDownloadFileMetadata(file),
-    });
-  } catch (error) {
-    logger.error('[DOWNLOAD URL ROUTE] Error generating file download URL:', error);
-    res.status(500).send('Error generating file download URL');
-  }
-});
-
-router.get('/download/:userId/:file_id', fileAccess, async (req, res) => {
-  try {
-    const { userId, file_id } = req.params;
-    logger.debug(`File download requested by user ${userId}: ${file_id}`);
-
-    // Access already validated by fileAccess middleware
-    const file = req.fileAccess.file;
-
-    if (checkOpenAIStorage(file.source) && !file.model) {
-      logger.warn(`File download requested by user ${userId} has no associated model: ${file_id}`);
-      return res.status(400).send('The model used when creating this file is not available');
-    }
-
-    const { getDownloadStream, getDownloadURL } = getStrategyFunctions(file.source);
-    if (!getDownloadStream && !getDownloadURL) {
-      logger.warn(
-        `File download requested by user ${userId} has no download method implemented: ${file.source}`,
-      );
-      return res.status(501).send('Not Implemented');
-    }
-
-    const setHeaders = () => {
-      res.setHeader('Content-Disposition', getContentDisposition(file.filename));
-      res.setHeader('Content-Type', 'application/octet-stream');
-      res.setHeader(
-        'X-File-Metadata',
-        encodeURIComponent(JSON.stringify(getDownloadFileMetadata(file))),
-      );
-    };
-
-    if (checkOpenAIStorage(file.source)) {
-      req.body = { model: file.model };
-      const endpointMap = {
-        [FileSources.openai]: EModelEndpoint.assistants,
-        [FileSources.azure]: EModelEndpoint.azureAssistants,
-      };
-      const { openai } = await getOpenAIClient({
-        req,
-        res,
-        overrideEndpoint: endpointMap[file.source],
-      });
-      logger.debug(`Downloading file ${file_id} from OpenAI`);
-      const passThrough = await getDownloadStream(file_id, openai);
-      setHeaders();
-      logger.debug(`File ${file_id} downloaded from OpenAI`);
-
-      // Handle both Node.js and Web streams
-      const stream =
-        passThrough.body && typeof passThrough.body.getReader === 'function'
-          ? Readable.fromWeb(passThrough.body)
-          : passThrough.body;
-
-      stream.pipe(res);
-    } else {
-      if (getDownloadURL && req.query.direct === 'true') {
-        try {
-          const downloadURL = await getDirectDownloadURL({ req, file });
-          if (downloadURL) {
-            res.setHeader('Cache-Control', 'no-store');
-            return res.redirect(302, downloadURL);
-          }
-        } catch (error) {
-          logger.warn(
-            '[DOWNLOAD ROUTE] Falling back to stream after URL generation failed:',
-            error,
-          );
-        }
+      const file = req.fileAccess.file;
+      if (checkOpenAIStorage(file.source) && !file.model) {
+        logger.warn(
+          `File download URL requested by user ${userId} has no associated model: ${file_id}`,
+        );
+        return res.status(400).send('The model used when creating this file is not available');
       }
 
-      if (!getDownloadStream) {
-        logger.warn(
-          `File download requested by user ${userId} has no stream method implemented: ${file.source}`,
+      const filename = cleanFileName(file.filename);
+      const downloadURL = checkOpenAIStorage(file.source)
+        ? null
+        : await getDirectDownloadURL({ req, file, customFilename: filename });
+
+      if (!downloadURL) {
+        logger.debug(
+          `File download URL requested by user ${userId} is not supported for source: ${file.source}`,
         );
         return res.status(501).send('Not Implemented');
       }
 
-      const fileStream = await getDownloadStream(req, file.storageKey || file.filepath);
-
-      fileStream.on('error', (streamError) => {
-        logger.error('[DOWNLOAD ROUTE] Stream error:', streamError);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json({
+        url: downloadURL,
+        filename,
+        type: file.type || 'application/octet-stream',
+        metadata: getDownloadFileMetadata(file),
       });
-
-      setHeaders();
-      fileStream.pipe(res);
+    } catch (error) {
+      logger.error('[DOWNLOAD URL ROUTE] Error generating file download URL:', error);
+      res.status(500).send('Error generating file download URL');
     }
-  } catch (error) {
-    logger.error('[DOWNLOAD ROUTE] Error downloading file:', error);
-    res.status(500).send('Error downloading file');
-  }
-});
+  },
+);
 
-router.post('/', async (req, res) => {
+router.get(
+  '/download/:userId/:file_id',
+  fileUploadIpLimiter,
+  fileUploadUserLimiter,
+  fileAccess,
+  async (req, res) => {
+    try {
+      const { userId, file_id } = req.params;
+      logger.debug(`File download requested by user ${userId}: ${file_id}`);
+
+      // Access already validated by fileAccess middleware
+      const file = req.fileAccess.file;
+
+      if (checkOpenAIStorage(file.source) && !file.model) {
+        logger.warn(
+          `File download requested by user ${userId} has no associated model: ${file_id}`,
+        );
+        return res.status(400).send('The model used when creating this file is not available');
+      }
+
+      const { getDownloadStream, getDownloadURL } = getStrategyFunctions(file.source);
+      if (!getDownloadStream && !getDownloadURL) {
+        logger.warn(
+          `File download requested by user ${userId} has no download method implemented: ${file.source}`,
+        );
+        return res.status(501).send('Not Implemented');
+      }
+
+      const setHeaders = () => {
+        res.setHeader('Content-Disposition', getContentDisposition(file.filename));
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader(
+          'X-File-Metadata',
+          encodeURIComponent(JSON.stringify(getDownloadFileMetadata(file))),
+        );
+      };
+
+      if (checkOpenAIStorage(file.source)) {
+        req.body = { model: file.model };
+        const endpointMap = {
+          [FileSources.openai]: EModelEndpoint.assistants,
+          [FileSources.azure]: EModelEndpoint.azureAssistants,
+        };
+        const { openai } = await getOpenAIClient({
+          req,
+          res,
+          overrideEndpoint: endpointMap[file.source],
+        });
+        logger.debug(`Downloading file ${file_id} from OpenAI`);
+        const passThrough = await getDownloadStream(file_id, openai);
+        setHeaders();
+        logger.debug(`File ${file_id} downloaded from OpenAI`);
+
+        // Handle both Node.js and Web streams
+        const stream =
+          passThrough.body && typeof passThrough.body.getReader === 'function'
+            ? Readable.fromWeb(passThrough.body)
+            : passThrough.body;
+
+        stream.pipe(res);
+      } else {
+        if (getDownloadURL && req.query.direct === 'true') {
+          try {
+            const downloadURL = await getDirectDownloadURL({ req, file });
+            if (downloadURL) {
+              res.setHeader('Cache-Control', 'no-store');
+              return res.redirect(302, downloadURL);
+            }
+          } catch (error) {
+            logger.warn(
+              '[DOWNLOAD ROUTE] Falling back to stream after URL generation failed:',
+              error,
+            );
+          }
+        }
+
+        if (!getDownloadStream) {
+          logger.warn(
+            `File download requested by user ${userId} has no stream method implemented: ${file.source}`,
+          );
+          return res.status(501).send('Not Implemented');
+        }
+
+        const fileStream = await getDownloadStream(req, file.storageKey || file.filepath);
+
+        fileStream.on('error', (streamError) => {
+          logger.error('[DOWNLOAD ROUTE] Stream error:', streamError);
+        });
+
+        setHeaders();
+        fileStream.pipe(res);
+      }
+    } catch (error) {
+      logger.error('[DOWNLOAD ROUTE] Error downloading file:', error);
+      res.status(500).send('Error downloading file');
+    }
+  },
+);
+
+router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
   const metadata = req.body;
   let cleanup = true;
 

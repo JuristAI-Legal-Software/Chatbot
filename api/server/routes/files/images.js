@@ -11,11 +11,13 @@ const {
 } = require('~/server/services/Files/process');
 const { checkPermission } = require('~/server/services/PermissionService');
 const { assertSinglePathSegment } = require('~/server/utils/pathSafety');
+const { createFileLimiters } = require('~/server/middleware/limiters/uploadLimiters');
 const db = require('~/models');
 
 const router = express.Router();
+const { fileUploadIpLimiter, fileUploadUserLimiter } = createFileLimiters();
 
-router.post('/', async (req, res) => {
+router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
   const metadata = req.body;
   const appConfig = req.config;
 

@@ -7,7 +7,7 @@ const { getBasePath } = require('@librechat/api');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 
 function generateTestCsrfToken(flowId) {
-  const token = crypto
+  return crypto
     .scryptSync(String(flowId), process.env.JWT_SECRET, 16, {
       N: 1 << 14,
       r: 8,
@@ -15,7 +15,6 @@ function generateTestCsrfToken(flowId) {
       maxmem: 32 * 1024 * 1024,
     })
     .toString('hex');
-  return crypto.createHash('sha256').update(Buffer.from(token, 'utf8')).digest('base64url');
 }
 
 const mockRegistryInstance = {
@@ -165,14 +164,12 @@ describe('MCP Routes', () => {
 
     app = express();
     app.use(express.json());
-    app.use(cookieParser());
-
     app.use((req, res, next) => {
       req.user = { id: 'test-user-id' };
       next();
     });
 
-    app.use('/api/mcp', mcpRouter);
+    app.use('/api/mcp', cookieParser(), mcpRouter);
   });
 
   afterAll(async () => {

@@ -30,47 +30,38 @@ const initialize = async () => {
   router.use('/speech', speech);
 
   const { fileUploadIpLimiter, fileUploadUserLimiter } = createFileLimiters();
-
-  /** Apply rate limiters to all POST routes and to GET routes that touch
-   *  user files / downloads / previews. The `/speech` sub-router has its
-   *  own limiting and is excluded. Closes CodeQL `js/missing-rate-limiting`
-   *  on the GET handlers in `files.js` (list, preview, download, etc.). */
-  const RATE_LIMITED_GET_PREFIXES = ['/agent/', '/code/download/', '/download/', '/download-url/'];
-  const shouldRateLimitGet = (req) => {
-    if (req.method !== 'GET') {
-      return false;
-    }
-    if (req.path === '/') {
-      return true;
-    }
-    if (RATE_LIMITED_GET_PREFIXES.some((p) => req.path.startsWith(p))) {
-      return true;
-    }
-    return req.path.endsWith('/preview');
-  };
-  router.use((req, res, next) => {
-    const isPost = req.method === 'POST' && !req.path.startsWith('/speech');
-    if (isPost || shouldRateLimitGet(req)) {
-      return fileUploadIpLimiter(req, res, (err) => {
-        if (err) {
-          return next(err);
-        }
-        return fileUploadUserLimiter(req, res, next);
-      });
-    }
-    next();
-  });
-
-  router.post('/', upload.single('file'), restoreTenantContextFromReq);
-  router.post('/images', upload.single('file'), restoreTenantContextFromReq);
-  router.post('/images/avatar', upload.single('file'), restoreTenantContextFromReq);
+  router.post(
+    '/',
+    fileUploadIpLimiter,
+    fileUploadUserLimiter,
+    upload.single('file'),
+    restoreTenantContextFromReq,
+  );
+  router.post(
+    '/images',
+    fileUploadIpLimiter,
+    fileUploadUserLimiter,
+    upload.single('file'),
+    restoreTenantContextFromReq,
+  );
+  router.post(
+    '/images/avatar',
+    fileUploadIpLimiter,
+    fileUploadUserLimiter,
+    upload.single('file'),
+    restoreTenantContextFromReq,
+  );
   router.post(
     '/images/agents/:agent_id/avatar',
+    fileUploadIpLimiter,
+    fileUploadUserLimiter,
     upload.single('file'),
     restoreTenantContextFromReq,
   );
   router.post(
     '/images/assistants/:assistant_id/avatar',
+    fileUploadIpLimiter,
+    fileUploadUserLimiter,
     upload.single('file'),
     restoreTenantContextFromReq,
   );

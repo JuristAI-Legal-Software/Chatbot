@@ -6,10 +6,12 @@ const { resizeAvatar } = require('~/server/services/Files/images/avatar');
 const { getFileStrategy } = require('~/server/utils/getFileStrategy');
 const { assertSinglePathSegment } = require('~/server/utils/pathSafety');
 const { filterFile } = require('~/server/services/Files/process');
+const { createFileLimiters } = require('~/server/middleware/limiters/uploadLimiters');
 
 const router = express.Router();
+const { fileUploadIpLimiter, fileUploadUserLimiter } = createFileLimiters();
 
-router.post('/', async (req, res) => {
+router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
   try {
     const appConfig = req.config;
     filterFile({ req, file: req.file, image: true, isAvatar: true });

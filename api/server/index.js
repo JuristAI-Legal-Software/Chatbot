@@ -46,6 +46,20 @@ const staticCache = require('./utils/staticCache');
 const noIndex = require('./middleware/noIndex');
 const routes = require('./routes');
 
+const getCookieValueFromHeader = (cookieHeader, cookieName) => {
+  if (!cookieHeader) {
+    return undefined;
+  }
+  const prefix = `${cookieName}=`;
+  for (const cookie of cookieHeader.split(';')) {
+    const trimmed = cookie.trim();
+    if (trimmed.startsWith(prefix)) {
+      return decodeURIComponent(trimmed.slice(prefix.length));
+    }
+  }
+  return undefined;
+};
+
 const { PORT, HOST, ALLOW_SOCIAL_LOGIN, DISABLE_COMPRESSION, TRUST_PROXY } = process.env ?? {};
 
 // Allow PORT=0 to be used for automatic free port assignment
@@ -145,8 +159,6 @@ const startServer = async () => {
 
   app.use(mongoSanitize());
   app.use(cors());
-  app.use(cookieParser());
-
   if (!isEnabled(DISABLE_COMPRESSION)) {
     app.use(compression());
   } else {
@@ -198,7 +210,7 @@ const startServer = async () => {
   app.use('/api/admin/users', routes.adminUsers);
   /* CodeQL note: `/api/actions` manages OAuth browser binding inside the
    * action routes themselves, including CSRF cookie validation before token exchange. */
-  app.use('/api/actions', routes.actions);
+  app.use('/api/actions', cookieParser(), routes.actions);
   app.use('/api/keys', routes.keys);
   app.use('/api/api-keys', routes.apiKeys);
   app.use('/api/user', routes.user);
@@ -226,7 +238,7 @@ const startServer = async () => {
   app.use('/api/tags', routes.tags);
   /* CodeQL note: `/api/mcp` applies per-route OAuth limiters and validates
    * CSRF/session bindings inside `routes/mcp.js` before completing callbacks. */
-  app.use('/api/mcp', routes.mcp);
+  app.use('/api/mcp', cookieParser(), routes.mcp);
 
   app.use('/metrics', metricsRouter);
 
@@ -241,7 +253,10 @@ const startServer = async () => {
       Expires: process.env.INDEX_EXPIRES || '0',
     });
 
-    const lang = req.cookies.lang || req.headers['accept-language']?.split(',')[0] || 'en-US';
+    const lang =
+      getCookieValueFromHeader(req.headers.cookie, 'lang') ||
+      req.headers['accept-language']?.split(',')[0] ||
+      'en-US';
     const saneLang = lang.replace(/"/g, '&quot;');
     let updatedIndexHtml = indexHTML.replace(/lang="en-US"/g, `lang="${saneLang}"`);
 
