@@ -361,7 +361,7 @@ describe('RedisEventTransport Integration Tests', () => {
       messageHandler(channel, JSON.stringify({ type: 'chunk', seq: 2, data: { index: 2 } }));
       messageHandler(channel, JSON.stringify({ type: 'chunk', seq: 1, data: { index: 1 } }));
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await waitForCondition(() => receivedEvents.length === 3);
 
       expect(receivedEvents).toEqual([0, 1, 2]);
 
@@ -400,13 +400,12 @@ describe('RedisEventTransport Integration Tests', () => {
       messageHandler(channel, JSON.stringify({ type: 'chunk', seq: 4, data: { index: 4 } }));
       messageHandler(channel, JSON.stringify({ type: 'chunk', seq: 3, data: { index: 3 } }));
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
       expect(receivedEvents).toEqual([]);
 
       messageHandler(channel, JSON.stringify({ type: 'chunk', seq: 0, data: { index: 0 } }));
       messageHandler(channel, JSON.stringify({ type: 'chunk', seq: 1, data: { index: 1 } }));
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await waitForCondition(() => receivedEvents.length === 5);
       expect(receivedEvents).toEqual([0, 1, 2, 3, 4]);
 
       transport.destroy();
@@ -488,7 +487,7 @@ describe('RedisEventTransport Integration Tests', () => {
       messageHandler(channel, JSON.stringify({ type: 'chunk', data: { msg: 'no-seq-2' } }));
       messageHandler(channel, JSON.stringify({ type: 'done', data: { msg: 'finished' } }));
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await waitForCondition(() => receivedEvents.length === 3);
 
       expect(receivedEvents).toEqual(['no-seq-1', 'no-seq-2', 'done:finished']);
 
@@ -523,8 +522,6 @@ describe('RedisEventTransport Integration Tests', () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
       const messageHandler = mockSubscriber.on.mock.calls.find(
         (call) => call[0] === 'message',
       )?.[1];
@@ -539,7 +536,7 @@ describe('RedisEventTransport Integration Tests', () => {
       messageHandler(channel, JSON.stringify({ type: 'chunk', seq: 2, data: { msg: 'chunk-2' } }));
       messageHandler(channel, JSON.stringify({ type: 'chunk', seq: 1, data: { msg: 'chunk-1' } }));
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForCondition(() => doneReceived === true && receivedEvents.length === 4);
 
       // Done event should be delivered AFTER all chunks despite arriving early
       expect(doneReceived).toBe(true);
@@ -575,8 +572,6 @@ describe('RedisEventTransport Integration Tests', () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
       const messageHandler = mockSubscriber.on.mock.calls.find(
         (call) => call[0] === 'message',
       )?.[1];
@@ -589,7 +584,9 @@ describe('RedisEventTransport Integration Tests', () => {
       messageHandler(channel, JSON.stringify({ type: 'error', seq: 2, error: 'Something failed' }));
       messageHandler(channel, JSON.stringify({ type: 'chunk', seq: 1, data: { msg: 'chunk-1' } }));
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForCondition(
+        () => errorReceived === 'Something failed' && receivedEvents.length === 3,
+      );
 
       // Error event should be delivered AFTER all preceding chunks
       expect(errorReceived).toBe('Something failed');

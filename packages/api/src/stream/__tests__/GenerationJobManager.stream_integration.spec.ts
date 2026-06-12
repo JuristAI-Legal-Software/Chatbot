@@ -34,6 +34,20 @@ describe('GenerationJobManager Integration Tests', () => {
   const redisConfigured = process.env.USE_REDIS === 'true';
   const describeRedis = redisConfigured ? describe : describe.skip;
   const testRedis = redisConfigured ? test : test.skip;
+  const waitForCondition = async (
+    condition: () => boolean,
+    timeoutMs = 2000,
+    intervalMs = 20,
+  ): Promise<void> => {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (condition()) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    throw new Error(`Condition not met within ${timeoutMs}ms`);
+  };
 
   beforeAll(async () => {
     originalEnv = { ...process.env };
@@ -131,7 +145,7 @@ describe('GenerationJobManager Integration Tests', () => {
       data: { id: 'step-1', delta: { content: { type: 'text', text: 'Hello' } } },
     });
 
-    await new Promise((resolve) => setTimeout(resolve, delay));
+    await waitForCondition(() => firstEvents.length === 2, Math.max(delay * 10, 1000));
     expect(firstEvents.length).toBe(2);
 
     sub?.unsubscribe();
@@ -1256,8 +1270,6 @@ describe('GenerationJobManager Integration Tests', () => {
           receivedEvents.push(event),
         );
 
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
         for (let i = 0; i < 10; i++) {
           await manager.emitChunk(streamId, {
             event: 'on_message_delta',
@@ -1265,7 +1277,7 @@ describe('GenerationJobManager Integration Tests', () => {
           });
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        await waitForCondition(() => receivedEvents.length === 12);
 
         expect(receivedEvents.length).toBe(12);
         expect((receivedEvents[0] as Record<string, unknown>).created).toBe(true);
@@ -1340,7 +1352,6 @@ describe('GenerationJobManager Integration Tests', () => {
         { skipBufferReplay: true },
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 20));
       expect(resumeEvents.length).toBe(0);
 
       await manager.emitChunk(streamId, {
@@ -1348,7 +1359,7 @@ describe('GenerationJobManager Integration Tests', () => {
         data: { id: 'step-1', delta: { content: { type: 'text', text: ' Live!' } } },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await waitForCondition(() => resumeEvents.length === 1);
       expect(resumeEvents.length).toBe(1);
       expect((resumeEvents[0] as StreamEvent).event).toBe('on_message_delta');
 
@@ -1539,7 +1550,6 @@ describe('GenerationJobManager Integration Tests', () => {
         { skipBufferReplay: true },
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
       expect(resumeEvents.length).toBe(0);
 
       await manager.emitChunk(streamId, {
@@ -1547,7 +1557,7 @@ describe('GenerationJobManager Integration Tests', () => {
         data: { id: 'step-1', delta: { content: { type: 'text', text: ' Live!' } } },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await waitForCondition(() => resumeEvents.length === 1, 3000);
       expect(resumeEvents.length).toBe(1);
       expect((resumeEvents[0] as StreamEvent).event).toBe('on_message_delta');
 
@@ -1572,13 +1582,10 @@ describe('GenerationJobManager Integration Tests', () => {
           data: { delta: { content: { type: 'text', text: 'buffered-redis' } } },
         });
 
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
         const sub2Events: ServerSentEvent[] = [];
         const sub2 = await manager.subscribe(streamId, (event) => sub2Events.push(event));
 
-        await new Promise((resolve) => setTimeout(resolve, 200));
-
+        await waitForCondition(() => sub2Events.length === 1, 3000);
         expect(sub2Events.length).toBe(1);
         expect((sub2Events[0] as StreamEvent).event).toBe('on_message_delta');
 
@@ -1718,7 +1725,7 @@ describe('GenerationJobManager Integration Tests', () => {
           data: { delta: { content: { type: 'text', text: 'live-redis' } } },
         });
 
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await waitForCondition(() => liveEvents.length === 1, 3000);
         expect(liveEvents.length).toBe(1);
 
         subscription?.unsubscribe();
