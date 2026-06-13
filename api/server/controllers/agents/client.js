@@ -69,6 +69,28 @@ const db = require('~/models');
 
 const loadAgent = (params) => loadAgentFn(params, { getAgent: db.getAgent, getMCPServerTools });
 
+const parseConversationIdentity = (conversationId) => {
+  if (typeof conversationId !== 'string' || conversationId.length === 0) {
+    return {};
+  }
+
+  return conversationId.split('|').reduce((acc, segment) => {
+    const separatorIndex = segment.indexOf(':');
+    if (separatorIndex <= 0) {
+      return acc;
+    }
+
+    const key = segment.slice(0, separatorIndex);
+    const value = segment.slice(separatorIndex + 1);
+    if (!key || !value) {
+      return acc;
+    }
+
+    acc[key] = value;
+    return acc;
+  }, {});
+};
+
 class AgentClient extends BaseClient {
   constructor(options = {}) {
     super(null, options);
@@ -797,6 +819,50 @@ class AgentClient extends BaseClient {
     }
   }
 
+  buildErrorLogContext(error, abortController) {
+    const requestBody = this.options?.req?.body ?? {};
+    const conversationId =
+      this.conversationId ??
+      requestBody.conversationId ??
+      requestBody.openaiConversationId ??
+      requestBody.openai_conversation_id;
+    const parsedConversation = parseConversationIdentity(conversationId);
+
+    return removeNullishValues({
+      conversationId,
+      threadId:
+        requestBody.threadId ??
+        requestBody.openaiConversationId ??
+        requestBody.openai_conversation_id ??
+        parsedConversation.threadId,
+      openaiConversationId:
+        requestBody.openaiConversationId ??
+        requestBody.openai_conversation_id ??
+        parsedConversation.threadId,
+      customId: requestBody.customId ?? parsedConversation.customId,
+      userId:
+        requestBody.userId ??
+        requestBody.metadata?.userId ??
+        parsedConversation.userId ??
+        this.user ??
+        this.options?.req?.user?.id,
+      appId: requestBody.appId ?? requestBody.metadata?.appId,
+      tag: requestBody.tag ?? requestBody.metadata?.tag ?? parsedConversation.tag,
+      endpoint: this.options?.endpoint,
+      agentId: this.options?.agent?.id,
+      model: requestBody.model ?? this.model,
+      responseMessageId: this.responseMessageId,
+      parentMessageId: this.parentMessageId,
+      wasAborted: Boolean(abortController?.signal?.aborted),
+      errorCode: error?.code ?? error?.error?.code,
+      errorType: error?.type ?? error?.error?.type,
+      errorParam: error?.param ?? error?.error?.param,
+      pregelTaskId: error?.pregelTaskId,
+      errorMessage: error?.message,
+      stack: error?.stack,
+    });
+  }
+
   /**
    * Get stream usage as returned by this client's API response.
    * @returns {UsageMetadata} The stream usage object.
@@ -1118,14 +1184,19 @@ class AgentClient extends BaseClient {
         });
       }
     } catch (err) {
+      const errorContext = this.buildErrorLogContext(err, abortController);
       logger.error(
-        '[api/server/controllers/agents/client.js #sendCompletion] Operation aborted',
-        err,
+        {
+          message: '[api/server/controllers/agents/client.js #sendCompletion] Operation aborted',
+          ...errorContext,
+        },
       );
       if (!abortController.signal.aborted) {
         logger.error(
-          '[api/server/controllers/agents/client.js #sendCompletion] Unhandled error type',
-          err,
+          {
+            message: '[api/server/controllers/agents/client.js #sendCompletion] Unhandled error type',
+            ...errorContext,
+          },
         );
         this.contentParts.push({
           type: ContentTypes.ERROR,

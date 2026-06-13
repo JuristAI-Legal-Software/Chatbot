@@ -22,7 +22,7 @@ const {
   ListModelsController,
   GetModelController,
 } = require('~/server/controllers/agents/openai');
-const { configMiddleware } = require('~/server/middleware');
+const { configMiddleware, createAccessLimiters } = require('~/server/middleware');
 const {
   checkAgentPermission,
   preAuthTenantMiddleware,
@@ -31,11 +31,14 @@ const {
 } = require('./middleware');
 
 const router = express.Router();
+const { accessIpLimiter, accessUserLimiter } = createAccessLimiters();
 
 router.use(preAuthTenantMiddleware);
 router.use(requireRemoteAgentAuth);
 router.use(configMiddleware);
 router.use(checkRemoteAgentsFeature);
+router.use(accessIpLimiter);
+router.use(accessUserLimiter);
 
 /**
  * @route POST /v1/chat/completions

@@ -9,9 +9,11 @@ const {
   domainParser,
 } = require('~/server/services/ActionService');
 const { getOpenAIClient } = require('~/server/controllers/assistants/helpers');
+const { createAccessLimiters } = require('~/server/middleware');
 const db = require('~/models');
 
 const router = express.Router();
+const { accessIpLimiter, accessUserLimiter } = createAccessLimiters();
 
 /**
  * Adds or updates actions for a specific assistant.
@@ -22,7 +24,7 @@ const router = express.Router();
  * @param {ActionMetadata} req.body.metadata - Metadata for the action.
  * @returns {Object} 200 - success response - application/json
  */
-router.post('/:assistant_id', async (req, res) => {
+router.post('/:assistant_id', accessIpLimiter, accessUserLimiter, async (req, res) => {
   try {
     const appConfig = req.config;
     const { assistant_id } = req.params;
@@ -169,7 +171,11 @@ router.post('/:assistant_id', async (req, res) => {
  * @param {string} req.params.action_id - The ID of the action to delete.
  * @returns {Object} 200 - success response - application/json
  */
-router.delete('/:assistant_id/:action_id/:model', async (req, res) => {
+router.delete(
+  '/:assistant_id/:action_id/:model',
+  accessIpLimiter,
+  accessUserLimiter,
+  async (req, res) => {
   try {
     const { assistant_id, action_id, model } = req.params;
     req.body = req.body || {}; // Express 5: ensure req.body exists
@@ -231,6 +237,7 @@ router.delete('/:assistant_id/:action_id/:model', async (req, res) => {
     logger.error(message, error);
     res.status(500).json({ message });
   }
-});
+  },
+);
 
 module.exports = router;

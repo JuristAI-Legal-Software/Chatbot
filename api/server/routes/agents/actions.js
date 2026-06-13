@@ -23,9 +23,10 @@ const {
 } = require('~/server/services/ActionService');
 const { findAccessibleResources } = require('~/server/services/PermissionService');
 const db = require('~/models');
-const { canAccessAgentResource } = require('~/server/middleware');
+const { canAccessAgentResource, createAccessLimiters } = require('~/server/middleware');
 
 const router = express.Router();
+const { accessIpLimiter, accessUserLimiter } = createAccessLimiters();
 
 const checkAgentCreate = generateCheckAccess({
   permissionType: PermissionTypes.AGENTS,
@@ -39,7 +40,7 @@ const checkAgentCreate = generateCheckAccess({
  * @param {string} req.params.id - Assistant identifier.
  * @returns {Action[]} 200 - success response - application/json
  */
-router.get('/', async (req, res) => {
+router.get('/', accessIpLimiter, accessUserLimiter, async (req, res) => {
   try {
     const userId = req.user.id;
     const editableAgentObjectIds = await findAccessibleResources({
@@ -77,6 +78,8 @@ router.get('/', async (req, res) => {
  */
 router.post(
   '/:agent_id',
+  accessIpLimiter,
+  accessUserLimiter,
   canAccessAgentResource({
     requiredPermission: PermissionBits.EDIT,
     resourceIdParam: 'agent_id',
@@ -240,6 +243,8 @@ router.post(
  */
 router.delete(
   '/:agent_id/:action_id',
+  accessIpLimiter,
+  accessUserLimiter,
   canAccessAgentResource({
     requiredPermission: PermissionBits.EDIT,
     resourceIdParam: 'agent_id',
