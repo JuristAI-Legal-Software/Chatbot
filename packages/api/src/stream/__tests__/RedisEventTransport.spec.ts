@@ -53,4 +53,36 @@ describe('RedisEventTransport', () => {
 
     transport.destroy();
   });
+
+  it('keeps the Redis channel subscribed while only abort listeners remain', () => {
+    const mockPublisher = createMockPublisher();
+    const mockSubscriber = createMockSubscriber();
+    const transport = new RedisEventTransport(
+      mockPublisher as unknown as Redis,
+      mockSubscriber as unknown as Redis,
+    );
+
+    const streamId = 'abort-listener-stays-subscribed-test';
+    let abortCallbackFired = false;
+
+    transport.onAbort(streamId, () => {
+      abortCallbackFired = true;
+    });
+
+    const subscription = transport.subscribe(streamId, { onChunk: () => {} });
+    subscription.unsubscribe();
+
+    expect(mockSubscriber.unsubscribe).not.toHaveBeenCalled();
+
+    const messageHandler = getMessageHandler(mockSubscriber);
+    const channel = `stream:{${streamId}}:events`;
+    messageHandler(channel, JSON.stringify({ type: 'abort' }));
+
+    expect(abortCallbackFired).toBe(true);
+
+    transport.cleanup(streamId);
+    expect(mockSubscriber.unsubscribe).toHaveBeenCalledWith(channel);
+
+    transport.destroy();
+  });
 });

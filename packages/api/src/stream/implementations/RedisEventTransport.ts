@@ -484,10 +484,12 @@ export class RedisEventTransport implements IEventTransport {
            */
           this.resetReorderBuffer(streamId);
 
-          this.subscriber.unsubscribe(channel).catch((err) => {
-            logger.error(`[RedisEventTransport] Failed to unsubscribe from ${channel}:`, err);
-          });
-          this.channelSubscriptions.delete(channel);
+          if (state.abortCallbacks.length === 0) {
+            this.subscriber.unsubscribe(channel).catch((err) => {
+              logger.error(`[RedisEventTransport] Failed to unsubscribe from ${channel}:`, err);
+            });
+            this.channelSubscriptions.delete(channel);
+          }
 
           // Call all-subscribers-left callbacks
           for (const callback of state.allSubscribersLeftCallbacks) {

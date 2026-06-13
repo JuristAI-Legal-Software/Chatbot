@@ -304,7 +304,7 @@ class GenerationJobManagerClass {
      * and aborts its local AbortController (if it's the one running generation).
      */
     if (this.eventTransport.onAbort) {
-      this.eventTransport.onAbort(streamId, () => {
+      await this.eventTransport.onAbort(streamId, () => {
         const currentRuntime = this.runtimeState.get(streamId);
         if (currentRuntime && !currentRuntime.abortController.signal.aborted) {
           logger.debug(`[GenerationJobManager] Received cross-replica abort for ${streamId}`);
@@ -500,7 +500,7 @@ class GenerationJobManagerClass {
     // Set up cross-replica abort listener (Redis mode only)
     // This ensures lazily-initialized jobs can receive abort signals
     if (this.eventTransport.onAbort) {
-      this.eventTransport.onAbort(streamId, () => {
+      await this.eventTransport.onAbort(streamId, () => {
         const currentRuntime = this.runtimeState.get(streamId);
         if (currentRuntime && !currentRuntime.abortController.signal.aborted) {
           logger.debug(
