@@ -600,6 +600,7 @@ router.post(
   mcpOAuthUserLimiter,
   requireJwtAuth,
   checkMCPUsePermissions,
+  mcpOAuthCallbackLimiter,
   setOAuthSession,
   async (req, res) => {
     try {
