@@ -12,6 +12,7 @@ const {
   createSafeUser,
   MCPOAuthHandler,
   MCPTokenStorage,
+  getOAuthRequestCookie,
   setOAuthSession,
   PENDING_STALE_MS,
   getUserMCPAuthMap,
@@ -74,7 +75,7 @@ const checkMCPCreate = generateCheckAccess({
  * Get all MCP tools available to the user
  * Returns only MCP tools, completely decoupled from regular LibreChat tools
  */
-router.get('/tools', requireJwtAuth, mcpOAuthIpLimiter, mcpOAuthUserLimiter, async (req, res) => {
+router.get('/tools', mcpOAuthIpLimiter, mcpOAuthUserLimiter, requireJwtAuth, async (req, res) => {
   return getMCPTools(req, res);
 });
 
@@ -85,9 +86,9 @@ router.get('/tools', requireJwtAuth, mcpOAuthIpLimiter, mcpOAuthUserLimiter, asy
 router.get(
   '/:serverName/oauth/initiate',
   loginLimiter,
-  requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
+  requireJwtAuth,
   setOAuthSession,
   async (req, res) => {
     try {
@@ -252,8 +253,8 @@ router.get(
           '[MCP OAuth] CSRF validation failed: no valid CSRF cookie, session cookie, or active flow',
           {
             flowId,
-            hasCsrfCookie: !!req.cookies?.[OAUTH_CSRF_COOKIE],
-            hasSessionCookie: !!req.cookies?.[OAUTH_SESSION_COOKIE],
+            hasCsrfCookie: !!getOAuthRequestCookie(req, OAUTH_CSRF_COOKIE),
+            hasSessionCookie: !!getOAuthRequestCookie(req, OAUTH_SESSION_COOKIE),
           },
         );
         return res.redirect(`${basePath}/oauth/error?error=csrf_validation_failed`);
@@ -427,9 +428,9 @@ router.get(
 router.get(
   '/oauth/tokens/:flowId',
   loginLimiter,
-  requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
+  requireJwtAuth,
   async (req, res) => {
     try {
       const { flowId } = req.params;
@@ -471,9 +472,9 @@ router.get(
 router.post(
   '/:serverName/oauth/bind',
   loginLimiter,
-  requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
+  requireJwtAuth,
   setOAuthSession,
   async (req, res) => {
     try {
@@ -502,9 +503,9 @@ router.post(
 router.get(
   '/oauth/status/:flowId',
   loginLimiter,
-  requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
+  requireJwtAuth,
   async (req, res) => {
     try {
       const { flowId } = req.params;
@@ -546,9 +547,9 @@ router.get(
 router.post(
   '/oauth/cancel/:serverName',
   loginLimiter,
-  requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
+  requireJwtAuth,
   async (req, res) => {
     try {
       const { serverName } = req.params;
@@ -595,9 +596,9 @@ router.post(
 router.post(
   '/:serverName/reinitialize',
   loginLimiter,
-  requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
+  requireJwtAuth,
   checkMCPUsePermissions,
   setOAuthSession,
   async (req, res) => {
@@ -678,9 +679,9 @@ router.post(
  */
 router.get(
   '/connection/status',
-  requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
+  requireJwtAuth,
   async (req, res) => {
     try {
       const user = req.user;
@@ -733,9 +734,9 @@ router.get(
  */
 router.get(
   '/connection/status/:serverName',
-  requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
+  requireJwtAuth,
   async (req, res) => {
     try {
       const user = req.user;
@@ -787,9 +788,9 @@ router.get(
  */
 router.get(
   '/:serverName/auth-values',
-  requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
+  requireJwtAuth,
   checkMCPUsePermissions,
   async (req, res) => {
     try {
@@ -869,9 +870,9 @@ MCP Server CRUD Routes (User-Managed MCP Servers)
  */
 router.get(
   '/servers',
-  requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
+  requireJwtAuth,
   checkMCPUsePermissions,
   getMCPServersList,
 );
@@ -884,9 +885,9 @@ router.get(
  */
 router.post(
   '/servers',
-  requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
+  requireJwtAuth,
   checkMCPCreate,
   createMCPServerController,
 );
@@ -899,9 +900,9 @@ router.post(
  */
 router.get(
   '/servers/:serverName',
-  requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
+  requireJwtAuth,
   checkMCPUsePermissions,
   canAccessMCPServerResource({
     requiredPermission: PermissionBits.VIEW,
@@ -919,9 +920,9 @@ router.get(
  */
 router.patch(
   '/servers/:serverName',
-  requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
+  requireJwtAuth,
   checkMCPCreate,
   canAccessMCPServerResource({
     requiredPermission: PermissionBits.EDIT,
@@ -938,9 +939,9 @@ router.patch(
  */
 router.delete(
   '/servers/:serverName',
-  requireJwtAuth,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
+  requireJwtAuth,
   checkMCPCreate,
   canAccessMCPServerResource({
     requiredPermission: PermissionBits.DELETE,

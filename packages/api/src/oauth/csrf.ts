@@ -8,8 +8,13 @@ export const OAUTH_CSRF_MAX_AGE = 10 * 60 * 1000;
 export const OAUTH_SESSION_COOKIE = 'oauth_session';
 export const OAUTH_SESSION_MAX_AGE = 24 * 60 * 60 * 1000;
 export const OAUTH_SESSION_COOKIE_PATH = '/api';
-const OAUTH_TOKEN_LENGTH_BYTES = 16;
-const OAUTH_SCRYPT_OPTS = { N: 1 << 14, r: 8, p: 1, maxmem: 32 * 1024 * 1024 } as const;
+const OAUTH_IV_LENGTH_BYTES = 12;
+const OAUTH_AUTH_TAG_LENGTH_BYTES = 16;
+const OAUTH_ENCRYPTION_ALGORITHM = 'aes-256-gcm';
+
+type RequestCookiesLike = Pick<Request, 'headers'> & {
+  cookies?: Record<string, string> | undefined;
+};
 
 /**
  * Determines if secure cookies should be used.
@@ -50,21 +55,11 @@ export function shouldUseSecureCookie(): boolean {
 }
 
 /**
- * Generates a deterministic opaque binding token for OAuth CSRF/session cookies.
+ * Generates an opaque binding token for OAuth CSRF/session cookies.
  *
- * We use scrypt instead of a fast hash so CodeQL does not classify the derived
- * value as `js/insufficient-password-hash` when the input contains user/server ids.
+ * The value is authenticated and encrypted with a key derived from JWT_SECRET,
+ * so browsers never receive the raw flow id / user id in clear text.
  */
-export function generateOAuthCsrfToken(flowId: string, secret?: string): string {
-  const signingKey = secret || process.env.JWT_SECRET;
-  if (!signingKey) {
-    throw new Error('JWT_SECRET is required for OAuth CSRF token generation');
-  }
-  return crypto
-    .scryptSync(String(flowId), signingKey, OAUTH_TOKEN_LENGTH_BYTES, OAUTH_SCRYPT_OPTS)
-    .toString('hex');
-}
-
 function getOAuthBindingSigningKey(secret?: string): string {
   const signingKey = secret || process.env.JWT_SECRET;
   if (!signingKey) {
@@ -73,11 +68,82 @@ function getOAuthBindingSigningKey(secret?: string): string {
   return signingKey;
 }
 
+function getOAuthBindingEncryptionKey(secret?: string): Buffer {
+  return crypto.createHash('sha256').update(getOAuthBindingSigningKey(secret), 'utf8').digest();
+}
+
+function encryptOAuthBindingValue(subject: string, secret?: string): string {
+  const iv = crypto.randomBytes(OAUTH_IV_LENGTH_BYTES);
+  const cipher = crypto.createCipheriv(
+    OAUTH_ENCRYPTION_ALGORITHM,
+    getOAuthBindingEncryptionKey(secret),
+    iv,
+  );
+  const ciphertext = Buffer.concat([cipher.update(subject, 'utf8'), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return Buffer.concat([iv, authTag, ciphertext]).toString('base64url');
+}
+
+function decryptOAuthBindingValue(token: string, secret?: string): string | null {
+  try {
+    const payload = Buffer.from(token, 'base64url');
+    if (payload.length <= OAUTH_IV_LENGTH_BYTES + OAUTH_AUTH_TAG_LENGTH_BYTES) {
+      return null;
+    }
+
+    const iv = payload.subarray(0, OAUTH_IV_LENGTH_BYTES);
+    const authTag = payload.subarray(
+      OAUTH_IV_LENGTH_BYTES,
+      OAUTH_IV_LENGTH_BYTES + OAUTH_AUTH_TAG_LENGTH_BYTES,
+    );
+    const ciphertext = payload.subarray(OAUTH_IV_LENGTH_BYTES + OAUTH_AUTH_TAG_LENGTH_BYTES);
+    const decipher = crypto.createDecipheriv(
+      OAUTH_ENCRYPTION_ALGORITHM,
+      getOAuthBindingEncryptionKey(secret),
+      iv,
+    );
+    decipher.setAuthTag(authTag);
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
+  } catch {
+    return null;
+  }
+}
+
+function parseCookieHeader(cookieHeader?: string): Record<string, string> {
+  if (!cookieHeader) {
+    return {};
+  }
+
+  return cookieHeader.split(';').reduce<Record<string, string>>((cookies, cookiePart) => {
+    const trimmed = cookiePart.trim();
+    if (!trimmed) {
+      return cookies;
+    }
+
+    const separatorIndex = trimmed.indexOf('=');
+    if (separatorIndex === -1) {
+      return cookies;
+    }
+
+    const key = trimmed.slice(0, separatorIndex);
+    cookies[key] = decodeURIComponent(trimmed.slice(separatorIndex + 1));
+    return cookies;
+  }, {});
+}
+
+export function getOAuthRequestCookie(
+  req: RequestCookiesLike,
+  cookieName: string,
+): string | undefined {
+  return req.cookies?.[cookieName] ?? parseCookieHeader(req.headers?.cookie)[cookieName];
+}
+
+export function generateOAuthCsrfToken(flowId: string, secret?: string): string {
+  return encryptOAuthBindingValue(String(flowId), secret);
+}
+
 export function getOAuthCookieBindingValue(subject: string, secret?: string): string {
-  return crypto
-    .createHmac('sha256', getOAuthBindingSigningKey(secret))
-    .update(generateOAuthCsrfToken(subject, secret), 'utf8')
-    .digest('base64url');
+  return encryptOAuthBindingValue(subject, secret);
 }
 
 function getCookieBindingValue(subject: string): string {
@@ -112,16 +178,12 @@ export function validateOAuthCsrf(
   flowId: string,
   cookiePath: string,
 ): boolean {
-  const cookie = (req.cookies as Record<string, string> | undefined)?.[OAUTH_CSRF_COOKIE];
+  const cookie = getOAuthRequestCookie(req, OAUTH_CSRF_COOKIE);
   res.clearCookie(OAUTH_CSRF_COOKIE, { path: cookiePath });
   if (!cookie) {
     return false;
   }
-  const expected = getCookieBindingValue(flowId);
-  if (cookie.length !== expected.length) {
-    return false;
-  }
-  return crypto.timingSafeEqual(Buffer.from(cookie), Buffer.from(expected));
+  return decryptOAuthBindingValue(cookie) === flowId;
 }
 
 /**
@@ -130,7 +192,7 @@ export function validateOAuthCsrf(
  */
 export function setOAuthSession(req: Request, res: Response, next: NextFunction): void {
   const user = (req as Request & { user?: { id?: string } }).user;
-  if (user?.id && !(req.cookies as Record<string, string> | undefined)?.[OAUTH_SESSION_COOKIE]) {
+  if (user?.id && !validateOAuthSession(req, user.id)) {
     setOAuthSessionCookie(res, user.id);
   }
   next();
@@ -154,13 +216,9 @@ export function setOAuthSessionCookie(res: Response, userId: string): void {
 
 /** Validates the session cookie against the expected userId using timing-safe comparison */
 export function validateOAuthSession(req: Request, userId: string): boolean {
-  const cookie = (req.cookies as Record<string, string> | undefined)?.[OAUTH_SESSION_COOKIE];
+  const cookie = getOAuthRequestCookie(req, OAUTH_SESSION_COOKIE);
   if (!cookie) {
     return false;
   }
-  const expected = getCookieBindingValue(userId);
-  if (cookie.length !== expected.length) {
-    return false;
-  }
-  return crypto.timingSafeEqual(Buffer.from(cookie), Buffer.from(expected));
+  return decryptOAuthBindingValue(cookie) === userId;
 }

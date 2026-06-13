@@ -5,6 +5,7 @@ const { CacheKeys } = require('librechat-data-provider');
 const {
   getBasePath,
   getAccessToken,
+  getOAuthRequestCookie,
   setOAuthSession,
   validateOAuthCsrf,
   OAUTH_CSRF_COOKIE,
@@ -93,8 +94,8 @@ router.get('/:action_id/oauth/callback', loginLimiter, async (req, res) => {
     ) {
       logger.error('[Action OAuth] CSRF validation failed: no valid CSRF or session cookie', {
         identifier,
-        hasCsrfCookie: !!req.cookies?.[OAUTH_CSRF_COOKIE],
-        hasSessionCookie: !!req.cookies?.[OAUTH_SESSION_COOKIE],
+        hasCsrfCookie: !!getOAuthRequestCookie(req, OAUTH_CSRF_COOKIE),
+        hasSessionCookie: !!getOAuthRequestCookie(req, OAUTH_SESSION_COOKIE),
       });
       await flowManager.failFlow(identifier, 'oauth', 'CSRF validation failed');
       return res.redirect(`${basePath}/oauth/error?error=csrf_validation_failed`);

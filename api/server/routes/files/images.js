@@ -21,6 +21,7 @@ const { fileUploadIpLimiter, fileUploadUserLimiter } = createFileLimiters();
 
 router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
   const metadata = req.body;
+  metadata.message_file = metadata.message_file === true || metadata.message_file === 'true';
   const appConfig = req.config;
   const safeUserDir = assertSinglePathSegment('userId', req.user.id);
   const tempFilename = assertSinglePathSegment('filename', req.file.filename);
@@ -38,7 +39,12 @@ router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) =>
     metadata.temp_file_id = metadata.file_id;
     metadata.file_id = req.file_id;
 
-    if (!isAssistantsEndpoint(metadata.endpoint) && metadata.tool_resource != null) {
+    const isAgentToolUpload =
+      !isAssistantsEndpoint(metadata.endpoint) &&
+      metadata.agent_id != null &&
+      metadata.tool_resource != null;
+
+    if (isAgentToolUpload) {
       const denied = await verifyAgentUploadPermission({
         req,
         res,

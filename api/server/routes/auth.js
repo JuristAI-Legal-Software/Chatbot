@@ -28,6 +28,7 @@ const setBalanceConfig = createSetBalanceConfig({
 });
 
 const router = express.Router();
+const { accessIpLimiter, accessUserLimiter } = middleware.createAccessLimiters();
 const getCloudFrontAuthCookieRefreshResult = (req, res) => {
   const warmedResult = req.cloudFrontAuthCookieRefreshResult;
   if (warmedResult && (warmedResult.attempted || !warmedResult.enabled)) {
@@ -39,7 +40,13 @@ const getCloudFrontAuthCookieRefreshResult = (req, res) => {
 
 const ldapAuth = !!process.env.LDAP_URL && !!process.env.LDAP_USER_SEARCH_BASE;
 //Local
-router.post('/logout', middleware.requireJwtAuth, logoutController);
+router.post(
+  '/logout',
+  accessIpLimiter,
+  accessUserLimiter,
+  middleware.requireJwtAuth,
+  logoutController,
+);
 router.post(
   '/login',
   middleware.logHeaders,
@@ -49,20 +56,26 @@ router.post(
   setBalanceConfig,
   loginController,
 );
-router.post('/refresh', refreshController);
-router.post('/cloudfront/refresh', middleware.requireJwtAuth, (req, res) => {
-  const result = getCloudFrontAuthCookieRefreshResult(req, res);
-  if (!result.enabled) {
-    return res.sendStatus(404);
-  }
+router.post('/refresh', accessIpLimiter, accessUserLimiter, refreshController);
+router.post(
+  '/cloudfront/refresh',
+  accessIpLimiter,
+  accessUserLimiter,
+  middleware.requireJwtAuth,
+  (req, res) => {
+    const result = getCloudFrontAuthCookieRefreshResult(req, res);
+    if (!result.enabled) {
+      return res.sendStatus(404);
+    }
 
-  const status = result.refreshed ? 200 : 500;
-  return res.status(status).json({
-    ok: result.refreshed,
-    expiresInSec: result.expiresInSec,
-    refreshAfterSec: result.refreshAfterSec,
-  });
-});
+    const status = result.refreshed ? 200 : 500;
+    return res.status(status).json({
+      ok: result.refreshed,
+      expiresInSec: result.expiresInSec,
+      refreshAfterSec: result.refreshAfterSec,
+    });
+  },
+);
 router.post(
   '/register',
   middleware.registerLimiter,
@@ -85,13 +98,55 @@ router.post(
   resetPasswordController,
 );
 
-router.post('/2fa/enable', middleware.requireJwtAuth, enable2FA);
-router.post('/2fa/verify', middleware.requireJwtAuth, verify2FA);
-router.post('/2fa/verify-temp', middleware.checkBan, verify2FAWithTempToken);
-router.post('/2fa/confirm', middleware.requireJwtAuth, confirm2FA);
-router.post('/2fa/disable', middleware.requireJwtAuth, disable2FA);
-router.post('/2fa/backup/regenerate', middleware.requireJwtAuth, regenerateBackupCodes);
+router.post(
+  '/2fa/enable',
+  accessIpLimiter,
+  accessUserLimiter,
+  middleware.requireJwtAuth,
+  enable2FA,
+);
+router.post(
+  '/2fa/verify',
+  accessIpLimiter,
+  accessUserLimiter,
+  middleware.requireJwtAuth,
+  verify2FA,
+);
+router.post(
+  '/2fa/verify-temp',
+  accessIpLimiter,
+  accessUserLimiter,
+  middleware.checkBan,
+  verify2FAWithTempToken,
+);
+router.post(
+  '/2fa/confirm',
+  accessIpLimiter,
+  accessUserLimiter,
+  middleware.requireJwtAuth,
+  confirm2FA,
+);
+router.post(
+  '/2fa/disable',
+  accessIpLimiter,
+  accessUserLimiter,
+  middleware.requireJwtAuth,
+  disable2FA,
+);
+router.post(
+  '/2fa/backup/regenerate',
+  accessIpLimiter,
+  accessUserLimiter,
+  middleware.requireJwtAuth,
+  regenerateBackupCodes,
+);
 
-router.get('/graph-token', middleware.requireJwtAuth, graphTokenController);
+router.get(
+  '/graph-token',
+  accessIpLimiter,
+  accessUserLimiter,
+  middleware.requireJwtAuth,
+  graphTokenController,
+);
 
 module.exports = router;

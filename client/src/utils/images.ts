@@ -38,11 +38,8 @@ export function isSafeImageSrc(src?: string | null): src is string {
  * Returns `''` on parse failure — callers should treat that as "do not render."
  */
 export function toRenderableImageUrl(src: string): string {
-  if (SAFE_DATA_IMAGE_PATTERN.test(src) || src.startsWith('blob:')) {
-    return src;
-  }
   try {
-    return new URL(src, window.location.origin).href;
+    return new URL(src, window.location.origin).toString();
   } catch {
     return '';
   }

@@ -64,7 +64,7 @@ if (allowSharedLinks) {
 /**
  * Shared links
  */
-router.get('/', requireJwtAuth, shareIpLimiter, shareUserLimiter, async (req, res) => {
+router.get('/', shareIpLimiter, requireJwtAuth, shareUserLimiter, async (req, res) => {
   try {
     const params = {
       pageParam: req.query.cursor,
@@ -103,8 +103,8 @@ router.get('/', requireJwtAuth, shareIpLimiter, shareUserLimiter, async (req, re
 
 router.get(
   '/link/:conversationId',
-  requireJwtAuth,
   shareIpLimiter,
+  requireJwtAuth,
   shareUserLimiter,
   async (req, res) => {
     try {
@@ -125,8 +125,8 @@ router.get(
 
 router.post(
   '/:conversationId',
-  requireJwtAuth,
   shareIpLimiter,
+  requireJwtAuth,
   shareUserLimiter,
   async (req, res) => {
     try {
@@ -154,7 +154,7 @@ router.post(
   },
 );
 
-router.patch('/:shareId', requireJwtAuth, shareIpLimiter, shareUserLimiter, async (req, res) => {
+router.patch('/:shareId', shareIpLimiter, requireJwtAuth, shareUserLimiter, async (req, res) => {
   try {
     const { targetMessageId } = req.body ?? {};
     if (targetMessageId !== undefined && typeof targetMessageId !== 'string') {
@@ -191,7 +191,7 @@ router.patch('/:shareId', requireJwtAuth, shareIpLimiter, shareUserLimiter, asyn
   }
 });
 
-router.delete('/:shareId', requireJwtAuth, shareIpLimiter, shareUserLimiter, async (req, res) => {
+router.delete('/:shareId', shareIpLimiter, requireJwtAuth, shareUserLimiter, async (req, res) => {
   try {
     const result = await deleteSharedLink(req.user.id, req.params.shareId);
 

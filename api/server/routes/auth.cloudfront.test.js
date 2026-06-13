@@ -49,6 +49,10 @@ jest.mock('~/server/middleware', () => {
   const pass = (req, res, next) => next();
   return {
     logHeaders: pass,
+    createAccessLimiters: jest.fn(() => ({
+      accessIpLimiter: pass,
+      accessUserLimiter: pass,
+    })),
     loginLimiter: pass,
     checkBan: pass,
     requireLocalAuth: pass,

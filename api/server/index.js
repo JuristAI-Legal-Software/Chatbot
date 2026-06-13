@@ -7,7 +7,6 @@ const axios = require('axios');
 const express = require('express');
 const passport = require('passport');
 const compression = require('compression');
-const cookieParser = require('cookie-parser');
 const mongoSanitize = require('express-mongo-sanitize');
 const { logger, runAsSystem } = require('@librechat/data-schemas');
 const {
@@ -34,6 +33,7 @@ const {
 } = require('~/models');
 const initializeOAuthReconnectManager = require('./services/initializeOAuthReconnectManager');
 const { capabilityContextMiddleware } = require('./middleware/roles/capabilities');
+const { createAccessLimiters, createFileLimiters, createShareLimiters } = require('./middleware');
 const createValidateImageRequest = require('./middleware/validateImageRequest');
 const { startExpiredFileSweep } = require('./services/Files/process');
 const { jwtLogin, ldapLogin, passportLogin } = require('~/strategies');
@@ -72,6 +72,9 @@ let serverReady = false;
 
 const startServer = async () => {
   const { metricsMiddleware, metricsRouter } = createMetrics();
+  const { accessIpLimiter, accessUserLimiter } = createAccessLimiters();
+  const { fileUploadIpLimiter, fileUploadUserLimiter } = createFileLimiters();
+  const { shareIpLimiter } = createShareLimiters();
   if (!process.env.METRICS_SECRET) {
     logger.warn('[metrics] METRICS_SECRET is not set - /metrics will return 401 for all requests');
   }
@@ -210,7 +213,7 @@ const startServer = async () => {
   app.use('/api/admin/users', routes.adminUsers);
   /* CodeQL note: `/api/actions` manages OAuth browser binding inside the
    * action routes themselves, including CSRF cookie validation before token exchange. */
-  app.use('/api/actions', cookieParser(), routes.actions);
+  app.use('/api/actions', routes.actions);
   app.use('/api/keys', routes.keys);
   app.use('/api/api-keys', routes.apiKeys);
   app.use('/api/user', routes.user);
@@ -222,13 +225,25 @@ const startServer = async () => {
   app.use('/api/skills', routes.skills);
   app.use('/api/categories', routes.categories);
   app.use('/api/endpoints', routes.endpoints);
-  app.use('/api/balance', routes.balance);
+  app.use('/api/balance', accessIpLimiter, accessUserLimiter, routes.balance);
   app.use('/api/models', routes.models);
-  app.use('/api/config', preAuthTenantMiddleware, optionalJwtAuth, routes.config);
+  app.use(
+    '/api/config',
+    preAuthTenantMiddleware,
+    accessIpLimiter,
+    accessUserLimiter,
+    optionalJwtAuth,
+    routes.config,
+  );
   app.use('/api/assistants', routes.assistants);
-  app.use('/api/files', await routes.files.initialize());
+  app.use(
+    '/api/files',
+    fileUploadIpLimiter,
+    fileUploadUserLimiter,
+    await routes.files.initialize(),
+  );
   app.use('/images/', createValidateImageRequest(appConfig.secureImageLinks), routes.staticRoute);
-  app.use('/api/share', preAuthTenantMiddleware, routes.share);
+  app.use('/api/share', preAuthTenantMiddleware, shareIpLimiter, routes.share);
   app.use('/api/roles', routes.roles);
   app.use('/api/agents', routes.agents);
   app.use('/api/banner', routes.banner);
@@ -238,7 +253,7 @@ const startServer = async () => {
   app.use('/api/tags', routes.tags);
   /* CodeQL note: `/api/mcp` applies per-route OAuth limiters and validates
    * CSRF/session bindings inside `routes/mcp.js` before completing callbacks. */
-  app.use('/api/mcp', cookieParser(), routes.mcp);
+  app.use('/api/mcp', routes.mcp);
 
   app.use('/metrics', metricsRouter);
 

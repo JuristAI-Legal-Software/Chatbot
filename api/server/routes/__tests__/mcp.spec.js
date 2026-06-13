@@ -1,4 +1,3 @@
-const crypto = require('crypto');
 const express = require('express');
 const request = require('supertest');
 const mongoose = require('mongoose');
@@ -6,40 +5,7 @@ const { getBasePath } = require('@librechat/api');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 
 function generateTestCsrfToken(flowId) {
-  const token = crypto
-    .scryptSync(String(flowId), process.env.JWT_SECRET, 16, {
-      N: 1 << 14,
-      r: 8,
-      p: 1,
-      maxmem: 32 * 1024 * 1024,
-    })
-    .toString('hex');
-  return crypto
-    .createHmac('sha256', process.env.JWT_SECRET)
-    .update(token, 'utf8')
-    .digest('base64url');
-}
-
-function parseCookies(cookieHeader) {
-  if (!cookieHeader) {
-    return {};
-  }
-
-  return cookieHeader.split(';').reduce((cookies, part) => {
-    const trimmed = part.trim();
-    if (!trimmed) {
-      return cookies;
-    }
-
-    const separatorIndex = trimmed.indexOf('=');
-    if (separatorIndex === -1) {
-      return cookies;
-    }
-
-    const key = trimmed.slice(0, separatorIndex);
-    cookies[key] = decodeURIComponent(trimmed.slice(separatorIndex + 1));
-    return cookies;
-  }, {});
+  return jest.requireActual('@librechat/api').getOAuthCookieBindingValue(flowId);
 }
 
 const mockRegistryInstance = {
@@ -191,10 +157,6 @@ describe('MCP Routes', () => {
     app.use(express.json());
     app.use((req, res, next) => {
       req.user = { id: 'test-user-id' };
-      next();
-    });
-    app.use((req, res, next) => {
-      req.cookies = parseCookies(req.headers.cookie);
       next();
     });
 
