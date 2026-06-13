@@ -43,6 +43,26 @@ const db = require('~/models');
 const router = express.Router();
 const { fileUploadIpLimiter, fileUploadUserLimiter } = createFileLimiters();
 
+function resolveTempUploadPath({ req, appConfig, safeUserDir }) {
+  if (req.file?.path) {
+    return req.file.path;
+  }
+
+  if (!appConfig?.paths?.uploads) {
+    return null;
+  }
+
+  const tempFilename = assertSinglePathSegment('filename', req.file.filename);
+
+  return resolvePathFromTrustedRoot(
+    'file upload path',
+    appConfig.paths.uploads,
+    'temp',
+    safeUserDir,
+    tempFilename,
+  );
+}
+
 router.get('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
   try {
     const appConfig = req.config;
@@ -644,17 +664,11 @@ router.get(
 );
 
 router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
-  const metadata = req.body;
+  const metadata = req.body ?? {};
   let cleanup = true;
+  const appConfig = req.config;
   const safeUserDir = assertSinglePathSegment('userId', req.user.id);
-  const tempFilename = assertSinglePathSegment('filename', req.file.filename);
-  const tempUploadPath = resolvePathFromTrustedRoot(
-    'file upload path',
-    req.config.paths.uploads,
-    'temp',
-    safeUserDir,
-    tempFilename,
-  );
+  const tempUploadPath = resolveTempUploadPath({ req, appConfig, safeUserDir });
 
   try {
     filterFile({ req });
@@ -692,6 +706,9 @@ router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) =>
     logger.error('[/files] Error processing file:', error);
 
     try {
+      if (!tempUploadPath) {
+        throw new Error('No temp upload path available');
+      }
       await fs.unlink(tempUploadPath);
       cleanup = false;
     } catch (error) {
@@ -701,7 +718,9 @@ router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) =>
   } finally {
     if (cleanup) {
       try {
-        await fs.unlink(tempUploadPath);
+        if (tempUploadPath) {
+          await fs.unlink(tempUploadPath);
+        }
       } catch (error) {
         logger.error('[/files] Error deleting file after file processing:', error);
       }

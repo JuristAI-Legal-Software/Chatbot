@@ -127,6 +127,7 @@ jest.mock('~/cache', () => ({
 }));
 
 jest.mock('~/server/middleware', () => ({
+  loginLimiter: (req, res, next) => next(),
   requireJwtAuth: (req, res, next) => next(),
   canAccessMCPServerResource: () => (req, res, next) => next(),
   createMCPOAuthLimiters: jest.fn(() => ({

@@ -22,6 +22,13 @@ jest.mock('~/server/services/Files/process', () => ({
   filterFile: jest.fn(),
 }));
 
+jest.mock('~/server/middleware/limiters/uploadLimiters', () => ({
+  createFileLimiters: jest.fn(() => ({
+    fileUploadIpLimiter: (_req, _res, next) => next(),
+    fileUploadUserLimiter: (_req, _res, next) => next(),
+  })),
+}));
+
 jest.mock('fs', () => {
   const actualFs = jest.requireActual('fs');
   return {

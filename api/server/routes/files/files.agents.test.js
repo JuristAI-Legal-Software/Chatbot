@@ -26,6 +26,13 @@ jest.mock('~/server/services/Files/process', () => ({
   }),
 }));
 
+jest.mock('~/server/middleware/limiters/uploadLimiters', () => ({
+  createFileLimiters: jest.fn(() => ({
+    fileUploadIpLimiter: (_req, _res, next) => next(),
+    fileUploadUserLimiter: (_req, _res, next) => next(),
+  })),
+}));
+
 jest.mock('~/server/services/Files/strategies', () => ({
   getStrategyFunctions: jest.fn(() => ({})),
 }));
