@@ -186,7 +186,9 @@ export async function createOAuthMCPServer(
       const state = url.searchParams.get('state') ?? '';
 
       let redirectTarget = '/';
-      const allowedRedirectUris = clientId ? registeredClients.get(clientId)?.redirect_uris ?? [] : [];
+      const allowedRedirectUris = clientId
+        ? (registeredClients.get(clientId)?.redirect_uris ?? [])
+        : [];
       try {
         const parsedRedirect = new URL(redirectUri);
         const isHttp = parsedRedirect.protocol === 'http:' || parsedRedirect.protocol === 'https:';

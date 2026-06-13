@@ -50,6 +50,10 @@ jest.mock('~/server/middleware', () => ({
   messageIpLimiter: (req, res, next) => next(),
   configMiddleware: (req, res, next) => next(),
   messageUserLimiter: (req, res, next) => next(),
+  createAccessLimiters: () => ({
+    accessIpLimiter: (req, res, next) => next(),
+    accessUserLimiter: (req, res, next) => next(),
+  }),
 }));
 
 // Mock the chat module - needs to be a router
