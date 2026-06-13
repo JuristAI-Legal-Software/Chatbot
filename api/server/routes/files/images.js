@@ -19,19 +19,31 @@ const db = require('~/models');
 const router = express.Router();
 const { fileUploadIpLimiter, fileUploadUserLimiter } = createFileLimiters();
 
-router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
-  const metadata = req.body;
-  metadata.message_file = metadata.message_file === true || metadata.message_file === 'true';
-  const appConfig = req.config;
-  const safeUserDir = assertSinglePathSegment('userId', req.user.id);
-  const tempFilename = assertSinglePathSegment('filename', req.file.filename);
-  const tempUploadPath = resolvePathFromTrustedRoot(
+function resolveTempUploadPath({ req, appConfig, safeUserDir, tempFilename }) {
+  if (req.file?.path) {
+    return req.file.path;
+  }
+
+  if (!appConfig?.paths?.uploads) {
+    return null;
+  }
+
+  return resolvePathFromTrustedRoot(
     'image upload path',
     appConfig.paths.uploads,
     'temp',
     safeUserDir,
     tempFilename,
   );
+}
+
+router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
+  const metadata = req.body ?? {};
+  metadata.message_file = metadata.message_file === true || metadata.message_file === 'true';
+  const appConfig = req.config;
+  const safeUserDir = assertSinglePathSegment('userId', req.user.id);
+  const tempFilename = assertSinglePathSegment('filename', req.file.filename);
+  const tempUploadPath = resolveTempUploadPath({ req, appConfig, safeUserDir, tempFilename });
 
   try {
     filterFile({ req, image: true });
@@ -80,8 +92,10 @@ router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) =>
     res.status(500).json({ message });
   } finally {
     try {
-      await fs.unlink(tempUploadPath);
-      logger.debug('[/files/images] Temp. image upload file deleted');
+      if (tempUploadPath) {
+        await fs.unlink(tempUploadPath);
+        logger.debug('[/files/images] Temp. image upload file deleted');
+      }
     } catch {
       logger.debug('[/files/images] Temp. image upload file already deleted');
     }
