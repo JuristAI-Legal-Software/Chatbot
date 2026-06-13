@@ -50,13 +50,17 @@ let testUsers, testRoles;
 let grantPermission;
 let currentTestUser; // Track current user for middleware
 
+jest.setTimeout(120_000);
+
 // Helper function to set user in middleware
 function setTestUser(app, user) {
   currentTestUser = user;
 }
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = await MongoMemoryServer.create({
+    instance: { launchTimeout: 30_000 },
+  });
   const mongoUri = mongoServer.getUri();
   await mongoose.connect(mongoUri);
 
@@ -111,7 +115,9 @@ afterEach(() => {
 
 afterAll(async () => {
   await mongoose.disconnect();
-  await mongoServer.stop();
+  if (mongoServer) {
+    await mongoServer.stop();
+  }
   jest.clearAllMocks();
 });
 
@@ -206,7 +212,7 @@ describe('Prompt Routes - ACL Permissions', () => {
   });
 
   afterEach(() => {
-    consoleErrorSpy.mockRestore();
+    consoleErrorSpy?.mockRestore();
   });
 
   // Simple test to verify route is loaded

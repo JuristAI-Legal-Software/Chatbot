@@ -44,10 +44,6 @@ const router = express.Router();
 const { fileUploadIpLimiter, fileUploadUserLimiter } = createFileLimiters();
 
 function resolveTempUploadPath({ req, appConfig, safeUserDir }) {
-  if (req.file?.path) {
-    return req.file.path;
-  }
-
   if (!appConfig?.paths?.uploads) {
     return null;
   }

@@ -11,6 +11,7 @@ export const OAUTH_SESSION_COOKIE_PATH = '/api';
 const OAUTH_IV_LENGTH_BYTES = 12;
 const OAUTH_AUTH_TAG_LENGTH_BYTES = 16;
 const OAUTH_ENCRYPTION_ALGORITHM = 'aes-256-gcm';
+const OAUTH_BINDING_KDF_SALT = 'oauth-cookie-binding';
 
 type RequestCookiesLike = Pick<Request, 'headers'> & {
   cookies?: Record<string, string> | undefined;
@@ -69,7 +70,7 @@ function getOAuthBindingSigningKey(secret?: string): string {
 }
 
 function getOAuthBindingEncryptionKey(secret?: string): Buffer {
-  return crypto.createHash('sha256').update(getOAuthBindingSigningKey(secret), 'utf8').digest();
+  return crypto.scryptSync(getOAuthBindingSigningKey(secret), OAUTH_BINDING_KDF_SALT, 32);
 }
 
 function encryptOAuthBindingValue(subject: string, secret?: string): string {
@@ -146,10 +147,6 @@ export function getOAuthCookieBindingValue(subject: string, secret?: string): st
   return encryptOAuthBindingValue(subject, secret);
 }
 
-function getCookieBindingValue(subject: string): string {
-  return getOAuthCookieBindingValue(subject);
-}
-
 /**
  * Sets a SameSite=Lax CSRF cookie bound to a specific OAuth flow.
  *
@@ -159,7 +156,7 @@ function getCookieBindingValue(subject: string): string {
  * SameSite=Lax, exactly per OWASP CSRF guidance.
  */
 export function setOAuthCsrfCookie(res: Response, flowId: string, cookiePath: string): void {
-  res.cookie(OAUTH_CSRF_COOKIE, getCookieBindingValue(flowId), {
+  res.cookie(OAUTH_CSRF_COOKIE, encryptOAuthBindingValue(String(flowId)), {
     httpOnly: true,
     secure: shouldUseSecureCookie(),
     sameSite: 'lax',
@@ -205,7 +202,7 @@ export function setOAuthSession(req: Request, res: Response, next: NextFunction)
  * HMAC-wrapped binding, not the raw scrypt-derived token.
  */
 export function setOAuthSessionCookie(res: Response, userId: string): void {
-  res.cookie(OAUTH_SESSION_COOKIE, getCookieBindingValue(userId), {
+  res.cookie(OAUTH_SESSION_COOKIE, encryptOAuthBindingValue(String(userId)), {
     httpOnly: true,
     secure: shouldUseSecureCookie(),
     sameSite: 'lax',

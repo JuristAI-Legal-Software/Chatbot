@@ -19,6 +19,20 @@ jest.mock('@librechat/api', () => ({
   refreshS3FileUrls: jest.fn(),
   resolveUploadErrorMessage: jest.fn(),
   verifyAgentUploadPermission: jest.fn(),
+  limiterCache: jest.fn(() => undefined),
+  violationCache: jest.fn(() => ({ get: jest.fn(), set: jest.fn(), delete: jest.fn() })),
+  removePorts: jest.fn((ip) => ip),
+  cacheConfig: { BAN_DURATION: 60_000 },
+  sessionCache: jest.fn(() => ({ get: jest.fn(), set: jest.fn(), destroy: jest.fn() })),
+  keyvMongo: {},
+  registerShutdownTask: jest.fn(),
+}));
+
+jest.mock('~/server/middleware/limiters/uploadLimiters', () => ({
+  createFileLimiters: jest.fn(() => ({
+    fileUploadIpLimiter: (_req, _res, next) => next(),
+    fileUploadUserLimiter: (_req, _res, next) => next(),
+  })),
 }));
 
 const mockFindFileById = jest.fn();

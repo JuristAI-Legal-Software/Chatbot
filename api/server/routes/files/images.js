@@ -19,11 +19,7 @@ const db = require('~/models');
 const router = express.Router();
 const { fileUploadIpLimiter, fileUploadUserLimiter } = createFileLimiters();
 
-function resolveTempUploadPath({ req, appConfig, safeUserDir, tempFilename }) {
-  if (req.file?.path) {
-    return req.file.path;
-  }
-
+function resolveTempUploadPath({ appConfig, safeUserDir, tempFilename }) {
   if (!appConfig?.paths?.uploads) {
     return null;
   }
@@ -43,7 +39,7 @@ router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) =>
   const appConfig = req.config;
   const safeUserDir = assertSinglePathSegment('userId', req.user.id);
   const tempFilename = assertSinglePathSegment('filename', req.file.filename);
-  const tempUploadPath = resolveTempUploadPath({ req, appConfig, safeUserDir, tempFilename });
+  const tempUploadPath = resolveTempUploadPath({ appConfig, safeUserDir, tempFilename });
 
   try {
     filterFile({ req, image: true });

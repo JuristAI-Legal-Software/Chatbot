@@ -21,7 +21,7 @@ describe('RedisEventTransport Integration Tests', () => {
 
   const waitForCondition = async (
     condition: () => boolean,
-    { timeoutMs = 2000, intervalMs = 10 } = {},
+    { timeoutMs = 5000, intervalMs = 10 } = {},
   ) => {
     const start = Date.now();
     while (!condition()) {
@@ -915,7 +915,7 @@ describe('RedisEventTransport Integration Tests', () => {
       // Poll for the fire-and-forget DEL to complete (robust under CI load)
       const start = Date.now();
       let valAfter: string | null = 'pending';
-      while (valAfter !== null && Date.now() - start < 2000) {
+      while (valAfter !== null && Date.now() - start < 5000) {
         await new Promise((resolve) => setTimeout(resolve, 10));
         valAfter = await ioredisClient.get(key);
       }

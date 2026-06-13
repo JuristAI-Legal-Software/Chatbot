@@ -85,7 +85,7 @@ describe('Telemetry wiring', () => {
 
 describe('Server Configuration', () => {
   // Increase the default timeout to allow for Mongo cleanup
-  jest.setTimeout(30_000);
+  jest.setTimeout(120_000);
 
   let mongoServer;
   let app;
@@ -123,7 +123,9 @@ describe('Server Configuration', () => {
       '<!DOCTYPE html><html><head><title>LibreChat</title></head><body><div id="root"></div></body></html>',
     );
 
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await MongoMemoryServer.create({
+      instance: { launchTimeout: 30_000 },
+    });
     process.env.MONGO_URI = mongoServer.getUri();
     process.env.PORT = '0'; // Use a random available port
     app = require('~/server');
@@ -133,7 +135,9 @@ describe('Server Configuration', () => {
   });
 
   afterAll(async () => {
-    await mongoServer.stop();
+    if (mongoServer) {
+      await mongoServer.stop();
+    }
     await mongoose.disconnect();
   });
 

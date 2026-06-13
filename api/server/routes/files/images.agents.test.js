@@ -44,6 +44,10 @@ const fs = require('fs');
 const { processAgentFileUpload } = require('~/server/services/Files/process');
 
 const router = require('~/server/routes/files/images');
+const expectTempUploadCleanup = (userId) => {
+  expect(fs.promises.unlink).toHaveBeenCalledWith(expect.stringContaining(`${userId}`));
+  expect(fs.promises.unlink).toHaveBeenCalledWith(expect.stringMatching(/[\\/]test\.png$/));
+};
 
 describe('POST /images - Agent Upload Permission Check (Integration)', () => {
   let mongoServer;
@@ -122,7 +126,10 @@ describe('POST /images - Agent Upload Permission Check (Integration)', () => {
     app.use((req, _res, next) => {
       req.user = { id: userId.toString(), role: userRole };
       req.app = { locals: {} };
-      req.config = { fileStrategy: 'local', paths: { imageOutput: '/tmp/images' } };
+      req.config = {
+        fileStrategy: 'local',
+        paths: { imageOutput: '/tmp/images', uploads: '/tmp/uploads' },
+      };
       next();
     });
     app.use('/images', router);
@@ -149,7 +156,7 @@ describe('POST /images - Agent Upload Permission Check (Integration)', () => {
     expect(response.status).toBe(403);
     expect(response.body.error).toBe('Forbidden');
     expect(processAgentFileUpload).not.toHaveBeenCalled();
-    expect(fs.promises.unlink).toHaveBeenCalledWith('/tmp/t.png');
+    expectTempUploadCleanup(otherUserId);
   });
 
   it('should allow upload for agent owner', async () => {
@@ -255,7 +262,7 @@ describe('POST /images - Agent Upload Permission Check (Integration)', () => {
     expect(response.status).toBe(403);
     expect(response.body.error).toBe('Forbidden');
     expect(processAgentFileUpload).not.toHaveBeenCalled();
-    expect(fs.promises.unlink).toHaveBeenCalledWith('/tmp/t.png');
+    expectTempUploadCleanup(otherUserId);
   });
 
   it('should skip permission check for regular image uploads without agent_id/tool_resource', async () => {
@@ -280,7 +287,7 @@ describe('POST /images - Agent Upload Permission Check (Integration)', () => {
     expect(response.status).toBe(404);
     expect(response.body.error).toBe('Not Found');
     expect(processAgentFileUpload).not.toHaveBeenCalled();
-    expect(fs.promises.unlink).toHaveBeenCalledWith('/tmp/t.png');
+    expectTempUploadCleanup(otherUserId);
   });
 
   it('should allow message_file attachment (boolean true) without EDIT permission', async () => {
@@ -378,6 +385,6 @@ describe('POST /images - Agent Upload Permission Check (Integration)', () => {
     expect(response.status).toBe(403);
     expect(response.body.error).toBe('Forbidden');
     expect(processAgentFileUpload).not.toHaveBeenCalled();
-    expect(fs.promises.unlink).toHaveBeenCalledWith('/tmp/t.png');
+    expectTempUploadCleanup(otherUserId);
   });
 });

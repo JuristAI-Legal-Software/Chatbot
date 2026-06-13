@@ -90,7 +90,9 @@ describe('loadAsyncEndpoints', () => {
     const result = await loadAsyncEndpoints();
 
     expect(result).toEqual({ google: { userProvide: false } });
-    expect(mockLoadServiceKey).toHaveBeenCalledWith(expect.stringContaining('api/data/auth.json'));
+    expect(mockLoadServiceKey).toHaveBeenCalledWith(
+      expect.stringMatching(/api[\\/]data[\\/]auth\.json$/),
+    );
   });
 
   it('loads an explicitly configured Google service key path without probing the default file', async () => {

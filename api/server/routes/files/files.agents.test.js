@@ -413,6 +413,7 @@ describe('File Routes - Agent Files Endpoint', () => {
         if (req.method === 'POST') {
           req.file = {
             originalname: 'test.txt',
+            filename: 'test.txt',
             mimetype: 'text/plain',
             size: 100,
             path: '/tmp/test.txt',
@@ -425,7 +426,7 @@ describe('File Routes - Agent Files Endpoint', () => {
       testApp.use((req, res, next) => {
         req.user = { id: userId.toString(), role: userRole };
         req.app = { locals: {} };
-        req.config = { fileStrategy: 'local' };
+        req.config = { fileStrategy: 'local', paths: { uploads: '/tmp/uploads' } };
         next();
       });
 
