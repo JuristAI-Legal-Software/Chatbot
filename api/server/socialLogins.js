@@ -42,7 +42,7 @@ async function configureOpenId(app) {
     store: getLogStores(CacheKeys.OPENID_SESSION),
     cookie: {
       maxAge: sessionExpiry,
-      secure: shouldUseSecureCookie(),
+      secure: true,
     },
   };
   mountAuthSessionMiddleware(app, sessionOptions);
