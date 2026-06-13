@@ -1,4 +1,5 @@
 const { Router } = require('express');
+const rateLimit = require('express-rate-limit');
 const { logger, getTenantId, tenantStorage } = require('@librechat/data-schemas');
 const {
   CacheKeys,
@@ -155,11 +156,19 @@ router.get(
  * OAuth callback handler
  * This handles the OAuth callback after the user has authorized the application
  */
+const mcpOAuthCallbackRouteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 router.get(
   '/:serverName/oauth/callback',
   loginLimiter,
   mcpOAuthIpLimiter,
   mcpOAuthCallbackLimiter,
+  mcpOAuthCallbackRouteLimiter,
   async (req, res) => {
     const basePath = getBasePath();
     try {
