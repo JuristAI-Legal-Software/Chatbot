@@ -125,7 +125,10 @@ export async function createOAuthMCPServer(
     string,
     { codeChallenge?: string; codeChallengeMethod?: string; clientId?: string }
   >();
-  const registeredClients = new Map<string, { client_id: string; client_secret: string }>();
+  const registeredClients = new Map<
+    string,
+    { client_id: string; client_secret: string; redirect_uris: string[] }
+  >();
 
   let port = 0;
 
@@ -156,13 +159,18 @@ export async function createOAuthMCPServer(
       const data = JSON.parse(body) as { redirect_uris?: string[] };
       const clientId = `client-${randomUUID().slice(0, 8)}`;
       const clientSecret = `secret-${randomUUID()}`;
-      registeredClients.set(clientId, { client_id: clientId, client_secret: clientSecret });
+      const redirectUris = data.redirect_uris ?? [];
+      registeredClients.set(clientId, {
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uris: redirectUris,
+      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
           client_id: clientId,
           client_secret: clientSecret,
-          redirect_uris: data.redirect_uris ?? [],
+          redirect_uris: redirectUris,
         }),
       );
       return;
@@ -176,8 +184,32 @@ export async function createOAuthMCPServer(
       authCodes.set(code, { codeChallenge, codeChallengeMethod, clientId });
       const redirectUri = url.searchParams.get('redirect_uri') ?? '';
       const state = url.searchParams.get('state') ?? '';
+
+      let redirectTarget = '/';
+      const allowedRedirectUris = clientId ? registeredClients.get(clientId)?.redirect_uris ?? [] : [];
+      try {
+        const parsedRedirect = new URL(redirectUri);
+        const isHttp = parsedRedirect.protocol === 'http:' || parsedRedirect.protocol === 'https:';
+        const isAllowed = allowedRedirectUris.includes(parsedRedirect.toString());
+        if (isHttp && isAllowed) {
+          parsedRedirect.searchParams.set('code', code);
+          parsedRedirect.searchParams.set('state', state);
+          redirectTarget = parsedRedirect.toString();
+        } else {
+          const fallbackUrl = new URL('/', `http://127.0.0.1:${port}`);
+          fallbackUrl.searchParams.set('code', code);
+          fallbackUrl.searchParams.set('state', state);
+          redirectTarget = fallbackUrl.toString();
+        }
+      } catch {
+        const fallbackUrl = new URL('/', `http://127.0.0.1:${port}`);
+        fallbackUrl.searchParams.set('code', code);
+        fallbackUrl.searchParams.set('state', state);
+        redirectTarget = fallbackUrl.toString();
+      }
+
       res.writeHead(302, {
-        Location: `${redirectUri}?code=${code}&state=${state}`,
+        Location: redirectTarget,
       });
       res.end();
       return;
