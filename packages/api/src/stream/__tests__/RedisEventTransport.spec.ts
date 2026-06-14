@@ -85,4 +85,42 @@ describe('RedisEventTransport', () => {
 
     transport.destroy();
   });
+
+  it('retries a transient subscribe failure before resolving ready', async () => {
+    const mockPublisher = createMockPublisher();
+    const mockSubscriber = createMockSubscriber();
+    mockSubscriber.subscribe
+      .mockRejectedValueOnce(new Error('temporary subscribe failure'))
+      .mockResolvedValue(undefined);
+
+    const transport = new RedisEventTransport(
+      mockPublisher as unknown as Redis,
+      mockSubscriber as unknown as Redis,
+    );
+
+    const subscription = transport.subscribe('retry-subscribe-test', { onChunk: () => {} });
+
+    await expect(subscription.ready).resolves.toBeUndefined();
+    expect(mockSubscriber.subscribe).toHaveBeenCalledTimes(2);
+
+    transport.destroy();
+  });
+
+  it('rejects ready when subscribe keeps failing', async () => {
+    const mockPublisher = createMockPublisher();
+    const mockSubscriber = createMockSubscriber();
+    mockSubscriber.subscribe.mockRejectedValue(new Error('permanent subscribe failure'));
+
+    const transport = new RedisEventTransport(
+      mockPublisher as unknown as Redis,
+      mockSubscriber as unknown as Redis,
+    );
+
+    const subscription = transport.subscribe('failed-subscribe-test', { onChunk: () => {} });
+
+    await expect(subscription.ready).rejects.toThrow('permanent subscribe failure');
+    expect(mockSubscriber.subscribe).toHaveBeenCalledTimes(3);
+
+    transport.destroy();
+  });
 });

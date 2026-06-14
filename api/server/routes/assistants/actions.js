@@ -1,4 +1,5 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const { nanoid } = require('nanoid');
 const { logger } = require('@librechat/data-schemas');
 const { isActionDomainAllowed, validateActionOAuthMetadata } = require('@librechat/api');
@@ -14,6 +15,9 @@ const db = require('~/models');
 
 const router = express.Router();
 const { accessIpLimiter, accessUserLimiter } = createAccessLimiters();
+/** Baseline IP rate limiter applied alongside the access limiters. */
+const routeRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
+router.use(routeRateLimiter);
 
 /**
  * Adds or updates actions for a specific assistant.

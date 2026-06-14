@@ -22,12 +22,21 @@ const { getLogStores } = require('~/cache');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 const OAUTH_CSRF_COOKIE_PATH = '/api/actions';
+/** Baseline IP rate limiter applied alongside the login and OAuth limiters. */
+const routeRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
 const actionOAuthLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
 });
+const actionOAuthCallbackLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+router.use(routeRateLimiter);
 
 /**
  * Sets a CSRF cookie binding the action OAuth flow to the current browser session.
@@ -67,7 +76,7 @@ router.post(
  * @param {string} req.query.state - The state token to verify the authenticity of the request.
  * @returns {void} Sends a success message after updating the action with OAuth tokens.
  */
-router.get('/:action_id/oauth/callback', loginLimiter, async (req, res) => {
+router.get('/:action_id/oauth/callback', loginLimiter, actionOAuthCallbackLimiter, async (req, res) => {
   const { action_id } = req.params;
   const { code, state } = req.query;
   const flowsCache = getLogStores(CacheKeys.FLOWS);

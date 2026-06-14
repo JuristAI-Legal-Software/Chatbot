@@ -1,7 +1,7 @@
 const passport = require('passport');
 const session = require('express-session');
 const { CacheKeys } = require('librechat-data-provider');
-const { isEnabled, shouldUseSecureCookie } = require('@librechat/api');
+const { isEnabled } = require('@librechat/api');
 const { logger, DEFAULT_SESSION_EXPIRY } = require('@librechat/data-schemas');
 const {
   openIdJwtLogin,
@@ -21,7 +21,17 @@ const {
 const { getLogStores } = require('~/cache');
 
 function mountAuthSessionMiddleware(app, sessionOptions) {
-  const sessionMiddleware = session(sessionOptions);
+  const secureSessionOptions = {
+    ...sessionOptions,
+    proxy: true,
+    cookie: {
+      ...sessionOptions.cookie,
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: true,
+    },
+  };
+  const sessionMiddleware = session(secureSessionOptions);
   const passportSessionMiddleware = passport.session();
   app.use('/oauth', sessionMiddleware, passportSessionMiddleware);
   app.use('/api/admin/oauth', sessionMiddleware, passportSessionMiddleware);
@@ -111,7 +121,7 @@ const configureSocialLogins = async (app) => {
       store: getLogStores(CacheKeys.SAML_SESSION),
       cookie: {
         maxAge: sessionExpiry,
-        secure: shouldUseSecureCookie(),
+        secure: true,
       },
     };
     mountAuthSessionMiddleware(app, sessionOptions);

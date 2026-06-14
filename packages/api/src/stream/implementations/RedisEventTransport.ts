@@ -53,6 +53,10 @@ interface ReorderBuffer {
 const REORDER_TIMEOUT_MS = 500;
 /** Max messages to buffer before force-flushing (prevents memory issues) */
 const MAX_BUFFER_SIZE = 100;
+/** Retry budget for transient Redis SUBSCRIBE failures */
+const SUBSCRIBE_RETRY_ATTEMPTS = 3;
+/** Small backoff between subscribe retries */
+const SUBSCRIBE_RETRY_DELAY_MS = 50;
 
 /**
  * Subscriber state for a stream
@@ -153,6 +157,33 @@ export class RedisEventTransport implements IEventTransport {
       state.reorderBuffer.nextSeq = 0;
       state.reorderBuffer.pending.clear();
     }
+  }
+
+  private async subscribeWithRetry(channel: string): Promise<void> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= SUBSCRIBE_RETRY_ATTEMPTS; attempt++) {
+      try {
+        await this.subscriber.subscribe(channel);
+        logger.debug(`[RedisEventTransport] Subscription active for channel ${channel}`);
+        return;
+      } catch (err) {
+        lastError = err;
+
+        if (attempt === SUBSCRIBE_RETRY_ATTEMPTS) {
+          break;
+        }
+
+        logger.warn(
+          `[RedisEventTransport] Subscribe attempt ${attempt} failed for ${channel}; retrying`,
+          err,
+        );
+        await new Promise((resolve) => setTimeout(resolve, SUBSCRIBE_RETRY_DELAY_MS * attempt));
+      }
+    }
+
+    logger.error(`[RedisEventTransport] Failed to subscribe to ${channel}:`, lastError);
+    throw lastError;
   }
 
   /**
@@ -451,14 +482,9 @@ export class RedisEventTransport implements IEventTransport {
     let readyPromise = this.channelSubscriptions.get(channel);
 
     if (!readyPromise) {
-      readyPromise = this.subscriber
-        .subscribe(channel)
-        .then(() => {
-          logger.debug(`[RedisEventTransport] Subscription active for channel ${channel}`);
-        })
-        .catch((err) => {
+      readyPromise = this.subscribeWithRetry(channel).catch((err) => {
           this.channelSubscriptions.delete(channel);
-          logger.error(`[RedisEventTransport] Failed to subscribe to ${channel}:`, err);
+          throw err;
         });
       this.channelSubscriptions.set(channel, readyPromise);
     }
@@ -648,12 +674,9 @@ export class RedisEventTransport implements IEventTransport {
     state.abortCallbacks.push(callback);
 
     if (!this.channelSubscriptions.has(channel)) {
-      const ready = this.subscriber
-        .subscribe(channel)
-        .then(() => {})
-        .catch((err) => {
+      const ready = this.subscribeWithRetry(channel).catch((err) => {
           this.channelSubscriptions.delete(channel);
-          logger.error(`[RedisEventTransport] Failed to subscribe to ${channel}:`, err);
+          throw err;
         });
       this.channelSubscriptions.set(channel, ready);
       return ready;

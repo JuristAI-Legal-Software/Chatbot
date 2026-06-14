@@ -39,11 +39,11 @@ const { accessIpLimiter, accessUserLimiter } = createAccessLimiters();
 /** Baseline IP rate limiter applied alongside the access limiters. */
 const routeRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
 
+router.use(routeRateLimiter);
 router.use(preAuthTenantMiddleware);
 router.use(requireRemoteAgentAuth);
 router.use(configMiddleware);
 router.use(checkRemoteAgentsFeature);
-router.use(routeRateLimiter);
 router.use(accessIpLimiter);
 router.use(accessUserLimiter);
 
