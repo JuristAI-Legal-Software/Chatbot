@@ -91,6 +91,13 @@ const oauthSessionLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const mcpOAuthInitiateRouteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 router.get(
   '/:serverName/oauth/initiate',
   loginLimiter,
@@ -160,13 +167,6 @@ router.get(
     }
   },
 );
-
-const mcpOAuthInitiateRouteLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
 /**
  * OAuth callback handler

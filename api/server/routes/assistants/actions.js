@@ -176,67 +176,67 @@ router.delete(
   accessIpLimiter,
   accessUserLimiter,
   async (req, res) => {
-  try {
-    const { assistant_id, action_id, model } = req.params;
-    req.body = req.body || {}; // Express 5: ensure req.body exists
-    req.body.model = model;
-    const { openai } = await getOpenAIClient({ req, res });
+    try {
+      const { assistant_id, action_id, model } = req.params;
+      req.body = req.body || {}; // Express 5: ensure req.body exists
+      req.body.model = model;
+      const { openai } = await getOpenAIClient({ req, res });
 
-    const initialPromises = [];
-    initialPromises.push(db.getAssistant({ assistant_id }));
-    initialPromises.push(openai.beta.assistants.retrieve(assistant_id));
+      const initialPromises = [];
+      initialPromises.push(db.getAssistant({ assistant_id }));
+      initialPromises.push(openai.beta.assistants.retrieve(assistant_id));
 
-    /** @type {[AssistantDocument, Assistant]} */
-    const [assistant_data, assistant] = await Promise.all(initialPromises);
+      /** @type {[AssistantDocument, Assistant]} */
+      const [assistant_data, assistant] = await Promise.all(initialPromises);
 
-    const { actions = [] } = assistant_data ?? {};
-    const { tools = [] } = assistant ?? {};
+      const { actions = [] } = assistant_data ?? {};
+      const { tools = [] } = assistant ?? {};
 
-    let storedDomain = '';
-    const updatedActions = actions.filter((action) => {
-      if (action.includes(action_id)) {
-        [storedDomain] = action.split(actionDelimiter);
-        return false;
-      }
-      return true;
-    });
-
-    if (!storedDomain) {
-      return res.status(400).json({ message: 'No domain provided' });
-    }
-
-    const updatedTools = tools.filter(
-      (tool) =>
-        !(
-          tool.function &&
-          (tool.function.name.includes(storedDomain) || tool.function.name.includes(action_id))
-        ),
-    );
-
-    await openai.beta.assistants.update(assistant_id, { tools: updatedTools });
-
-    const promises = [];
-    // Only update user field if assistant document doesn't exist
-    const assistantUpdateData = { actions: updatedActions };
-    if (!assistant_data) {
-      assistantUpdateData.user = req.user.id;
-    }
-    promises.push(db.updateAssistantDoc({ assistant_id }, assistantUpdateData));
-    promises.push(db.deleteAction({ action_id, assistant_id }));
-
-    const [, deletedAction] = await Promise.all(promises);
-    if (!deletedAction) {
-      logger.warn('[Assistant Action Delete] No matching action document found', {
-        action_id,
-        assistant_id,
+      let storedDomain = '';
+      const updatedActions = actions.filter((action) => {
+        if (action.includes(action_id)) {
+          [storedDomain] = action.split(actionDelimiter);
+          return false;
+        }
+        return true;
       });
+
+      if (!storedDomain) {
+        return res.status(400).json({ message: 'No domain provided' });
+      }
+
+      const updatedTools = tools.filter(
+        (tool) =>
+          !(
+            tool.function &&
+            (tool.function.name.includes(storedDomain) || tool.function.name.includes(action_id))
+          ),
+      );
+
+      await openai.beta.assistants.update(assistant_id, { tools: updatedTools });
+
+      const promises = [];
+      // Only update user field if assistant document doesn't exist
+      const assistantUpdateData = { actions: updatedActions };
+      if (!assistant_data) {
+        assistantUpdateData.user = req.user.id;
+      }
+      promises.push(db.updateAssistantDoc({ assistant_id }, assistantUpdateData));
+      promises.push(db.deleteAction({ action_id, assistant_id }));
+
+      const [, deletedAction] = await Promise.all(promises);
+      if (!deletedAction) {
+        logger.warn('[Assistant Action Delete] No matching action document found', {
+          action_id,
+          assistant_id,
+        });
+      }
+      res.status(200).json({ message: 'Action deleted successfully' });
+    } catch (error) {
+      const message = 'Trouble deleting the Assistant Action';
+      logger.error(message, error);
+      res.status(500).json({ message });
     }
-    res.status(200).json({ message: 'Action deleted successfully' });
-  } catch (error) {
-    const message = 'Trouble deleting the Assistant Action';
-    logger.error(message, error);
-    res.status(500).json({ message });
-  }
   },
 );
 

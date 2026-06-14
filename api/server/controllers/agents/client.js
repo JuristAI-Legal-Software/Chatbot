@@ -1185,19 +1185,15 @@ class AgentClient extends BaseClient {
       }
     } catch (err) {
       const errorContext = this.buildErrorLogContext(err, abortController);
-      logger.error(
-        {
-          message: '[api/server/controllers/agents/client.js #sendCompletion] Operation aborted',
-          ...errorContext,
-        },
-      );
+      logger.error({
+        message: '[api/server/controllers/agents/client.js #sendCompletion] Operation aborted',
+        ...errorContext,
+      });
       if (!abortController.signal.aborted) {
-        logger.error(
-          {
-            message: '[api/server/controllers/agents/client.js #sendCompletion] Unhandled error type',
-            ...errorContext,
-          },
-        );
+        logger.error({
+          message: '[api/server/controllers/agents/client.js #sendCompletion] Unhandled error type',
+          ...errorContext,
+        });
         this.contentParts.push({
           type: ContentTypes.ERROR,
           [ContentTypes.ERROR]: `An error occurred while processing the request${err?.message ? `: ${err.message}` : ''}`,
