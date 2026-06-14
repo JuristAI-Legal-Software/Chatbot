@@ -478,12 +478,20 @@ router.get(
  * (e.g. during chat via SSE). The frontend should call this before opening the OAuth URL
  * so the callback can verify the browser matches the flow initiator.
  */
+const mcpOAuthBindLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 router.post(
   '/:serverName/oauth/bind',
   loginLimiter,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
   requireJwtAuth,
+  mcpOAuthBindLimiter,
   setOAuthSession,
   async (req, res) => {
     try {
