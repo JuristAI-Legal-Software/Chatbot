@@ -2,6 +2,7 @@ const express = require('express');
 const passport = require('passport');
 const crypto = require('node:crypto');
 const openIdClient = require('openid-client');
+const rateLimit = require('express-rate-limit');
 const { CacheKeys } = require('librechat-data-provider');
 const {
   logger,
@@ -184,7 +185,12 @@ router.get(
  * SAML Admin Routes
  * ────────────────────────────────────────────── */
 
-router.get('/oauth/saml', middleware.loginLimiter, async (req, res, next) => {
+const adminOAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+});
+
+router.get('/oauth/saml', middleware.loginLimiter, adminOAuthLimiter, async (req, res, next) => {
   const state = generateState();
   const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
   const stored = await storeAndStripChallenge(cache, req, state, 'saml');
