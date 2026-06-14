@@ -46,6 +46,9 @@ const setBalanceConfig = createSetBalanceConfig({
 });
 
 const router = express.Router();
+/** Baseline IP rate limiter applied alongside the per-route login limiter. */
+const routeRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
+router.use(routeRateLimiter);
 
 function resolveRequestOrigin(req) {
   const originHeader = req.get('origin');

@@ -1,4 +1,5 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const { createSetBalanceConfig, forceRefreshCloudFrontAuthCookies } = require('@librechat/api');
 const {
   resetPasswordRequestController,
@@ -29,6 +30,9 @@ const setBalanceConfig = createSetBalanceConfig({
 
 const router = express.Router();
 const { accessIpLimiter, accessUserLimiter } = middleware.createAccessLimiters();
+/** Baseline IP rate limiter applied alongside the access limiters. */
+const routeRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
+router.use(routeRateLimiter);
 const getCloudFrontAuthCookieRefreshResult = (req, res) => {
   const warmedResult = req.cloudFrontAuthCookieRefreshResult;
   if (warmedResult && (warmedResult.attempted || !warmedResult.enabled)) {

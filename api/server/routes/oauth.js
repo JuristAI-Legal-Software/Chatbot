@@ -1,6 +1,7 @@
 // file deepcode ignore NoRateLimitingForLogin: Rate limiting is handled by the `loginLimiter` middleware
 const express = require('express');
 const passport = require('passport');
+const rateLimit = require('express-rate-limit');
 const { randomState } = require('openid-client');
 const { logger } = require('@librechat/data-schemas');
 const { ErrorTypes } = require('librechat-data-provider');
@@ -24,6 +25,9 @@ const domains = {
 };
 
 router.use(logHeaders);
+/** Baseline IP rate limiter applied alongside the per-route login limiter. */
+const routeRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
+router.use(routeRateLimiter);
 
 const oauthHandler = createOAuthHandler();
 
