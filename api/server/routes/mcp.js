@@ -84,6 +84,13 @@ router.get('/tools', mcpOAuthIpLimiter, mcpOAuthUserLimiter, requireJwtAuth, asy
  * Initiate OAuth flow
  * This endpoint is called when the user clicks the auth link in the UI
  */
+const oauthSessionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 router.get(
   '/:serverName/oauth/initiate',
   loginLimiter,
@@ -91,6 +98,7 @@ router.get(
   mcpOAuthUserLimiter,
   mcpOAuthInitiateRouteLimiter,
   requireJwtAuth,
+  oauthSessionLimiter,
   setOAuthSession,
   async (req, res) => {
     try {
