@@ -89,6 +89,7 @@ router.get(
   loginLimiter,
   mcpOAuthIpLimiter,
   mcpOAuthUserLimiter,
+  mcpOAuthInitiateRouteLimiter,
   requireJwtAuth,
   setOAuthSession,
   async (req, res) => {
@@ -151,6 +152,13 @@ router.get(
     }
   },
 );
+
+const mcpOAuthInitiateRouteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 /**
  * OAuth callback handler
