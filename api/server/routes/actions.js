@@ -1,5 +1,6 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const { logger } = require('@librechat/data-schemas');
 const { CacheKeys } = require('librechat-data-provider');
 const {
@@ -21,6 +22,12 @@ const { getLogStores } = require('~/cache');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 const OAUTH_CSRF_COOKIE_PATH = '/api/actions';
+const actionOAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 /**
  * Sets a CSRF cookie binding the action OAuth flow to the current browser session.
@@ -31,6 +38,7 @@ const OAUTH_CSRF_COOKIE_PATH = '/api/actions';
 router.post(
   '/:action_id/oauth/bind',
   loginLimiter,
+  actionOAuthLimiter,
   requireJwtAuth,
   setOAuthSession,
   async (req, res) => {
