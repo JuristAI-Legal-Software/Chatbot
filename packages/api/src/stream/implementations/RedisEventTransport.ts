@@ -115,12 +115,18 @@ export class RedisEventTransport implements IEventTransport {
    * @param publisher - Redis client for publishing (can be shared)
    * @param subscriber - Redis client for subscribing (must be dedicated)
    */
+  static __diagCounter = 0;
+  __diagId = ++RedisEventTransport.__diagCounter;
+
   constructor(publisher: Redis | Cluster, subscriber: Redis | Cluster) {
     this.publisher = publisher;
     this.subscriber = subscriber;
 
     // Set up message handler for all subscriptions
     this.subscriber.on('message', (channel: string, message: string) => {
+      if (channel.includes('cross-buf-live')) {
+        console.error(`DIAGMSG transport#${this.__diagId} channel=${channel} msg=${message}`);
+      }
       this.handleMessage(channel, message);
     });
   }
@@ -202,7 +208,6 @@ export class RedisEventTransport implements IEventTransport {
     const rawStr = await this.publisher.get(key);
     const parsed = rawStr != null ? parseInt(rawStr, 10) : 0;
     const currentSeq = Number.isNaN(parsed) ? 0 : parsed;
-    // eslint-disable-next-line no-console
     console.error(
       `DIAGSYNC stream ${streamId}: earlyReplayCount=${earlyReplayCount} currentSeq=${currentSeq} rawStr=${rawStr} nextSeqBefore=${this.streams.get(streamId)?.reorderBuffer.nextSeq} pendingSize=${this.streams.get(streamId)?.reorderBuffer.pending.size}`,
     );
@@ -324,6 +329,12 @@ export class RedisEventTransport implements IEventTransport {
     const buffer = streamState.reorderBuffer;
     const seq = message.seq!;
 
+    if (streamId.includes('cross-buf-live')) {
+      console.error(
+        `DIAGCHUNK transport#${this.__diagId} streamId=${streamId} seq=${seq} nextSeq=${buffer.nextSeq} handlers=${streamState.handlers.size} count=${streamState.count}`,
+      );
+    }
+
     if (seq === buffer.nextSeq) {
       this.deliverMessage(streamState, message);
       buffer.nextSeq++;
@@ -339,7 +350,6 @@ export class RedisEventTransport implements IEventTransport {
         this.scheduleFlushTimeout(streamId, streamState);
       }
     } else {
-      // eslint-disable-next-line no-console
       console.error(`DIAGDROP stream ${streamId}: seq=${seq}, expected=${buffer.nextSeq}`);
       logger.debug(
         `[RedisEventTransport] Dropping duplicate/old message for stream ${streamId}: seq=${seq}, expected=${buffer.nextSeq}`,

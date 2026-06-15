@@ -2170,7 +2170,6 @@ describe('GenerationJobManager Integration Tests', () => {
       try {
         await waitForCondition(() => receivedOnA.length === 4 && receivedOnB.length === 4, 3000);
       } catch {
-        // eslint-disable-next-line no-console
         console.error(
           'DIAG receivedOnA=',
           JSON.stringify(receivedOnA),
