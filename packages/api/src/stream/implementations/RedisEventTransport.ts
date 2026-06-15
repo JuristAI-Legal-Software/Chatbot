@@ -202,6 +202,10 @@ export class RedisEventTransport implements IEventTransport {
     const rawStr = await this.publisher.get(key);
     const parsed = rawStr != null ? parseInt(rawStr, 10) : 0;
     const currentSeq = Number.isNaN(parsed) ? 0 : parsed;
+    // eslint-disable-next-line no-console
+    console.error(
+      `DIAGSYNC stream ${streamId}: earlyReplayCount=${earlyReplayCount} currentSeq=${currentSeq} rawStr=${rawStr} nextSeqBefore=${this.streams.get(streamId)?.reorderBuffer.nextSeq} pendingSize=${this.streams.get(streamId)?.reorderBuffer.pending.size}`,
+    );
     const state = this.streams.get(streamId);
     if (state) {
       if (state.reorderBuffer.flushTimeout) {
@@ -335,6 +339,8 @@ export class RedisEventTransport implements IEventTransport {
         this.scheduleFlushTimeout(streamId, streamState);
       }
     } else {
+      // eslint-disable-next-line no-console
+      console.error(`DIAGDROP stream ${streamId}: seq=${seq}, expected=${buffer.nextSeq}`);
       logger.debug(
         `[RedisEventTransport] Dropping duplicate/old message for stream ${streamId}: seq=${seq}, expected=${buffer.nextSeq}`,
       );
