@@ -483,9 +483,9 @@ export class RedisEventTransport implements IEventTransport {
 
     if (!readyPromise) {
       readyPromise = this.subscribeWithRetry(channel).catch((err) => {
-          this.channelSubscriptions.delete(channel);
-          throw err;
-        });
+        this.channelSubscriptions.delete(channel);
+        throw err;
+      });
       this.channelSubscriptions.set(channel, readyPromise);
     }
 
@@ -675,9 +675,9 @@ export class RedisEventTransport implements IEventTransport {
 
     if (!this.channelSubscriptions.has(channel)) {
       const ready = this.subscribeWithRetry(channel).catch((err) => {
-          this.channelSubscriptions.delete(channel);
-          throw err;
-        });
+        this.channelSubscriptions.delete(channel);
+        throw err;
+      });
       this.channelSubscriptions.set(channel, ready);
       return ready;
     }
