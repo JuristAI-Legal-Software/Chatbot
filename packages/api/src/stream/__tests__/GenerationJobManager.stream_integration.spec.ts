@@ -2167,7 +2167,10 @@ describe('GenerationJobManager Integration Tests', () => {
       }
 
       /** B joined after A published seq 0, so B's reorder buffer force-flushes after REORDER_TIMEOUT_MS (500ms) */
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      await waitForCondition(
+        () => receivedOnA.length === 4 && receivedOnB.length === 4,
+        3000,
+      );
 
       expect(receivedOnA.length).toBe(4);
       expect(receivedOnB.length).toBe(4);

@@ -1642,4 +1642,6 @@ module.exports = {
   loadToolsForExecution,
   processRequiredActions,
   resolveAgentCapabilities,
+  extractRequestCaseId,
+  buildActionInjectParams,
 };
