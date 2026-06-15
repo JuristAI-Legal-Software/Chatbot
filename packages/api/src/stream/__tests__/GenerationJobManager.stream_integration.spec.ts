@@ -2167,10 +2167,17 @@ describe('GenerationJobManager Integration Tests', () => {
       }
 
       /** B joined after A published seq 0, so B's reorder buffer force-flushes after REORDER_TIMEOUT_MS (500ms) */
-      await waitForCondition(
-        () => receivedOnA.length === 4 && receivedOnB.length === 4,
-        3000,
-      );
+      try {
+        await waitForCondition(() => receivedOnA.length === 4 && receivedOnB.length === 4, 3000);
+      } catch {
+        // eslint-disable-next-line no-console
+        console.error(
+          'DIAG receivedOnA=',
+          JSON.stringify(receivedOnA),
+          'receivedOnB=',
+          JSON.stringify(receivedOnB),
+        );
+      }
 
       expect(receivedOnA.length).toBe(4);
       expect(receivedOnB.length).toBe(4);

@@ -31,7 +31,9 @@ describe('buildActionInjectParams', () => {
   const accountSignature = { parameters: { properties: { resultLimit: {} } } };
 
   it('injects caseId for a tool whose schema declares caseId', () => {
-    expect(buildActionInjectParams('case-123', caseScopedSignature)).toEqual({ caseId: 'case-123' });
+    expect(buildActionInjectParams('case-123', caseScopedSignature)).toEqual({
+      caseId: 'case-123',
+    });
   });
 
   it('uses the snake_case param name when that is what the schema declares', () => {
