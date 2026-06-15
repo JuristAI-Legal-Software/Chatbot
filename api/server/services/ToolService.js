@@ -513,6 +513,46 @@ const isBuiltInTool = (toolName) =>
   );
 
 /**
+ * Resolves the active case id for the current request from the case-scoped
+ * thread, preferring explicit metadata and falling back to the structured
+ * conversationId (`...|caseId:<id>|...`).
+ * @param {ServerRequest} req
+ * @returns {string|null}
+ */
+const extractRequestCaseId = (req) => {
+  const fromMetadata = req?.body?.metadata?.caseId;
+  if (typeof fromMetadata === 'string' && fromMetadata.trim()) {
+    return fromMetadata.trim();
+  }
+  const conversationId = req?.body?.conversationId;
+  if (typeof conversationId === 'string') {
+    const match = conversationId.match(/caseId:([^|]+)/);
+    if (match && match[1].trim()) {
+      return match[1].trim();
+    }
+  }
+  return null;
+};
+
+/** Returns the first parameter name the tool schema declares from candidates. */
+const functionSignatureParamName = (functionSignature, candidates) => {
+  const properties = functionSignature?.parameters?.properties;
+  if (!properties) {
+    return null;
+  }
+  return candidates.find((name) => Object.prototype.hasOwnProperty.call(properties, name)) || null;
+};
+
+/** Builds server-injected params for a case-scoped action tool, or null. */
+const buildActionInjectParams = (caseId, functionSignature) => {
+  if (!caseId) {
+    return null;
+  }
+  const caseParam = functionSignatureParamName(functionSignature, ['caseId', 'case_id']);
+  return caseParam ? { [caseParam]: caseId } : null;
+};
+
+/**
  * Loads only tool definitions without creating tool instances.
  * This is the efficient path for event-driven mode where tools are loaded on-demand.
  *
@@ -1559,6 +1599,7 @@ async function loadActionToolsForExecution({
     });
   }
 
+  const requestCaseId = extractRequestCaseId(req);
   for (const toolName of actionToolNames) {
     const entry = toolToAction.get(normalizeActionToolName(toolName));
     if (!entry) {
@@ -1566,6 +1607,7 @@ async function loadActionToolsForExecution({
     }
 
     const { action, encrypted, zodSchema, requestBuilder, functionSignature } = entry;
+    const injectParams = buildActionInjectParams(requestCaseId, functionSignature);
     const tool = await createActionTool({
       userId: req.user.id,
       res,
@@ -1578,6 +1620,7 @@ async function loadActionToolsForExecution({
       description: functionSignature.description,
       useSSRFProtection: !Array.isArray(allowedDomains) || allowedDomains.length === 0,
       allowedAddresses,
+      injectParams,
     });
 
     if (!tool) {

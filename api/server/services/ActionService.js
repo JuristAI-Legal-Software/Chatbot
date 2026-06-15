@@ -191,6 +191,7 @@ async function createActionTool({
   streamId = null,
   useSSRFProtection = false,
   allowedAddresses,
+  injectParams = null,
 }) {
   const ssrfAgents = useSSRFProtection ? createSSRFSafeAgents(allowedAddresses) : undefined;
   /** @type {(toolInput: Object | string, config: GraphRunnableConfig) => Promise<unknown>} */
@@ -199,7 +200,20 @@ async function createActionTool({
       /** @type {import('librechat-data-provider').ActionMetadataRuntime} */
       const metadata = action.metadata;
       const executor = requestBuilder.createExecutor();
-      const preparedExecutor = executor.setParams(toolInput ?? {});
+      // Fill server-derived parameters (e.g. the active case id from the
+      // case-scoped thread) only when the model omitted them, so case-scoped
+      // tools no longer depend on the model knowing/guessing the caseId.
+      let effectiveInput = toolInput;
+      if (injectParams && toolInput && typeof toolInput === 'object' && !Array.isArray(toolInput)) {
+        effectiveInput = { ...toolInput };
+        for (const [key, value] of Object.entries(injectParams)) {
+          const current = effectiveInput[key];
+          if (current === undefined || current === null || current === '') {
+            effectiveInput[key] = value;
+          }
+        }
+      }
+      const preparedExecutor = executor.setParams(effectiveInput ?? {});
 
       if (metadata.auth && metadata.auth.type !== AuthTypeEnum.None) {
         try {
