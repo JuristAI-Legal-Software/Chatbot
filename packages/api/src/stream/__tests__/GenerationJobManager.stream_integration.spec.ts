@@ -68,6 +68,25 @@ describe('GenerationJobManager Integration Tests', () => {
     return subscriber;
   };
 
+  /** Wait until Redis reports the expected number of server-side subscribers for a stream. */
+  const waitForServerSubscribers = async (
+    streamId: string,
+    expected: number,
+    timeoutMs = 3000,
+    intervalMs = 20,
+  ): Promise<void> => {
+    const channel = `stream:{${streamId}}:events`;
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const result = (await ioredisClient!.call('PUBSUB', 'NUMSUB', channel)) as [string, string];
+      if (Number(result[1]) >= expected) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    throw new Error(`Expected ${expected} server-side subscribers for ${channel} not reached`);
+  };
+
   beforeAll(async () => {
     originalEnv = { ...process.env };
 
@@ -2178,7 +2197,13 @@ describe('GenerationJobManager Integration Tests', () => {
       const receivedOnB: unknown[] = [];
       const subB = await replicaB.subscribe(streamId, (event: unknown) => receivedOnB.push(event));
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      /**
+       * Ensure both replicas are registered as subscribers on the Redis server before the
+       * live deltas are published. subscribe() resolving only acknowledges the SUBSCRIBE was
+       * sent; publishing before the server-side registration settles can silently drop events
+       * for a replica when replicas are co-located on one shared client.
+       */
+      await waitForServerSubscribers(streamId, 2);
 
       for (let i = 0; i < 3; i++) {
         await replicaA.emitChunk(streamId, {
