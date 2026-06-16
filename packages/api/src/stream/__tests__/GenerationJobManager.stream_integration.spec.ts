@@ -49,22 +49,23 @@ describe('GenerationJobManager Integration Tests', () => {
     throw new Error(`Condition not met within ${timeoutMs}ms`);
   };
 
-  const waitForServerSubscribers = async (
-    streamId: string,
-    expected: number,
-    timeoutMs = 3000,
-    intervalMs = 20,
-  ): Promise<void> => {
-    const channel = `stream:{${streamId}}:events`;
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      const result = (await ioredisClient!.call('PUBSUB', 'NUMSUB', channel)) as [string, string];
-      if (Number(result[1]) >= expected) {
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
-    }
-    throw new Error(`Only ${expected} server-side subscribers not reached for ${channel}`);
+  /**
+   * Create a dedicated subscriber connection that is already connected before use.
+   *
+   * Co-locating replicas in one process means each duplicates the shared ioredisClient
+   * for its subscriber. Issuing SUBSCRIBE on a freshly duplicated connection that is still
+   * connecting can race the socket handshake — the command resolves but the server-side
+   * registration is dropped on the reconnect, silently losing pub/sub messages for that
+   * replica. Awaiting a ping guarantees the connection is live, so SUBSCRIBE registers
+   * reliably. In production each replica is a separate process with its own dedicated
+   * connection, so this race does not occur.
+   */
+  const createReadySubscriber = async (): Promise<typeof ioredisClient> => {
+    const subscriber = (
+      ioredisClient as unknown as { duplicate: () => typeof ioredisClient }
+    ).duplicate()!;
+    await (subscriber as unknown as { ping: () => Promise<string> }).ping();
+    return subscriber;
   };
 
   beforeAll(async () => {
@@ -2139,6 +2140,7 @@ describe('GenerationJobManager Integration Tests', () => {
       const servicesA = createStreamServices({
         useRedis: true,
         redisClient: ioredisClient,
+        redisSubscriber: await createReadySubscriber(),
       });
       replicaA.configure(servicesA);
       replicaA.initialize();
@@ -2164,6 +2166,7 @@ describe('GenerationJobManager Integration Tests', () => {
       const servicesB = createStreamServices({
         useRedis: true,
         redisClient: ioredisClient,
+        redisSubscriber: await createReadySubscriber(),
       });
       replicaB.configure(servicesB);
       replicaB.initialize();
@@ -2175,15 +2178,7 @@ describe('GenerationJobManager Integration Tests', () => {
       const receivedOnB: unknown[] = [];
       const subB = await replicaB.subscribe(streamId, (event: unknown) => receivedOnB.push(event));
 
-      /**
-       * Both replicas duplicate the same shared ioredisClient for their subscriber
-       * connection. subscribe() resolving only guarantees the SUBSCRIBE was acknowledged;
-       * a subsequent reconnect on the busy shared connection can briefly drop the
-       * server-side registration. Publishing into that window silently loses events for
-       * a replica. Wait until Redis reports both subscribers are registered before emitting
-       * so the live deltas are guaranteed to reach both A and B.
-       */
-      await waitForServerSubscribers(streamId, 2);
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       for (let i = 0; i < 3; i++) {
         await replicaA.emitChunk(streamId, {
@@ -2192,12 +2187,26 @@ describe('GenerationJobManager Integration Tests', () => {
         });
       }
 
-      /** B joined after A published seq 0, so B's reorder buffer force-flushes after REORDER_TIMEOUT_MS (500ms) */
+      /**
+       * A replays the buffered created event locally and receives its own live deltas over
+       * pub/sub; B joined after A published the created event (seq 0), so it reconstructs the
+       * created event from persisted metadata and force-flushes the live deltas once its
+       * reorder buffer gap times out (REORDER_TIMEOUT_MS, 500ms). Both converge on 4 events.
+       */
       await waitForCondition(() => receivedOnA.length === 4 && receivedOnB.length === 4, 3000);
 
       expect(receivedOnA.length).toBe(4);
       expect(receivedOnB.length).toBe(4);
       expect((receivedOnB[0] as CreatedEvent).created).toBe(true);
+      for (let i = 0; i < 3; i++) {
+        const data = (receivedOnB[i + 1] as Record<string, unknown>).data as Record<
+          string,
+          unknown
+        >;
+        const delta = data.delta as Record<string, unknown>;
+        const content = delta.content as Record<string, unknown>;
+        expect(content.text).toBe(`word${i} `);
+      }
 
       subA?.unsubscribe();
       subB?.unsubscribe();
