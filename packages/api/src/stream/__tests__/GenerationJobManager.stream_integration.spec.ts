@@ -49,6 +49,24 @@ describe('GenerationJobManager Integration Tests', () => {
     throw new Error(`Condition not met within ${timeoutMs}ms`);
   };
 
+  const waitForServerSubscribers = async (
+    streamId: string,
+    expected: number,
+    timeoutMs = 3000,
+    intervalMs = 20,
+  ): Promise<void> => {
+    const channel = `stream:{${streamId}}:events`;
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const result = (await ioredisClient!.call('PUBSUB', 'NUMSUB', channel)) as [string, string];
+      if (Number(result[1]) >= expected) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    throw new Error(`Only ${expected} server-side subscribers not reached for ${channel}`);
+  };
+
   beforeAll(async () => {
     originalEnv = { ...process.env };
 
@@ -2157,7 +2175,15 @@ describe('GenerationJobManager Integration Tests', () => {
       const receivedOnB: unknown[] = [];
       const subB = await replicaB.subscribe(streamId, (event: unknown) => receivedOnB.push(event));
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      /**
+       * Both replicas duplicate the same shared ioredisClient for their subscriber
+       * connection. subscribe() resolving only guarantees the SUBSCRIBE was acknowledged;
+       * a subsequent reconnect on the busy shared connection can briefly drop the
+       * server-side registration. Publishing into that window silently loses events for
+       * a replica. Wait until Redis reports both subscribers are registered before emitting
+       * so the live deltas are guaranteed to reach both A and B.
+       */
+      await waitForServerSubscribers(streamId, 2);
 
       for (let i = 0; i < 3; i++) {
         await replicaA.emitChunk(streamId, {
@@ -2167,16 +2193,7 @@ describe('GenerationJobManager Integration Tests', () => {
       }
 
       /** B joined after A published seq 0, so B's reorder buffer force-flushes after REORDER_TIMEOUT_MS (500ms) */
-      try {
-        await waitForCondition(() => receivedOnA.length === 4 && receivedOnB.length === 4, 3000);
-      } catch {
-        console.error(
-          'DIAG receivedOnA=',
-          JSON.stringify(receivedOnA),
-          'receivedOnB=',
-          JSON.stringify(receivedOnB),
-        );
-      }
+      await waitForCondition(() => receivedOnA.length === 4 && receivedOnB.length === 4, 3000);
 
       expect(receivedOnA.length).toBe(4);
       expect(receivedOnB.length).toBe(4);

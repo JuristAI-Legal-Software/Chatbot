@@ -115,18 +115,12 @@ export class RedisEventTransport implements IEventTransport {
    * @param publisher - Redis client for publishing (can be shared)
    * @param subscriber - Redis client for subscribing (must be dedicated)
    */
-  static __diagCounter = 0;
-  __diagId = ++RedisEventTransport.__diagCounter;
-
   constructor(publisher: Redis | Cluster, subscriber: Redis | Cluster) {
     this.publisher = publisher;
     this.subscriber = subscriber;
 
     // Set up message handler for all subscriptions
     this.subscriber.on('message', (channel: string, message: string) => {
-      if (channel.includes('cross-buf-live')) {
-        console.error(`DIAGMSG transport#${this.__diagId} channel=${channel} msg=${message}`);
-      }
       this.handleMessage(channel, message);
     });
   }
@@ -171,9 +165,6 @@ export class RedisEventTransport implements IEventTransport {
     for (let attempt = 1; attempt <= SUBSCRIBE_RETRY_ATTEMPTS; attempt++) {
       try {
         await this.subscriber.subscribe(channel);
-        if (channel.includes('cross-buf-live')) {
-          console.error(`DIAGSUB transport#${this.__diagId} SUBSCRIBED ${channel} attempt=${attempt}`);
-        }
         logger.debug(`[RedisEventTransport] Subscription active for channel ${channel}`);
         return;
       } catch (err) {
@@ -211,9 +202,6 @@ export class RedisEventTransport implements IEventTransport {
     const rawStr = await this.publisher.get(key);
     const parsed = rawStr != null ? parseInt(rawStr, 10) : 0;
     const currentSeq = Number.isNaN(parsed) ? 0 : parsed;
-    console.error(
-      `DIAGSYNC stream ${streamId}: earlyReplayCount=${earlyReplayCount} currentSeq=${currentSeq} rawStr=${rawStr} nextSeqBefore=${this.streams.get(streamId)?.reorderBuffer.nextSeq} pendingSize=${this.streams.get(streamId)?.reorderBuffer.pending.size}`,
-    );
     const state = this.streams.get(streamId);
     if (state) {
       if (state.reorderBuffer.flushTimeout) {
@@ -270,15 +258,7 @@ export class RedisEventTransport implements IEventTransport {
 
     const streamState = this.streams.get(streamId);
     if (!streamState) {
-      if (channel.includes('cross-buf-live')) {
-        console.error(`DIAGNOSTATE transport#${this.__diagId} NO streamState for ${streamId}`);
-      }
       return;
-    }
-    if (channel.includes('cross-buf-live')) {
-      console.error(
-        `DIAGHASSTATE transport#${this.__diagId} ${streamId} handlers=${streamState.handlers.size} count=${streamState.count}`,
-      );
     }
 
     try {
@@ -340,12 +320,6 @@ export class RedisEventTransport implements IEventTransport {
     const buffer = streamState.reorderBuffer;
     const seq = message.seq!;
 
-    if (streamId.includes('cross-buf-live')) {
-      console.error(
-        `DIAGCHUNK transport#${this.__diagId} streamId=${streamId} seq=${seq} nextSeq=${buffer.nextSeq} handlers=${streamState.handlers.size} count=${streamState.count}`,
-      );
-    }
-
     if (seq === buffer.nextSeq) {
       this.deliverMessage(streamState, message);
       buffer.nextSeq++;
@@ -361,7 +335,6 @@ export class RedisEventTransport implements IEventTransport {
         this.scheduleFlushTimeout(streamId, streamState);
       }
     } else {
-      console.error(`DIAGDROP stream ${streamId}: seq=${seq}, expected=${buffer.nextSeq}`);
       logger.debug(
         `[RedisEventTransport] Dropping duplicate/old message for stream ${streamId}: seq=${seq}, expected=${buffer.nextSeq}`,
       );
@@ -578,10 +551,7 @@ export class RedisEventTransport implements IEventTransport {
       const channel = CHANNELS.events(streamId);
       const seq = await this.getNextSequence(streamId);
       const message: PubSubMessage = { type: EventTypes.CHUNK, seq, data: event };
-      const receivers = await this.publisher.publish(channel, JSON.stringify(message));
-      if (channel.includes('cross-buf-live')) {
-        console.error(`DIAGPUB transport#${this.__diagId} seq=${seq} receivers=${receivers}`);
-      }
+      await this.publisher.publish(channel, JSON.stringify(message));
     } catch (err) {
       logger.error(`[RedisEventTransport] Failed to publish chunk:`, err);
     }
