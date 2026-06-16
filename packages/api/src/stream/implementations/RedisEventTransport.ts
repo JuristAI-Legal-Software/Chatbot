@@ -578,7 +578,10 @@ export class RedisEventTransport implements IEventTransport {
       const channel = CHANNELS.events(streamId);
       const seq = await this.getNextSequence(streamId);
       const message: PubSubMessage = { type: EventTypes.CHUNK, seq, data: event };
-      await this.publisher.publish(channel, JSON.stringify(message));
+      const receivers = await this.publisher.publish(channel, JSON.stringify(message));
+      if (channel.includes('cross-buf-live')) {
+        console.error(`DIAGPUB transport#${this.__diagId} seq=${seq} receivers=${receivers}`);
+      }
     } catch (err) {
       logger.error(`[RedisEventTransport] Failed to publish chunk:`, err);
     }
