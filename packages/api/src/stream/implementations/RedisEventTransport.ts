@@ -171,6 +171,9 @@ export class RedisEventTransport implements IEventTransport {
     for (let attempt = 1; attempt <= SUBSCRIBE_RETRY_ATTEMPTS; attempt++) {
       try {
         await this.subscriber.subscribe(channel);
+        if (channel.includes('cross-buf-live')) {
+          console.error(`DIAGSUB transport#${this.__diagId} SUBSCRIBED ${channel} attempt=${attempt}`);
+        }
         logger.debug(`[RedisEventTransport] Subscription active for channel ${channel}`);
         return;
       } catch (err) {
@@ -267,7 +270,15 @@ export class RedisEventTransport implements IEventTransport {
 
     const streamState = this.streams.get(streamId);
     if (!streamState) {
+      if (channel.includes('cross-buf-live')) {
+        console.error(`DIAGNOSTATE transport#${this.__diagId} NO streamState for ${streamId}`);
+      }
       return;
+    }
+    if (channel.includes('cross-buf-live')) {
+      console.error(
+        `DIAGHASSTATE transport#${this.__diagId} ${streamId} handlers=${streamState.handlers.size} count=${streamState.count}`,
+      );
     }
 
     try {
