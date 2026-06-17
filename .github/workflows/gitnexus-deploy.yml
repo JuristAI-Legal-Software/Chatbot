@@ -52,15 +52,12 @@
 name: GitNexus Deploy
 
 on:
-  workflow_run:
-    workflows: ['GitNexus Index']
-    types: [completed]
   workflow_dispatch:
     inputs:
-      pr_number:
-        description: 'Optional PR number to post completion comment on (set by bot-triggered dispatches from gitnexus-index.yml)'
+      enable:
+        description: 'Set to "true" to run (disabled until GITNEXUS_DO_* secrets are configured)'
         type: string
-        default: ''
+        default: 'false'
 
 permissions:
   actions: read
@@ -85,15 +82,13 @@ concurrency:
 
 env:
   GITNEXUS_VERSION: '1.5.3'
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/librechat-gitnexus
+  IMAGE_NAME: ghcr.io/juristai-legal-software/librechat-gitnexus
 
 jobs:
   # Rebuilds the long-lived image only when Dockerfile/entrypoint/extensions
   # change. Skipped on every other run, so index-only deploys are fast.
   build-image:
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.enable == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
