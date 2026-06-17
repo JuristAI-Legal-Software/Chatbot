@@ -20,44 +20,32 @@
  * @see https://openresponses.org/specification
  */
 const express = require('express');
-const { PermissionTypes, Permissions } = require('librechat-data-provider');
-const {
-  generateCheckAccess,
-  createRequireApiKeyAuth,
-  createCheckRemoteAgentAccess,
-} = require('@librechat/api');
+const rateLimit = require('express-rate-limit');
 const {
   createResponse,
   getResponse,
   listModels,
 } = require('~/server/controllers/agents/responses');
-const { getEffectivePermissions } = require('~/server/services/PermissionService');
-const { validateAgentApiKey, findUser } = require('~/models');
-const { configMiddleware } = require('~/server/middleware');
-const { getRoleByName } = require('~/models/Role');
-const { getAgent } = require('~/models/Agent');
+const { configMiddleware, createAccessLimiters } = require('~/server/middleware');
+const {
+  checkAgentPermission,
+  preAuthTenantMiddleware,
+  requireRemoteAgentAuth,
+  checkRemoteAgentsFeature,
+} = require('./middleware');
 
 const router = express.Router();
+const { accessIpLimiter, accessUserLimiter } = createAccessLimiters();
+/** Baseline IP rate limiter applied alongside the access limiters. */
+const routeRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
 
-const requireApiKeyAuth = createRequireApiKeyAuth({
-  validateAgentApiKey,
-  findUser,
-});
-
-const checkRemoteAgentsFeature = generateCheckAccess({
-  permissionType: PermissionTypes.REMOTE_AGENTS,
-  permissions: [Permissions.USE],
-  getRoleByName,
-});
-
-const checkAgentPermission = createCheckRemoteAgentAccess({
-  getAgent,
-  getEffectivePermissions,
-});
-
-router.use(requireApiKeyAuth);
+router.use(routeRateLimiter);
+router.use(preAuthTenantMiddleware);
+router.use(requireRemoteAgentAuth);
 router.use(configMiddleware);
 router.use(checkRemoteAgentsFeature);
+router.use(accessIpLimiter);
+router.use(accessUserLimiter);
 
 /**
  * @route POST /v1/responses

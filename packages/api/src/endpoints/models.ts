@@ -1,7 +1,14 @@
+import crypto from 'crypto';
 import axios from 'axios';
 import { logger } from '@librechat/data-schemas';
 import { HttpsProxyAgent } from 'https-proxy-agent';
-import { CacheKeys, KnownEndpoints, EModelEndpoint, defaultModels } from 'librechat-data-provider';
+import {
+  Time,
+  CacheKeys,
+  KnownEndpoints,
+  EModelEndpoint,
+  defaultModels,
+} from 'librechat-data-provider';
 import type { IUser } from '@librechat/data-schemas';
 import {
   processModelData,
@@ -12,7 +19,19 @@ import {
   logAxiosError,
   inputSchema,
 } from '~/utils';
-import { standardCache } from '~/cache';
+import { standardCache, tokenConfigCache } from '~/cache';
+
+/**
+ * Linear-time trailing-slash stripper.
+ * Avoids the ReDoS surface of `.replace(/\/+$/, '')` when fed untrusted input.
+ */
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end--;
+  }
+  return end === value.length ? value : value.slice(0, end);
+}
 
 export interface FetchModelsParams {
   /** User ID for API requests */
@@ -37,6 +56,8 @@ export interface FetchModelsParams {
   headers?: Record<string, string> | null;
   /** Optional user object for header resolution */
   userObject?: Partial<IUser>;
+  /** Skip MODEL_QUERIES cache (e.g., for user-provided keys) */
+  skipCache?: boolean;
 }
 
 /**
@@ -104,6 +125,7 @@ export async function fetchModels({
   tokenKey,
   headers,
   userObject,
+  skipCache = false,
 }: FetchModelsParams): Promise<string[]> {
   let models: string[] = [];
   const baseURL = direct ? extractBaseURL(_baseURL ?? '') : _baseURL;
@@ -116,13 +138,32 @@ export async function fetchModels({
     return models;
   }
 
+  const shouldCache = !skipCache && !(userIdQuery && user);
+  const cacheKey = shouldCache ? modelsCacheKey(baseURL ?? '', apiKey) : '';
+  const modelsCache = shouldCache ? standardCache(CacheKeys.MODEL_QUERIES) : null;
+  if (modelsCache && cacheKey) {
+    const cachedModels = await modelsCache.get(cacheKey);
+    if (cachedModels) {
+      return cachedModels as string[];
+    }
+  }
+
   if (name && name.toLowerCase().startsWith(KnownEndpoints.ollama)) {
+    let ollamaModels: string[] | null = null;
     try {
-      return await fetchOllamaModels(baseURL ?? '', { headers, user: userObject });
+      ollamaModels = await fetchOllamaModels(baseURL ?? '', { headers, user: userObject });
     } catch (ollamaError) {
-      const logMessage =
-        'Failed to fetch models from Ollama API. Attempting to fetch via OpenAI-compatible endpoint.';
-      logAxiosError({ message: logMessage, error: ollamaError as Error });
+      logAxiosError({
+        message:
+          'Failed to fetch models from Ollama API. Attempting to fetch via OpenAI-compatible endpoint.',
+        error: ollamaError as Error,
+      });
+    }
+    if (ollamaModels !== null) {
+      if (modelsCache && cacheKey && ollamaModels.length > 0) {
+        await modelsCache.set(cacheKey, ollamaModels, Time.TWO_MINUTES);
+      }
+      return ollamaModels;
     }
   }
 
@@ -155,10 +196,7 @@ export async function fetchModels({
       options.headers['OpenAI-Organization'] = process.env.OPENAI_ORGANIZATION;
     }
 
-    const normalizedBaseURL = (baseURL ?? '').endsWith('/')
-      ? (baseURL ?? '').slice(0, -1)
-      : (baseURL ?? '');
-    const url = new URL(`${normalizedBaseURL}${azure ? '' : '/models'}`);
+    const url = new URL(`${stripTrailingSlashes(baseURL ?? '')}${azure ? '' : '/models'}`);
     if (user && userIdQuery) {
       url.searchParams.append('user', user);
     }
@@ -169,8 +207,7 @@ export async function fetchModels({
     const validationResult = inputSchema.safeParse(input);
     if (validationResult.success && createTokenConfig) {
       const endpointTokenConfig = processModelData(input);
-      const cache = standardCache(CacheKeys.TOKEN_CONFIG);
-      await cache.set(tokenKey ?? name, endpointTokenConfig);
+      await tokenConfigCache().set(tokenKey ?? name, endpointTokenConfig);
     }
     models = input.data.map((item: { id: string }) => item.id);
   } catch (error) {
@@ -178,7 +215,27 @@ export async function fetchModels({
     logAxiosError({ message: logMessage, error: error as Error });
   }
 
+  if (modelsCache && cacheKey && models.length > 0) {
+    await modelsCache.set(cacheKey, models, Time.TWO_MINUTES);
+  }
+
   return models;
+}
+
+const CACHE_KEY_LENGTH_BYTES = 16;
+const SCRYPT_OPTS = { N: 1 << 14, r: 8, p: 1, maxmem: 32 * 1024 * 1024 } as const;
+
+/**
+ * Derives an opaque cache key from a `(baseURL, apiKey)` pair via scrypt.
+ *
+ * This is deterministic like a hash, but uses a password-hard KDF so CodeQL
+ * does not flag the API-key-derived cache key as `js/insufficient-password-hash`.
+ * The derived value is only used as an internal cache key.
+ */
+function modelsCacheKey(baseURL: string, apiKey: string): string {
+  const cacheSecret = process.env.JWT_SECRET || 'librechat-model-cache';
+  const salt = `${cacheSecret}:${baseURL}`;
+  return crypto.scryptSync(apiKey, salt, CACHE_KEY_LENGTH_BYTES, SCRYPT_OPTS).toString('hex');
 }
 
 /** Options for fetching OpenAI models */
@@ -191,8 +248,12 @@ export interface GetOpenAIModelsOptions {
   assistants?: boolean;
   /** OpenAI API key (if not using environment variable) */
   openAIApiKey?: string;
-  /** Whether user provides their own API key */
-  userProvidedOpenAI?: boolean;
+  /** Skip MODEL_QUERIES cache (e.g., for user-provided keys) */
+  skipCache?: boolean;
+}
+
+function resolveOpenAIApiKey(opts: GetOpenAIModelsOptions): string | undefined {
+  return opts.openAIApiKey || process.env.OPENAI_API_KEY;
 }
 
 /**
@@ -206,7 +267,7 @@ export async function fetchOpenAIModels(
   _models: string[] = [],
 ): Promise<string[]> {
   let models = _models.slice() ?? [];
-  const apiKey = opts.openAIApiKey ?? process.env.OPENAI_API_KEY;
+  const apiKey = resolveOpenAIApiKey(opts);
   const openaiBaseURL = 'https://api.openai.com/v1';
   let baseURL = openaiBaseURL;
   let reverseProxyUrl = process.env.OPENAI_REVERSE_PROXY;
@@ -221,13 +282,6 @@ export async function fetchOpenAIModels(
     baseURL = extractBaseURL(reverseProxyUrl) ?? openaiBaseURL;
   }
 
-  const modelsCache = standardCache(CacheKeys.MODEL_QUERIES);
-
-  const cachedModels = await modelsCache.get(baseURL);
-  if (cachedModels) {
-    return cachedModels as string[];
-  }
-
   if (baseURL || opts.azure) {
     models = await fetchModels({
       apiKey: apiKey ?? '',
@@ -235,6 +289,7 @@ export async function fetchOpenAIModels(
       azure: opts.azure,
       user: opts.user,
       name: EModelEndpoint.openAI,
+      skipCache: opts.skipCache,
     });
   }
 
@@ -251,7 +306,6 @@ export async function fetchOpenAIModels(
     models = otherModels.concat(instructModels);
   }
 
-  await modelsCache.set(baseURL, models);
   return models;
 }
 
@@ -282,7 +336,7 @@ export async function getOpenAIModels(opts: GetOpenAIModelsOptions = {}): Promis
     return splitAndTrim(process.env[key]);
   }
 
-  if (opts.userProvidedOpenAI) {
+  if (isUserProvided(resolveOpenAIApiKey(opts))) {
     return models;
   }
 
@@ -296,7 +350,7 @@ export async function getOpenAIModels(opts: GetOpenAIModelsOptions = {}): Promis
  * @returns Promise resolving to array of model IDs
  */
 export async function fetchAnthropicModels(
-  opts: { user?: string } = {},
+  opts: { user?: string; skipCache?: boolean } = {},
   _models: string[] = [],
 ): Promise<string[]> {
   let models = _models.slice() ?? [];
@@ -313,13 +367,6 @@ export async function fetchAnthropicModels(
     return models;
   }
 
-  const modelsCache = standardCache(CacheKeys.MODEL_QUERIES);
-
-  const cachedModels = await modelsCache.get(baseURL);
-  if (cachedModels) {
-    return cachedModels as string[];
-  }
-
   if (baseURL) {
     models = await fetchModels({
       apiKey,
@@ -327,6 +374,7 @@ export async function fetchAnthropicModels(
       user: opts.user,
       name: EModelEndpoint.anthropic,
       tokenKey: EModelEndpoint.anthropic,
+      skipCache: opts.skipCache,
     });
   }
 
@@ -334,7 +382,6 @@ export async function fetchAnthropicModels(
     return _models;
   }
 
-  await modelsCache.set(baseURL, models);
   return models;
 }
 

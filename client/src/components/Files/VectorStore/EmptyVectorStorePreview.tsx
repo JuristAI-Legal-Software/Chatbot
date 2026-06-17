@@ -6,7 +6,7 @@ export default function EmptyVectorStorePreview() {
 
   return (
     <div className="h-full w-full content-center text-center font-bold">
-      {localize('com_ui_select_vector_store_to_view_details')}
+      {localize('com_files_select_vector_store')}
     </div>
   );
 }

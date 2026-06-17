@@ -14,7 +14,7 @@ export type Option = Record<string, unknown> & {
 };
 
 export type OptionWithIcon = Option & { icon?: React.ReactNode };
-export type DropdownValueSetter = (value: string | Option | OptionWithIcon) => void;
+export type DropdownValueSetter = (value: string | Option | OptionWithIcon | null) => void;
 export type MentionOption = OptionWithIcon & {
   type: string;
   value: string;

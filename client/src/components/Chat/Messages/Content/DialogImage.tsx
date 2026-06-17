@@ -3,6 +3,9 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Button, TooltipAnchor } from '@librechat/client';
 import { X, ArrowDownToLine, PanelLeftOpen, PanelLeftClose, RotateCcw } from 'lucide-react';
 import { useLocalize } from '~/hooks';
+import { isSafeImageSrc, toRenderableImageUrl } from '~/utils';
+
+const imageSizeCache = new Map<string, string>();
 
 const getQualityStyles = (quality: string): string => {
   if (quality === 'high') {
@@ -35,6 +38,8 @@ export default function DialogImage({
   triggerRef?: React.RefObject<HTMLButtonElement>;
 }) {
   const localize = useLocalize();
+  const safeSrc = isSafeImageSrc(src) ? src : '';
+  const safeRenderableSrc = safeSrc ? toRenderableImageUrl(safeSrc) : '';
   const [isPromptOpen, setIsPromptOpen] = useState(false);
   const [imageSize, setImageSize] = useState<string | null>(null);
 
@@ -50,18 +55,26 @@ export default function DialogImage({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const getImageSize = useCallback(async (url: string) => {
+    const cached = imageSizeCache.get(url);
+    if (cached) {
+      return cached;
+    }
     try {
       const response = await fetch(url, { method: 'HEAD' });
       const contentLength = response.headers.get('Content-Length');
 
       if (contentLength) {
         const bytes = parseInt(contentLength, 10);
-        return formatFileSize(bytes);
+        const result = formatFileSize(bytes);
+        imageSizeCache.set(url, result);
+        return result;
       }
 
       const fullResponse = await fetch(url);
       const blob = await fullResponse.blob();
-      return formatFileSize(blob.size);
+      const result = formatFileSize(blob.size);
+      imageSizeCache.set(url, result);
+      return result;
     } catch (error) {
       console.error('Error getting image size:', error);
       return null;
@@ -192,11 +205,11 @@ export default function DialogImage({
   }, [resetZoom, onOpenChange, isOpen, zoom]);
 
   useEffect(() => {
-    if (isOpen && src) {
-      getImageSize(src).then(setImageSize);
+    if (isOpen && safeRenderableSrc) {
+      getImageSize(safeSrc).then(setImageSize);
       resetZoom();
     }
-  }, [isOpen, src, getImageSize, resetZoom]);
+  }, [isOpen, safeRenderableSrc, safeSrc, getImageSize, resetZoom]);
 
   useEffect(() => {
     if (zoom === 1) {
@@ -353,8 +366,9 @@ export default function DialogImage({
               >
                 <img
                   ref={imageRef}
-                  src={src}
+                  src={safeRenderableSrc}
                   alt="Image"
+                  decoding="async"
                   className="block max-h-[85vh] object-contain"
                   style={{
                     maxWidth: getImageMaxWidth(),

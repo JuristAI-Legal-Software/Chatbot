@@ -13,8 +13,8 @@ export default function VectorStoreListItem({
   vectorStore,
   deleteVectorStore,
 }: VectorStoreListItemProps) {
-  const navigate = useNavigate();
   const localize = useLocalize();
+  const navigate = useNavigate();
   return (
     <div
       onClick={() => {
@@ -28,7 +28,7 @@ export default function VectorStoreListItem({
       </div>
       <div className="w-2/6 text-gray-500">
         <p>
-          {localize('com_files_vector_store_summary', {
+          {localize('com_files_vector_store_file_count_and_size', {
             count: vectorStore.file_counts.total,
             size: vectorStore.bytes / 1000,
           })}

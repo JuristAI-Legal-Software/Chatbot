@@ -1,15 +1,14 @@
 import React from 'react';
+import VectorStoreSidePanel from './VectorStore/VectorStoreSidePanel';
+import FilesSectionSelector from './FilesSectionSelector';
+import { Button } from '../ui';
 import { Outlet, useNavigate, useParams } from 'react-router-dom';
 import { useLocalize } from '~/hooks';
-import { Button } from '../ui';
-import FilesSectionSelector from './FilesSectionSelector';
-import VectorStoreSidePanel from './VectorStore/VectorStoreSidePanel';
 
 export default function VectorStoreView() {
+  const localize = useLocalize();
   const params = useParams();
   const navigate = useNavigate();
-  const localize = useLocalize();
-
   return (
     <div className="max-h-[100vh] bg-[#f9f9f9] p-0 lg:p-7">
       <div className="m-4 flex max-h-[10vh] w-full flex-row justify-between md:m-2">

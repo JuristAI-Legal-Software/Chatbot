@@ -2,12 +2,6 @@ import type { Redis, Cluster } from 'ioredis';
 import type { RedisClientType, RedisClusterType } from '@redis/client';
 
 type RedisClient = RedisClientType | RedisClusterType | Redis | Cluster;
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
-};
 
 describe('redisClients Integration Tests', () => {
   let originalEnv: NodeJS.ProcessEnv;
@@ -65,8 +59,8 @@ describe('redisClients Integration Tests', () => {
         if (keys.length > 0) {
           await ioredisClient.del(...keys);
         }
-      } catch (error: unknown) {
-        console.warn('Error cleaning up test keys:', getErrorMessage(error));
+      } catch (error) {
+        console.warn('Error cleaning up test keys:', (error as Error).message);
       }
     }
 
@@ -76,8 +70,8 @@ describe('redisClients Integration Tests', () => {
         if (ioredisClient.status === 'ready') {
           ioredisClient.disconnect();
         }
-      } catch (error: unknown) {
-        console.warn('Error disconnecting ioredis client:', getErrorMessage(error));
+      } catch (error) {
+        console.warn('Error disconnecting ioredis client:', (error as Error).message);
       }
       ioredisClient = null;
     }
@@ -86,8 +80,8 @@ describe('redisClients Integration Tests', () => {
       try {
         // Try to disconnect - keyv/redis client doesn't have an isReady property
         await keyvRedisClient.disconnect();
-      } catch (error: unknown) {
-        console.warn('Error disconnecting keyv redis client:', getErrorMessage(error));
+      } catch (error) {
+        console.warn('Error disconnecting keyv redis client:', (error as Error).message);
       }
       keyvRedisClient = null;
     }
@@ -110,6 +104,7 @@ describe('redisClients Integration Tests', () => {
 
     describe('when connecting to a Redis instance', () => {
       test('should connect and perform set/get/delete operations', async () => {
+        expect.hasAssertions();
         const clients = await import('../redisClients');
         ioredisClient = clients.ioredisClient;
         await testRedisOperations(ioredisClient!, 'ioredis-single');
@@ -118,6 +113,7 @@ describe('redisClients Integration Tests', () => {
 
     describe('when connecting to a Redis cluster', () => {
       test('should connect to cluster and perform set/get/delete operations', async () => {
+        expect.hasAssertions();
         process.env.USE_REDIS_CLUSTER = 'true';
         process.env.REDIS_URI =
           'redis://127.0.0.1:7001,redis://127.0.0.1:7002,redis://127.0.0.1:7003';
@@ -142,21 +138,31 @@ describe('redisClients Integration Tests', () => {
 
     describe('when connecting to a Redis instance', () => {
       test('should connect and perform set/get/delete operations', async () => {
+        expect.hasAssertions();
         const clients = await import('../redisClients');
         keyvRedisClient = clients.keyvRedisClient;
-        await testRedisOperations(keyvRedisClient!, 'keyv-single', clients.keyvRedisClientReady!);
+        await testRedisOperations(
+          keyvRedisClient!,
+          'keyv-single',
+          clients.keyvRedisClientReady!.then(() => undefined),
+        );
       });
     });
 
     describe('when connecting to a Redis cluster', () => {
       test('should connect to cluster and perform set/get/delete operations', async () => {
+        expect.hasAssertions();
         process.env.USE_REDIS_CLUSTER = 'true';
         process.env.REDIS_URI =
           'redis://127.0.0.1:7001,redis://127.0.0.1:7002,redis://127.0.0.1:7003';
 
         const clients = await import('../redisClients');
         keyvRedisClient = clients.keyvRedisClient;
-        await testRedisOperations(keyvRedisClient!, 'keyv-cluster', clients.keyvRedisClientReady!);
+        await testRedisOperations(
+          keyvRedisClient!,
+          'keyv-cluster',
+          clients.keyvRedisClientReady!.then(() => undefined),
+        );
       });
     });
   });

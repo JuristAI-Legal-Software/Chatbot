@@ -1,11 +1,16 @@
-const path = require('path');
 const crypto = require('crypto');
+const path = require('path');
 const mongoose = require('mongoose');
 const { User } = require('@librechat/data-schemas').createModels(mongoose);
 require('module-alias')({ base: path.resolve(__dirname, '..', 'api') });
 const { registerUser } = require('~/server/services/AuthService');
 const { askQuestion, silentExit } = require('./helpers');
 const connect = require('./connect');
+
+const generateSecurePassword = (length = 18) => {
+  const bytesNeeded = Math.ceil((length * 3) / 4);
+  return crypto.randomBytes(bytesNeeded).toString('base64url').slice(0, length);
+};
 
 (async () => {
   await connect();
@@ -15,9 +20,7 @@ const connect = require('./connect');
   console.purple('--------------------------');
 
   if (process.argv.length < 5) {
-    console.orange(
-      'Usage: npm run create-user -- <email> <name> <username> [--email-verified=false]',
-    );
+    console.orange('Usage: npm run create-user -- <email> <name> <username> [--email-verified=false]');
     console.orange('Note: if you do not pass in the arguments, you will be prompted for them.');
     console.orange(
       'If you really need to pass in the password, you can do so as the 4th argument (not recommended for security).',
@@ -75,7 +78,7 @@ const connect = require('./connect');
   if (password === undefined) {
     password = await askQuestion('Password: (leave blank, to generate one)');
     if (!password) {
-      password = crypto.randomBytes(18).toString('base64url');
+      password = generateSecurePassword();
       console.orange('Your password is: ' + password);
     }
   }
@@ -91,9 +94,9 @@ If \`n\`, and email service is configured, the user will be sent a verification 
 If \`n\`, and email service is not configured, you must have the \`ALLOW_UNVERIFIED_EMAIL_LOGIN\` .env variable set to true,
 or the user will need to attempt logging in to have a verification link sent to them.`);
 
-    const normalizedEmailVerifiedInput = emailVerifiedInput.trim().toLowerCase();
+    const normalizedEmailVerifiedInput = emailVerifiedInput.trim().toLowerCase()
 
-    emailVerified = true;
+    emailVerified = true
 
     if (normalizedEmailVerifiedInput === 'n') {
       emailVerified = false;
@@ -106,10 +109,11 @@ or the user will need to attempt logging in to have a verification link sent to 
     silentExit(1);
   }
 
-  const user = { email, password, name, username, confirm_password: password, provider };
+  const user = { email, password, name, username, confirm_password: password };
+  const additionalData = { emailVerified, ...(provider !== undefined ? { provider } : {}) };
   let result;
   try {
-    result = await registerUser(user, { emailVerified });
+    result = await registerUser(user, additionalData);
   } catch (error) {
     console.red('Error: ' + error.message);
     silentExit(1);

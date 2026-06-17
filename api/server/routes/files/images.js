@@ -1,37 +1,45 @@
-const path = require('path');
 const fs = require('fs').promises;
 const express = require('express');
 const { logger } = require('@librechat/data-schemas');
+const { verifyAgentUploadPermission, resolveUploadErrorMessage } = require('@librechat/api');
 const { isAssistantsEndpoint } = require('librechat-data-provider');
-const { loginLimiter } = require('~/server/middleware');
 const {
   processAgentFileUpload,
   processImageFile,
   filterFile,
 } = require('~/server/services/Files/process');
+const { checkPermission } = require('~/server/services/PermissionService');
+const {
+  assertSinglePathSegment,
+  resolvePathFromTrustedRoot,
+} = require('~/server/utils/pathSafety');
+const { createFileLimiters } = require('~/server/middleware/limiters/uploadLimiters');
+const db = require('~/models');
 
 const router = express.Router();
+const { fileUploadIpLimiter, fileUploadUserLimiter } = createFileLimiters();
 
-router.use(loginLimiter);
-
-const sanitizePathSegment = (value = '') => value.replace(/[^a-zA-Z0-9_-]/g, '');
-
-const createSafeImagePath = (basePath, userId, filename) => {
-  const safeUserId = sanitizePathSegment(userId);
-  const safeFilename = path.basename(filename);
-  const userPath = path.resolve(basePath, safeUserId);
-  const filePath = path.resolve(userPath, safeFilename);
-
-  if (!filePath.startsWith(`${userPath}${path.sep}`) && filePath !== userPath) {
+function resolveTempUploadPath({ appConfig, safeUserDir, tempFilename }) {
+  if (!appConfig?.paths?.uploads) {
     return null;
   }
 
-  return filePath;
-};
+  return resolvePathFromTrustedRoot(
+    'image upload path',
+    appConfig.paths.uploads,
+    'temp',
+    safeUserDir,
+    tempFilename,
+  );
+}
 
-router.post('/', async (req, res) => {
-  const metadata = req.body;
+router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
+  const metadata = req.body ?? {};
+  metadata.message_file = metadata.message_file === true || metadata.message_file === 'true';
   const appConfig = req.config;
+  const safeUserDir = assertSinglePathSegment('userId', req.user.id);
+  const tempFilename = assertSinglePathSegment('filename', req.file.filename);
+  const tempUploadPath = resolveTempUploadPath({ appConfig, safeUserDir, tempFilename });
 
   try {
     filterFile({ req, image: true });
@@ -39,7 +47,22 @@ router.post('/', async (req, res) => {
     metadata.temp_file_id = metadata.file_id;
     metadata.file_id = req.file_id;
 
-    if (!isAssistantsEndpoint(metadata.endpoint) && metadata.tool_resource != null) {
+    const isAgentToolUpload =
+      !isAssistantsEndpoint(metadata.endpoint) &&
+      metadata.agent_id != null &&
+      metadata.tool_resource != null;
+
+    if (isAgentToolUpload) {
+      const denied = await verifyAgentUploadPermission({
+        req,
+        res,
+        metadata,
+        getAgent: db.getAgent,
+        checkPermission,
+      });
+      if (denied) {
+        return;
+      }
       return await processAgentFileUpload({ req, res, metadata });
     }
 
@@ -48,34 +71,27 @@ router.post('/', async (req, res) => {
     // TODO: delete remote file if it exists
     logger.error('[/files/images] Error processing file:', error);
 
-    let message = 'Error processing file';
-
-    if (
-      error.message?.includes('Invalid file format') ||
-      error.message?.includes('No OCR result') ||
-      error.message?.includes('exceeds token limit')
-    ) {
-      message = error.message;
-    }
+    const message = resolveUploadErrorMessage(error);
 
     try {
-      const filepath = createSafeImagePath(
+      const safeFilename = assertSinglePathSegment('filename', req.file.filename);
+      const filepath = resolvePathFromTrustedRoot(
+        'image output path',
         appConfig.paths.imageOutput,
-        req.user?.id,
-        req.file?.filename ?? '',
+        safeUserDir,
+        safeFilename,
       );
-
-      if (filepath) {
-        await fs.unlink(filepath);
-      }
+      await fs.unlink(filepath);
     } catch (error) {
       logger.error('[/files/images] Error deleting file:', error);
     }
     res.status(500).json({ message });
   } finally {
     try {
-      await fs.unlink(req.file.path);
-      logger.debug('[/files/images] Temp. image upload file deleted');
+      if (tempUploadPath) {
+        await fs.unlink(tempUploadPath);
+        logger.debug('[/files/images] Temp. image upload file deleted');
+      }
     } catch {
       logger.debug('[/files/images] Temp. image upload file already deleted');
     }

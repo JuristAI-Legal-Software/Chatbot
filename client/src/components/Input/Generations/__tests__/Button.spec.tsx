@@ -1,34 +1,31 @@
-import { fireEvent, render } from '@testing-library/react';
+import { render, fireEvent } from '@testing-library/react';
+import enTranslation from '~/locales/en/translation.json';
 import Button from '../Button';
 
 describe('Button', () => {
   it('renders with the correct type and children', () => {
-    const regenerateLabel = 'Regenerate';
     const { getByTestId, getByText } = render(
       <Button
         type="regenerate"
         onClick={() => {
-          return;
+          ('');
         }}
       >
-        {regenerateLabel}
+        {enTranslation.com_ui_regenerate}
       </Button>,
     );
-
     expect(getByTestId('regenerate-generation-button')).toBeInTheDocument();
-    expect(getByText(regenerateLabel)).toBeInTheDocument();
+    expect(getByText(enTranslation.com_ui_regenerate)).toBeInTheDocument();
   });
 
   it('calls onClick when clicked', () => {
-    const continueLabel = 'Continue';
     const handleClick = jest.fn();
     const { getByText } = render(
       <Button type="continue" onClick={handleClick}>
-        {continueLabel}
+        {enTranslation.com_ui_continue}
       </Button>,
     );
-
-    fireEvent.click(getByText(continueLabel));
+    fireEvent.click(getByText(enTranslation.com_ui_continue));
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 });

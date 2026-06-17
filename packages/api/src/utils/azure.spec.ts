@@ -27,6 +27,26 @@ describe('genAzureEndpoint', () => {
     });
     expect(url).toBe('https://instanceName.openai.azure.com/openai/deployments/deploymentName');
   });
+
+  test('uses trusted Azure hostnames as-is', () => {
+    const url = genAzureEndpoint({
+      azureOpenAIApiInstanceName: 'instanceName.cognitiveservices.azure.com',
+      azureOpenAIApiDeploymentName: 'deploymentName',
+    });
+    expect(url).toBe(
+      'https://instanceName.cognitiveservices.azure.com/openai/deployments/deploymentName',
+    );
+  });
+
+  test('does not trust attacker-controlled hostnames that only contain an Azure suffix', () => {
+    const url = genAzureEndpoint({
+      azureOpenAIApiInstanceName: 'instanceName.openai.azure.com.attacker.test',
+      azureOpenAIApiDeploymentName: 'deploymentName',
+    });
+    expect(url).toBe(
+      'https://instanceName.openai.azure.com.attacker.test.openai.azure.com/openai/deployments/deploymentName',
+    );
+  });
 });
 
 describe('genAzureChatCompletion', () => {

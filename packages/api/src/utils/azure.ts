@@ -1,6 +1,22 @@
 import { isEnabled } from './common';
 import type { AzureOptions, GenericClient } from '~/types';
 
+const isTrustedAzureHostname = (value: string): boolean => {
+  try {
+    const parsed = new URL(`https://${value}`);
+    const normalizedValue = value.toLowerCase();
+    return (
+      parsed.hostname === normalizedValue &&
+      parsed.pathname === '/' &&
+      parsed.search === '' &&
+      parsed.hash === '' &&
+      parsed.hostname.endsWith('.azure.com')
+    );
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Sanitizes the model name to be used in the URL by removing or replacing disallowed characters.
  * @param modelName - The model name to be sanitized.
@@ -27,7 +43,7 @@ export const genAzureEndpoint = ({
 }): string => {
   // Support both old (.openai.azure.com) and new (.cognitiveservices.azure.com) endpoint formats
   // If instanceName already includes a full domain, use it as-is
-  if (azureOpenAIApiInstanceName.includes('.azure.com')) {
+  if (isTrustedAzureHostname(azureOpenAIApiInstanceName)) {
     return `https://${azureOpenAIApiInstanceName}/openai/deployments/${azureOpenAIApiDeploymentName}`;
   }
   // Legacy format for backward compatibility

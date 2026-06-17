@@ -6,7 +6,7 @@ export default function EmptyFilePreview() {
 
   return (
     <div className="h-full w-full content-center text-center font-bold">
-      {localize('com_ui_select_file_to_view_details')}
+      {localize('com_files_select_file')}
     </div>
   );
 }

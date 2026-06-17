@@ -1,11 +1,17 @@
-import React, { useState, ChangeEvent } from 'react';
+import React, { ChangeEvent, useRef, useState } from 'react';
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, Input } from '@librechat/client';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
-const UploadFileModal = ({ open, onOpenChange }) => {
+type UploadFileModalProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+
+const UploadFileModal = ({ open, onOpenChange }: UploadFileModalProps) => {
   const localize = useLocalize();
   const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -23,7 +29,7 @@ const UploadFileModal = ({ open, onOpenChange }) => {
       >
         <DialogHeader>
           <DialogTitle className="text-lg font-medium leading-6 text-gray-900 dark:text-gray-200">
-            {localize('com_files_upload_title')}
+            {localize('com_ui_upload')}
           </DialogTitle>
         </DialogHeader>
         <div className="flex w-full flex-col p-0 sm:p-6 sm:pb-0 sm:pt-4">
@@ -32,44 +38,54 @@ const UploadFileModal = ({ open, onOpenChange }) => {
               <img />
             </div>
             <div className="flex w-full flex-col text-center sm:w-4/5 sm:text-left">
-              <div className="italic">{localize('com_files_upload_hint')}</div>
+              <div className="italic">{localize('com_files_upload_square_file_hint')}</div>
               <div className="mt-4 flex w-full flex-row items-center bg-[#f9f9f9] p-2">
                 <div className="w-1/2 sm:w-1/3">
-                  <Button>{localize('com_files_choose_file')}</Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileChange}
+                    aria-label={localize('com_ui_select_file')}
+                  />
+                  <Button
+                    onClick={() => {
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    {localize('com_files_choose_file')}
+                  </Button>
                 </div>
-                <div className="w-1/2 sm:w-1/3"> {localize('com_files_no_file_chosen')}</div>
+                <div className="w-1/2 sm:w-1/3">
+                  {file?.name ?? localize('com_files_no_file_chosen')}
+                </div>
               </div>
             </div>
           </div>
           <div className="mt-3 flex w-full flex-col">
-            <label htmlFor="name">{localize('com_files_name_label')}</label>
+            <label htmlFor="name">{localize('com_ui_name')}</label>
             <label className="hidden text-[#808080] sm:block">
-              {localize('com_files_name_description')}
+              {localize('com_files_uploaded_file_name')}
             </label>
-            <Input
-              type="text"
-              id="name"
-              name="name"
-              placeholder={localize('com_files_name_placeholder')}
-            />
+            <Input type="text" id="name" name="name" placeholder={localize('com_ui_name')} />
           </div>
 
           <div className="mt-3 flex w-full flex-col">
-            <label htmlFor="purpose">{localize('com_files_purpose_label')}</label>
+            <label htmlFor="purpose">{localize('com_files_purpose')}</label>
             <label className="hidden text-[#808080] sm:block">
-              {localize('com_files_purpose_description')}
+              {localize('com_files_uploaded_file_purpose')}
             </label>
             <Input
               type="text"
               id="purpose"
               name="purpose"
-              placeholder={localize('com_files_purpose_placeholder')}
+              placeholder={localize('com_files_purpose')}
             />
           </div>
 
           <div className="mt-3 flex w-full flex-row justify-between">
             <div className="hidden w-1/3 sm:block">
-              <span className="font-bold">{localize('com_files_learn_about_purpose')}</span>
+              <span className="font-bold">{localize('com_files_learn_file_purpose')}</span>
             </div>
             <div className="flex w-full flex-row justify-evenly sm:w-1/3">
               <Button

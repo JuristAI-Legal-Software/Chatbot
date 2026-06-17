@@ -14,7 +14,7 @@ type ThemeType = 'system' | 'dark' | 'light';
 const Theme = ({ theme, onChange }: { theme: string; onChange: (value: string) => void }) => {
   const localize = useLocalize();
 
-  const themeIcons: Record<ThemeType, JSX.Element> = {
+  const themeIcons: Record<ThemeType, React.JSX.Element> = {
     system: <Monitor aria-hidden="true" />,
     dark: <Moon aria-hidden="true" />,
     light: <Sun aria-hidden="true" />,

@@ -1,10 +1,11 @@
-/* eslint-disable i18next/no-literal-string */
 import React from 'react';
 import VectorStoreSidePanel from './VectorStore/VectorStoreSidePanel';
 import { Outlet, useNavigate, useParams } from 'react-router-dom';
+import { useLocalize } from '~/hooks';
 import { Button } from '../ui';
 
 const FileDashboardView = () => {
+  const localize = useLocalize();
   const params = useParams();
   const navigate = useNavigate();
   return (
@@ -19,7 +20,7 @@ const FileDashboardView = () => {
               navigate('/d');
             }}
           >
-            Go back
+            {localize('com_ui_go_back')}
           </Button>
         )}
       </div>

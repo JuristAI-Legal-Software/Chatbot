@@ -10,18 +10,33 @@ const {
   PrincipalType,
   PermissionBits,
 } = require('librechat-data-provider');
+const { SystemCapabilities } = require('@librechat/data-schemas');
 
 // Mock modules before importing
 jest.mock('~/server/services/Config', () => ({
   getCachedTools: jest.fn().mockResolvedValue({}),
 }));
 
-jest.mock('~/models/Role', () => ({
-  getRoleByName: jest.fn(),
-}));
+jest.mock('~/models', () => {
+  const mongoose = require('mongoose');
+  const { createMethods } = require('@librechat/data-schemas');
+  const methods = createMethods(mongoose, {
+    removeAllPermissions: async ({ resourceType, resourceId }) => {
+      const AclEntry = mongoose.models.AclEntry;
+      if (AclEntry) {
+        await AclEntry.deleteMany({ resourceType, resourceId });
+      }
+    },
+  });
+  return {
+    ...methods,
+    getRoleByName: jest.fn(),
+  };
+});
 
 jest.mock('~/server/middleware', () => ({
   requireJwtAuth: (req, res, next) => next(),
+  promptUsageLimiter: (req, res, next) => next(),
   canAccessPromptViaGroup: jest.requireActual('~/server/middleware').canAccessPromptViaGroup,
   canAccessPromptGroupResource:
     jest.requireActual('~/server/middleware').canAccessPromptGroupResource,
@@ -30,10 +45,12 @@ jest.mock('~/server/middleware', () => ({
 let app;
 let mongoServer;
 let promptRoutes;
-let Prompt, PromptGroup, AclEntry, AccessRole, User;
+let Prompt, PromptGroup, AclEntry, AccessRole, User, SystemGrant;
 let testUsers, testRoles;
 let grantPermission;
 let currentTestUser; // Track current user for middleware
+
+jest.setTimeout(120_000);
 
 // Helper function to set user in middleware
 function setTestUser(app, user) {
@@ -41,7 +58,9 @@ function setTestUser(app, user) {
 }
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = await MongoMemoryServer.create({
+    instance: { launchTimeout: 30_000 },
+  });
   const mongoUri = mongoServer.getUri();
   await mongoose.connect(mongoUri);
 
@@ -52,6 +71,7 @@ beforeAll(async () => {
   AclEntry = dbModels.AclEntry;
   AccessRole = dbModels.AccessRole;
   User = dbModels.User;
+  SystemGrant = dbModels.SystemGrant;
 
   // Import permission service
   const permissionService = require('~/server/services/PermissionService');
@@ -95,7 +115,9 @@ afterEach(() => {
 
 afterAll(async () => {
   await mongoose.disconnect();
-  await mongoServer.stop();
+  if (mongoServer) {
+    await mongoServer.stop();
+  }
   jest.clearAllMocks();
 });
 
@@ -152,8 +174,24 @@ async function setupTestData() {
     }),
   };
 
+  // Seed capabilities for the ADMIN role
+  await SystemGrant.create([
+    {
+      principalType: PrincipalType.ROLE,
+      principalId: SystemRoles.ADMIN,
+      capability: SystemCapabilities.MANAGE_PROMPTS,
+      grantedAt: new Date(),
+    },
+    {
+      principalType: PrincipalType.ROLE,
+      principalId: SystemRoles.ADMIN,
+      capability: SystemCapabilities.READ_PROMPTS,
+      grantedAt: new Date(),
+    },
+  ]);
+
   // Mock getRoleByName
-  const { getRoleByName } = require('~/models/Role');
+  const { getRoleByName } = require('~/models');
   getRoleByName.mockImplementation((roleName) => {
     switch (roleName) {
       case SystemRoles.USER:
@@ -174,7 +212,7 @@ describe('Prompt Routes - ACL Permissions', () => {
   });
 
   afterEach(() => {
-    consoleErrorSpy.mockRestore();
+    consoleErrorSpy?.mockRestore();
   });
 
   // Simple test to verify route is loaded

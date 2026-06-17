@@ -9,11 +9,14 @@ import {
 
 /**
  * Pre-computed regex for matching the Graph token placeholder.
- * Escapes curly braces in the placeholder string for safe regex use.
+ * Escapes all regex meta-characters in the placeholder string (not just `{}`)
+ * so the placeholder is matched literally regardless of future changes to it.
+ * Closes CodeQL "Incomplete string escaping or encoding".
  */
-const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-const GRAPH_TOKEN_REGEX = new RegExp(escapeRegex(GRAPH_TOKEN_PLACEHOLDER), 'g');
+const GRAPH_TOKEN_REGEX = new RegExp(
+  GRAPH_TOKEN_PLACEHOLDER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+  'g',
+);
 
 /**
  * Response from a Graph API token exchange.

@@ -1,9 +1,11 @@
 import { FullConfig } from '@playwright/test';
-import localUser from '../config.local';
 import authenticate from './authenticate';
+import { runJuristAIPreflight } from './preflight';
+import { getE2EUser } from './user';
 
 async function globalSetup(config: FullConfig) {
-  await authenticate(config, localUser);
+  await runJuristAIPreflight();
+  await authenticate(config, getE2EUser());
 }
 
 export default globalSetup;

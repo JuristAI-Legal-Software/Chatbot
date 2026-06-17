@@ -1,0 +1,62 @@
+{
+  "_comment": "Per-tool prompt overrides for the mcp-django-user-path E2E spec.",
+  "_format": "Keys are 'serverName.toolName' (preferred) or just 'toolName'.",
+
+  "juristai-django.list_my_cases": {
+    "prompt": "Use the list_my_cases tool from the juristai-django MCP server to show me my cases."
+  },
+  "juristai-django.get_case_metadata": {
+    "prompt": "Use the get_case_metadata tool from the juristai-django MCP server. Use any case ID valid for my account, or 'test-case-001' if none are known."
+  },
+  "juristai-django.list_action_items": {
+    "prompt": "Use the list_action_items tool from the juristai-django MCP server for case 'test-case-001'."
+  },
+  "juristai-django.list_case_important_dates": {
+    "prompt": "Use the list_case_important_dates tool from the juristai-django MCP server for case 'test-case-001'."
+  },
+  "juristai-django.get_case_calendar": {
+    "prompt": "Use the get_case_calendar tool from the juristai-django MCP server for case 'test-case-001'."
+  },
+  "juristai-django.list_case_timeline": {
+    "prompt": "Use the list_case_timeline tool from the juristai-django MCP server for case 'test-case-001'."
+  },
+  "juristai-django.get_latest_docket_entry": {
+    "prompt": "Use the get_latest_docket_entry tool from the juristai-django MCP server for case 'test-case-001'."
+  },
+  "juristai-django.retrieve_case_billing_summary": {
+    "prompt": "Use the retrieve_case_billing_summary tool from the juristai-django MCP server for case 'test-case-001'."
+  },
+  "juristai-django.list_legal_team_members": {
+    "prompt": "Use the list_legal_team_members tool from the juristai-django MCP server with legal team ID 'test-team-001'."
+  },
+  "juristai-django.list_organization_members": {
+    "prompt": "Use the list_organization_members tool from the juristai-django MCP server to list my organization members."
+  },
+  "juristai-django.read_people_dossiers": {
+    "prompt": "Use the read_people_dossiers tool from the juristai-django MCP server for case 'test-case-001'."
+  },
+  "juristai-django.search_case": {
+    "prompt": "Use the search_case tool from the juristai-django MCP server to search for 'Smith v. Jones'."
+  },
+  "juristai-django.precedent_query": {
+    "prompt": "Use the precedent_query tool from the juristai-django MCP server to search for 'breach of fiduciary duty'."
+  },
+  "juristai-django.query_processor": {
+    "prompt": "Use the query_processor tool from the juristai-django MCP server with query 'What are key deadlines in federal civil procedure?'."
+  },
+  "juristai-django.deadlines_insight": {
+    "prompt": "Use the deadlines_insight tool from the juristai-django MCP server for case 'test-case-001'."
+  },
+  "juristai-django.list_host_scheduling_schedules": {
+    "prompt": "Use the list_host_scheduling_schedules tool from the juristai-django MCP server."
+  },
+  "juristai-django.list_host_scheduling_event_types": {
+    "prompt": "Use the list_host_scheduling_event_types tool from the juristai-django MCP server."
+  },
+  "juristai-django.list_host_scheduling_bookings": {
+    "prompt": "Use the list_host_scheduling_bookings tool from the juristai-django MCP server."
+  },
+  "juristai-django.list_case_signatures": {
+    "prompt": "Use the list_case_signatures tool from the juristai-django MCP server for case 'test-case-001'."
+  }
+}

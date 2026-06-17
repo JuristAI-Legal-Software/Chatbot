@@ -1,19 +1,81 @@
-export const envVarRegex = /^\$\{([^{}]+)\}$/;
+/**
+ * Matches a whole-string env-var placeholder `${VAR}` and captures `VAR`.
+ * Uses `[^}]+` instead of `.+` so the inner quantifier cannot backtrack
+ * against the closing `}` — fixes CodeQL `js/polynomial-redos`.
+ */
+export const envVarRegex = /^\${([^}]+)}$/;
 
-const ENV_VAR_PREFIX = '${';
-const ENV_VAR_SUFFIX = '}';
-
-function isSimpleEnvVariableReference(value: string): boolean {
-  return value.startsWith(ENV_VAR_PREFIX) && value.endsWith(ENV_VAR_SUFFIX);
-}
-
-function parseEnvVariableName(value: string): string | null {
-  if (!isSimpleEnvVariableReference(value)) {
+function parseWholePlaceholder(value: string): string | null {
+  if (!value.startsWith('${') || !value.endsWith('}')) {
     return null;
   }
 
-  const varName = value.slice(ENV_VAR_PREFIX.length, -ENV_VAR_SUFFIX.length);
-  return varName.length > 0 && !varName.includes(ENV_VAR_SUFFIX) ? varName : null;
+  const varName = value.slice(2, -1);
+  if (!varName || varName.includes('}')) {
+    return null;
+  }
+
+  return varName;
+}
+
+function isPlaceholderToken(value: string): boolean {
+  return parseWholePlaceholder(value) != null;
+}
+
+function replaceInlinePlaceholders(value: string): string {
+  let result = '';
+  let cursor = 0;
+
+  while (cursor < value.length) {
+    const openIndex = value.indexOf('${', cursor);
+    if (openIndex === -1) {
+      result += value.slice(cursor);
+      break;
+    }
+
+    result += value.slice(cursor, openIndex);
+    const closeIndex = value.indexOf('}', openIndex + 2);
+    if (closeIndex === -1) {
+      result += value.slice(openIndex);
+      break;
+    }
+
+    const fullMatch = value.slice(openIndex, closeIndex + 1);
+    const varName = parseWholePlaceholder(fullMatch);
+    if (!varName || isSensitiveEnvVar(varName)) {
+      result += fullMatch;
+    } else {
+      result += process.env[varName] || fullMatch;
+    }
+
+    cursor = closeIndex + 1;
+  }
+
+  return result;
+}
+
+/**
+ * Infrastructure env vars that must never be resolved via placeholder expansion.
+ * These are internal secrets whose exposure would compromise the system —
+ * they have no legitimate reason to appear in outbound headers, MCP env/args, or OAuth config.
+ *
+ * Intentionally excludes API keys (operators reference them in config) and
+ * OAuth/session secrets (referenced in MCP OAuth config via processMCPEnv).
+ */
+const SENSITIVE_ENV_VARS = new Set([
+  'JWT_SECRET',
+  'JWT_REFRESH_SECRET',
+  'CREDS_KEY',
+  'CREDS_IV',
+  'MEILI_MASTER_KEY',
+  'MONGO_URI',
+  'REDIS_URI',
+  'REDIS_PASSWORD',
+]);
+
+/** Returns true when `varName` refers to an infrastructure secret that must not leak. */
+export function isSensitiveEnvVar(varName: string): boolean {
+  return SENSITIVE_ENV_VARS.has(varName);
 }
 
 /** Extracts the environment variable name from a template literal string */
@@ -22,7 +84,7 @@ export function extractVariableName(value: string): string | null {
     return null;
   }
 
-  return parseEnvVariableName(value.trim());
+  return parseWholePlaceholder(value.trim());
 }
 
 /** Extracts the value of an environment variable from a string. */
@@ -32,37 +94,23 @@ export function extractEnvVariable(value: string) {
   }
 
   const trimmed = value.trim();
+  const whitespaceSeparatedTokens = trimmed.split(/\s+/);
+  const isPlaceholderList =
+    whitespaceSeparatedTokens.length > 1 && whitespaceSeparatedTokens.every(isPlaceholderToken);
 
-  const singleVariableName = parseEnvVariableName(trimmed);
-  if (singleVariableName) {
-    return process.env[singleVariableName] || trimmed;
+  if (isPlaceholderList) {
+    return trimmed;
   }
 
-  let result = '';
-  let index = 0;
-
-  while (index < trimmed.length) {
-    const startIndex = trimmed.indexOf(ENV_VAR_PREFIX, index);
-    if (startIndex < 0) {
-      result += trimmed.slice(index);
-      break;
+  const varName = parseWholePlaceholder(trimmed);
+  if (varName) {
+    if (isSensitiveEnvVar(varName)) {
+      return trimmed;
     }
-
-    result += trimmed.slice(index, startIndex);
-
-    const endIndex = trimmed.indexOf(ENV_VAR_SUFFIX, startIndex + ENV_VAR_PREFIX.length);
-    if (endIndex < 0) {
-      result += trimmed.slice(startIndex);
-      break;
-    }
-
-    const variableName = trimmed.slice(startIndex + ENV_VAR_PREFIX.length, endIndex);
-    const fullMatch = trimmed.slice(startIndex, endIndex + 1);
-    result += process.env[variableName] || fullMatch;
-    index = endIndex + 1;
+    return process.env[varName] || trimmed;
   }
 
-  return result;
+  return replaceInlinePlaceholders(trimmed);
 }
 
 /**

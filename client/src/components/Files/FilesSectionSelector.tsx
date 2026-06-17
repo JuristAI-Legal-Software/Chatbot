@@ -4,18 +4,10 @@ import { useLocalize } from '~/hooks';
 import { Button } from '../ui';
 
 export default function FilesSectionSelector() {
+  const localize = useLocalize();
   const navigate = useNavigate();
   const location = useLocation();
-  const localize = useLocalize();
-
-  let selectedPage = '/vector-stores';
-
-  if (location.pathname.includes('vector-stores')) {
-    selectedPage = '/vector-stores';
-  }
-  if (location.pathname.includes('files')) {
-    selectedPage = '/files';
-  }
+  const selectedPage = location.pathname.includes('files') ? '/files' : '/vector-stores';
 
   const darkButton = { backgroundColor: 'black', color: 'white' };
   const lightButton = { backgroundColor: '#f9f9f9', color: 'black' };
@@ -27,7 +19,6 @@ export default function FilesSectionSelector() {
           className="w-full rounded rounded-lg border"
           style={selectedPage === '/vector-stores' ? darkButton : lightButton}
           onClick={() => {
-            selectedPage = '/vector-stores';
             navigate('/d/vector-stores');
           }}
         >
@@ -39,7 +30,6 @@ export default function FilesSectionSelector() {
           className="w-full rounded rounded-lg border"
           style={selectedPage === '/files' ? darkButton : lightButton}
           onClick={() => {
-            selectedPage = '/files';
             navigate('/d/files');
           }}
         >

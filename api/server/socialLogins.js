@@ -1,19 +1,41 @@
 const passport = require('passport');
 const session = require('express-session');
 const { CacheKeys } = require('librechat-data-provider');
-const { isEnabled, shouldUseSecureCookie } = require('@librechat/api');
+const { isEnabled } = require('@librechat/api');
 const { logger, DEFAULT_SESSION_EXPIRY } = require('@librechat/data-schemas');
 const {
   openIdJwtLogin,
   facebookLogin,
+  facebookAdminLogin,
   discordLogin,
+  discordAdminLogin,
   setupOpenId,
   googleLogin,
+  googleAdminLogin,
   githubLogin,
+  githubAdminLogin,
   appleLogin,
+  appleAdminLogin,
   setupSaml,
 } = require('~/strategies');
 const { getLogStores } = require('~/cache');
+
+function mountAuthSessionMiddleware(app, sessionOptions) {
+  const secureSessionOptions = {
+    ...sessionOptions,
+    proxy: true,
+    cookie: {
+      ...sessionOptions.cookie,
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: true,
+    },
+  };
+  const sessionMiddleware = session(secureSessionOptions);
+  const passportSessionMiddleware = passport.session();
+  app.use('/oauth', sessionMiddleware, passportSessionMiddleware);
+  app.use('/api/admin/oauth', sessionMiddleware, passportSessionMiddleware);
+}
 
 /**
  * Configures OpenID Connect for the application.
@@ -30,11 +52,10 @@ async function configureOpenId(app) {
     store: getLogStores(CacheKeys.OPENID_SESSION),
     cookie: {
       maxAge: sessionExpiry,
-      secure: shouldUseSecureCookie(),
+      secure: true,
     },
   };
-  app.use(session(sessionOptions));
-  app.use(passport.session());
+  mountAuthSessionMiddleware(app, sessionOptions);
 
   const config = await setupOpenId();
   if (!config) {
@@ -58,22 +79,27 @@ const configureSocialLogins = async (app) => {
 
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     passport.use(googleLogin());
+    passport.use('googleAdmin', googleAdminLogin());
   }
   if (process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET) {
     passport.use(facebookLogin());
+    passport.use('facebookAdmin', facebookAdminLogin());
   }
   if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
     passport.use(githubLogin());
+    passport.use('githubAdmin', githubAdminLogin());
   }
   if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) {
     passport.use(discordLogin());
+    passport.use('discordAdmin', discordAdminLogin());
   }
   if (process.env.APPLE_CLIENT_ID && process.env.APPLE_PRIVATE_KEY_PATH) {
     passport.use(appleLogin());
+    passport.use('appleAdmin', appleAdminLogin());
   }
   if (
     process.env.OPENID_CLIENT_ID &&
-    process.env.OPENID_CLIENT_SECRET &&
+    (isEnabled(process.env.OPENID_USE_PKCE) || process.env.OPENID_CLIENT_SECRET?.trim()) &&
     process.env.OPENID_ISSUER &&
     process.env.OPENID_SCOPE &&
     process.env.OPENID_SESSION_SECRET
@@ -95,11 +121,10 @@ const configureSocialLogins = async (app) => {
       store: getLogStores(CacheKeys.SAML_SESSION),
       cookie: {
         maxAge: sessionExpiry,
-        secure: shouldUseSecureCookie(),
+        secure: true,
       },
     };
-    app.use(session(sessionOptions));
-    app.use(passport.session());
+    mountAuthSessionMiddleware(app, sessionOptions);
     setupSaml();
 
     logger.info('SAML Connect configured.');

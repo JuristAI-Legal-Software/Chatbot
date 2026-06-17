@@ -1,3 +1,10 @@
+const esModules = [
+  'uuid',
+  '@mistralai[\\\\/]mistralai',
+  '@langchain[\\\\/]langgraph',
+  '@langchain[\\\\/]langgraph-checkpoint',
+].join('|');
+
 export default {
   collectCoverageFrom: ['src/**/*.{js,jsx,ts,tsx}', '!<rootDir>/node_modules/'],
   coveragePathIgnorePatterns: ['/node_modules/', '/dist/'],
@@ -7,9 +14,12 @@ export default {
     '\\.dev\\.ts$',
     '\\.helper\\.ts$',
     '\\.helper\\.d\\.ts$',
+    '/__tests__/helpers/',
+    '\\.manual\\.spec\\.[jt]sx?$',
   ],
   coverageReporters: ['text', 'cobertura'],
   testResultsProcessor: 'jest-junit',
+  transformIgnorePatterns: [`[/\\\\]node_modules[/\\\\](?!(${esModules})([/\\\\]|$))`],
   transform: {
     '\\.[jt]sx?$': [
       'babel-jest',
@@ -33,6 +43,8 @@ export default {
   //     lines: 57,
   //   },
   // },
+  setupFiles: ['<rootDir>/jest.setup.cjs'],
+  maxWorkers: '50%',
   restoreMocks: true,
   testTimeout: 15000,
 };

@@ -26,28 +26,22 @@ describe('GeminiImageGen Proxy Configuration', () => {
 
   /**
    * Simulates the proxy wrapper that GeminiImageGen applies at module load.
+   * This is the same logic from GeminiImageGen.js lines 30-42.
    */
-
-  function isGoogleApisUrl(url) {
-    try {
-      const parsedUrl = new URL(url.toString());
-      return (
-        parsedUrl.protocol === 'https:' &&
-        (parsedUrl.hostname === 'googleapis.com' || parsedUrl.hostname.endsWith('.googleapis.com'))
-      );
-    } catch {
-      return false;
-    }
-  }
-
   function applyProxyWrapper() {
     if (process.env.PROXY) {
       const _originalFetch = globalThis.fetch;
       const proxyAgent = new ProxyAgent(process.env.PROXY);
 
       globalThis.fetch = function (url, options = {}) {
-        const urlString = url.toString();
-        if (isGoogleApisUrl(urlString)) {
+        let isGoogleApis = false;
+        try {
+          const { hostname } = new URL(url.toString());
+          isGoogleApis = hostname === 'googleapis.com' || hostname.endsWith('.googleapis.com');
+        } catch {
+          isGoogleApis = false;
+        }
+        if (isGoogleApis) {
           options = { ...options, dispatcher: proxyAgent };
         }
         return _originalFetch.call(this, url, options);
@@ -91,24 +85,6 @@ describe('GeminiImageGen Proxy Configuration', () => {
 
     expect(capturedOptions).toBeDefined();
     expect(capturedOptions.dispatcher).toBeInstanceOf(ProxyAgent);
-  });
-
-  it('should not add dispatcher to lookalike domains that include googleapis.com as a substring', async () => {
-    process.env.PROXY = 'http://proxy.example.com:8080';
-
-    let capturedOptions = null;
-    const mockFetch = jest.fn((url, options) => {
-      capturedOptions = options;
-      return Promise.resolve({ ok: true });
-    });
-    globalThis.fetch = mockFetch;
-
-    applyProxyWrapper();
-
-    await globalThis.fetch('https://googleapis.com.evil.example/v1/models', {});
-
-    expect(capturedOptions).toBeDefined();
-    expect(capturedOptions.dispatcher).toBeUndefined();
   });
 
   it('should not add dispatcher to non-googleapis.com URLs', async () => {

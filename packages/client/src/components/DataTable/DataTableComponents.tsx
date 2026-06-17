@@ -40,6 +40,16 @@ export const SelectionCheckbox = memo(
 
 SelectionCheckbox.displayName = 'SelectionCheckbox';
 
+const getCellWidthStyle = (columnId: string, percent?: number): React.CSSProperties | undefined => {
+  if (columnId === 'select') {
+    return { width: '32px', maxWidth: '32px', minWidth: '32px' };
+  }
+  if (percent) {
+    return { width: `${percent}%`, maxWidth: `${percent}%`, minWidth: `${percent}%` };
+  }
+  return undefined;
+};
+
 interface TableRowComponentProps<TData extends Record<string, unknown>> {
   row: Row<TData>;
   virtualIndex?: number;
@@ -70,16 +80,7 @@ const TableRowComponent = <TData extends Record<string, unknown>>(
         const isDesktopOnly = meta?.desktopOnly;
         const isRowHeader = meta?.isRowHeader;
         const percent = meta?.width;
-        const widthStyle =
-          cell.column.id === 'select'
-            ? { width: '32px', maxWidth: '32px', minWidth: '32px' }
-            : percent
-              ? {
-                  width: `${percent}%`,
-                  maxWidth: `${percent}%`,
-                  minWidth: `${percent}%`, // Don't shrink on mobile
-                }
-              : undefined;
+        const widthStyle = getCellWidthStyle(cell.column.id, percent);
 
         const CellComponent = isRowHeader ? TableRowHeader : TableCell;
 
@@ -113,7 +114,7 @@ const TableRowComponent = <TData extends Record<string, unknown>>(
 
 type ForwardTableRowComponentType = <TData extends Record<string, unknown>>(
   props: TableRowComponentProps<TData> & React.RefAttributes<HTMLTableRowElement>,
-) => JSX.Element;
+) => React.JSX.Element;
 
 const ForwardTableRowComponent = forwardRef(TableRowComponent) as ForwardTableRowComponentType;
 
@@ -125,7 +126,7 @@ interface GenericRowProps {
 }
 
 export const MemoizedTableRow = memo(
-  ForwardTableRowComponent as (props: GenericRowProps) => JSX.Element,
+  ForwardTableRowComponent as (props: GenericRowProps) => React.JSX.Element,
   (prev: GenericRowProps, next: GenericRowProps) =>
     prev.row.original === next.row.original && prev.selected === next.selected,
 );
