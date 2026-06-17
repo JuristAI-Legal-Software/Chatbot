@@ -36,22 +36,22 @@ jobs:
       - name: Build Docker image
         run: |
           IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
+          IMAGE_TAG="${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
           docker build --no-cache --pull \
             --build-arg NODE_MAX_OLD_SPACE_SIZE=8192 \
             --build-arg NPM_CI_TIMEOUT_SECONDS=2400 \
             --build-arg NPM_CI_ATTEMPTS=3 \
-            -t "$IMAGE_URI:${GITHUB_SHA}" \
-            -t "$IMAGE_URI:latest" \
+            -t "$IMAGE_URI:$IMAGE_TAG" \
             .
 
       - name: Push Docker image
         run: |
           IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
-          docker push "$IMAGE_URI:${GITHUB_SHA}"
-          docker push "$IMAGE_URI:latest"
+          IMAGE_TAG="${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
+          docker push "$IMAGE_URI:$IMAGE_TAG"
 
       - name: Print pushed image
         run: |
           IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
-          echo "Pushed $IMAGE_URI:${GITHUB_SHA}"
-          echo "Pushed $IMAGE_URI:latest"
+          IMAGE_TAG="${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
+          echo "Pushed $IMAGE_URI:$IMAGE_TAG"
