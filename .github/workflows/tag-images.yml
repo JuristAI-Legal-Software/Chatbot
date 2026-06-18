@@ -67,6 +67,9 @@ jobs:
         run: |
           cp .env.example .env
 
+      - name: Set lowercase owner
+        run: echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Compute build metadata
         run: |
           echo "BUILD_COMMIT=${{ github.sha }}" >> $GITHUB_ENV
@@ -83,9 +86,9 @@ jobs:
           set -euo pipefail
           {
             echo 'tags<<EOF'
-            printf 'ghcr.io/%s/%s:%s\n' "$GITHUB_REPOSITORY_OWNER" "$IMAGE_NAME" "$IMAGE_TAG"
+            printf 'ghcr.io/%s/%s:%s\n' "$OWNER" "$IMAGE_NAME" "$IMAGE_TAG"
             if [ "$IS_STABLE" = "true" ]; then
-              printf 'ghcr.io/%s/%s:latest\n' "$GITHUB_REPOSITORY_OWNER" "$IMAGE_NAME"
+              printf 'ghcr.io/%s/%s:latest\n' "$OWNER" "$IMAGE_NAME"
             fi
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
