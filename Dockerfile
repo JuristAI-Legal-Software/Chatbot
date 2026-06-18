@@ -4,7 +4,6 @@
 FROM alpine:3.24 AS node
 
 RUN apk update && apk upgrade --no-cache && apk add --no-cache nodejs npm python3 py3-pip uv jemalloc && addgroup -S node && adduser -S node -G node
-RUN npm install -g npm@10.9.4 && node --version && npm --version
 
 # Set environment variable to use jemalloc
 ENV LD_PRELOAD=/usr/lib/libjemalloc.so.2
@@ -31,7 +30,6 @@ COPY --chown=node:node packages/data-schemas/package.json ./packages/data-schema
 COPY --chown=node:node packages/api/package.json ./packages/api/package.json
 
 RUN \
-    # Allow mounting of these files, which have no default
     touch .env ; \
     # Create directories for the volumes to inherit the correct permissions
     mkdir -p /app/client/public/images /app/logs /app/uploads ; \
@@ -39,12 +37,12 @@ RUN \
     npm config set fetch-retries 5 ; \
     npm config set fetch-retry-mintimeout 15000 ; \
     attempt=1 ; \
-    until timeout "$NPM_CI_TIMEOUT_SECONDS" npm ci --no-audit ; do \
+    until timeout "$NPM_CI_TIMEOUT_SECONDS" npm install --legacy-peer-deps --ignore-scripts --no-audit ; do \
         status=$? ; \
         if [ "$attempt" -ge "$NPM_CI_ATTEMPTS" ]; then \
             exit "$status" ; \
         fi ; \
-        echo "npm ci --no-audit failed with exit code $status; retrying attempt $((attempt + 1))/$NPM_CI_ATTEMPTS" ; \
+        echo "npm install --legacy-peer-deps --ignore-scripts --no-audit failed with exit code $status; retrying attempt $((attempt + 1))/$NPM_CI_ATTEMPTS" ; \
         attempt=$((attempt + 1)) ; \
         npm cache clean --force || true ; \
         sleep 10 ; \
@@ -58,6 +56,11 @@ RUN \
     npm prune --production; \
     rm -rf /usr/local/include/node; \
     npm cache clean --force
+
+USER root
+# Remove npm tooling from final image for Vanta/AWS Inspector.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/lib/node_modules/npm /usr/bin/npm /usr/bin/npx /home/node/.npm
+USER node
 
 # Optional build metadata surfaced in Settings -> About for support triage.
 # Declared here (after the heavy install/build steps) so that commit/date
