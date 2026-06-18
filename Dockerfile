@@ -1,11 +1,10 @@
 # v0.8.6-rc1
 
 # Base node image
-FROM node:22-alpine AS node
+FROM alpine:3.24 AS node
 
-RUN apk update && apk upgrade --no-cache
-RUN apk update && apk upgrade --no-cache && apk add --no-cache jemalloc
-RUN apk update && apk upgrade --no-cache && apk add --no-cache python3 py3-pip uv
+RUN apk update && apk upgrade --no-cache && apk add --no-cache nodejs npm python3 py3-pip uv jemalloc && addgroup -S node && adduser -S node -G node
+RUN npm install -g npm@10.9.4 && node --version && npm --version
 
 # Set environment variable to use jemalloc
 ENV LD_PRELOAD=/usr/lib/libjemalloc.so.2
