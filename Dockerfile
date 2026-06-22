@@ -59,21 +59,6 @@ RUN \
         sleep 10 ; \
     done
 
-# Force patched package versions for Vanta high/medium findings.
-# Remove package.json overrides inside the image first; npm rejects forced installs when
-# an override conflicts with a direct dependency.
-RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.parse(fs.readFileSync(p,"utf8")); const names=["hono","form-data","protobufjs","multer","uuid","dompurify","@opentelemetry/core","undici","nodemailer"]; if (pkg.overrides) { for (const n of names) delete pkg.overrides[n]; } fs.writeFileSync(p, JSON.stringify(pkg,null,2));' \
-    && npm install --legacy-peer-deps --ignore-scripts --no-audit --save=false \
-    hono@4.12.25 \
-    form-data@4.0.6 \
-    protobufjs@8.4.1 \
-    multer@3.0.0-alpha.2 \
-    uuid@13.0.1 \
-    dompurify@3.4.11 \
-    @opentelemetry/core@latest \
-    undici@latest \
-    nodemailer@latest
-
 COPY --chown=node:node . .
 
 RUN \
@@ -83,6 +68,19 @@ RUN \
     rm -rf /usr/local/include/node; \
     npm cache clean --force
 
+# Re-apply patched package versions after npm prune for Vanta high/medium findings.
+RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.parse(fs.readFileSync(p,"utf8")); const names=["hono","form-data","protobufjs","multer","uuid","dompurify","@opentelemetry/core","undici","nodemailer"]; if (pkg.overrides) { for (const n of names) delete pkg.overrides[n]; } fs.writeFileSync(p, JSON.stringify(pkg,null,2));' \
+    && npm install --force --legacy-peer-deps --ignore-scripts --no-audit --omit=dev --save=false \
+    hono@4.12.25 \
+    form-data@4.0.6 \
+    protobufjs@8.4.1 \
+    multer@3.0.0-alpha.2 \
+    uuid@13.0.1 \
+    dompurify@3.4.11 \
+    @opentelemetry/core@latest \
+    undici@latest \
+    nodemailer@latest \
+    && npm cache clean --force
 USER root
 # Remove npm tooling from final image for Vanta/AWS Inspector.
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/lib/node_modules/npm /usr/bin/npm /usr/bin/npx /home/node/.npm
