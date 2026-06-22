@@ -54,11 +54,10 @@ RUN npm install --legacy-peer-deps --ignore-scripts --no-audit --save=false \
     form-data@4.0.6 \
     protobufjs@8.4.1 \
     multer@3.0.0-alpha.2 \
-    uuid@13.0.1 \
-    dompurify@3.4.8 \
-    @opentelemetry/core@2.7.2 \
-    undici@7.28.0 \
-    nodemailer@8.0.11
+    dompurify@latest \
+    @opentelemetry/core@latest \
+    undici@latest \
+    nodemailer@latest
 
 COPY --chown=node:node . .
 
