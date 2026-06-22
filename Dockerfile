@@ -3,7 +3,18 @@
 # Base node image
 FROM alpine:3.24 AS node
 
-RUN apk update && apk upgrade --no-cache && apk add --no-cache nodejs npm python3 py3-pip uv jemalloc && addgroup -S node && adduser -S node -G node
+RUN set -eux; \
+    for i in 1 2 3 4 5; do \
+        apk update \
+        && apk upgrade --no-cache \
+        && apk add --no-cache nodejs npm python3 py3-pip uv jemalloc \
+        && break; \
+        echo "apk install failed; retrying $i/5"; \
+        rm -rf /var/cache/apk/* /tmp/*; \
+        sleep 10; \
+    done; \
+    addgroup -S node; \
+    adduser -S node -G node
 
 # Set environment variable to use jemalloc
 ENV LD_PRELOAD=/usr/lib/libjemalloc.so.2
@@ -49,12 +60,16 @@ RUN \
     done
 
 # Force patched package versions for Vanta high/medium findings.
-RUN npm install --legacy-peer-deps --ignore-scripts --no-audit --save=false \
+# Remove package.json overrides inside the image first; npm rejects forced installs when
+# an override conflicts with a direct dependency.
+RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.parse(fs.readFileSync(p,"utf8")); const names=["hono","form-data","protobufjs","multer","uuid","dompurify","@opentelemetry/core","undici","nodemailer"]; if (pkg.overrides) { for (const n of names) delete pkg.overrides[n]; } fs.writeFileSync(p, JSON.stringify(pkg,null,2));' \
+    && npm install --legacy-peer-deps --ignore-scripts --no-audit --save=false \
     hono@4.12.25 \
     form-data@4.0.6 \
     protobufjs@8.4.1 \
     multer@3.0.0-alpha.2 \
-    dompurify@latest \
+    uuid@13.0.1 \
+    dompurify@3.4.11 \
     @opentelemetry/core@latest \
     undici@latest \
     nodemailer@latest
