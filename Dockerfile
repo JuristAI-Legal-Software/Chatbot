@@ -50,15 +50,15 @@ RUN \
 
 # Force patched package versions for Vanta high/medium findings.
 RUN npm install --legacy-peer-deps --ignore-scripts --no-audit --save=false \
-    hono@latest \
-    form-data@latest \
-    protobufjs@latest \
-    multer@latest \
-    uuid@latest \
-    dompurify@latest \
-    @opentelemetry/core@latest \
-    undici@latest \
-    nodemailer@latest
+    hono@4.12.25 \
+    form-data@4.0.6 \
+    protobufjs@8.4.1 \
+    multer@3.0.0-alpha.2 \
+    uuid@13.0.1 \
+    dompurify@3.4.8 \
+    @opentelemetry/core@2.7.2 \
+    undici@7.28.0 \
+    nodemailer@8.0.11
 
 COPY --chown=node:node . .
 
