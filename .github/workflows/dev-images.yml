@@ -77,7 +77,7 @@ jobs:
           tags: |
             ghcr.io/${{ env.OWNER }}/${{ matrix.image_name }}:${{ github.sha }}
             ghcr.io/${{ env.OWNER }}/${{ matrix.image_name }}:latest
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           target: ${{ matrix.target }}
           build-args: |
             BUILD_COMMIT=${{ env.BUILD_COMMIT }}
