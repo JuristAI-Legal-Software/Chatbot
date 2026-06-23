@@ -80,7 +80,7 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
     nodemailer@9.0.1 \
     dompurify@3.4.11 \
     @opentelemetry/core@2.8.0 \
-    file-type@latest \
+    file-type@21.3.1 \
     && rm -rf /app/node_modules/gaxios/node_modules/uuid \
     && mkdir -p /app/node_modules/gaxios/node_modules \
     && cp -a /app/node_modules/uuid /app/node_modules/gaxios/node_modules/uuid \
@@ -95,6 +95,9 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
     && rm -rf /app/api/node_modules/nodemailer \
     && mkdir -p /app/api/node_modules \
     && cp -a /app/node_modules/nodemailer /app/api/node_modules/nodemailer \
+    && rm -rf /app/node_modules/stream-file-type/node_modules/file-type \
+    && mkdir -p /app/node_modules/stream-file-type/node_modules \
+    && cp -a /app/node_modules/file-type /app/node_modules/stream-file-type/node_modules/file-type \
     && rm -f /app/packages/data-provider/react-query/package-lock.json \
     && rm -f /app/node_modules/@monaco-editor/loader/playground/package-lock.json \
     && npm cache clean --force
