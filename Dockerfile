@@ -69,22 +69,34 @@ RUN \
     npm cache clean --force
 
 # Re-apply patched package versions after npm prune for Vanta high/medium findings.
-RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.parse(fs.readFileSync(p,"utf8")); const names=["form-data","protobufjs","uuid","nodemailer"]; if (pkg.overrides) { for (const n of names) delete pkg.overrides[n]; } fs.writeFileSync(p, JSON.stringify(pkg,null,2));' \
+RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.parse(fs.readFileSync(p,"utf8")); const names=["hono","multer","undici","uuid","form-data","protobufjs","nodemailer","dompurify","@opentelemetry/core","file-type"]; if (pkg.overrides) { for (const n of names) delete pkg.overrides[n]; } fs.writeFileSync(p, JSON.stringify(pkg,null,2));' \
     && npm install --force --legacy-peer-deps --ignore-scripts --no-audit --omit=dev --save=false \
-    form-data@4.0.6 \
-    protobufjs@8.4.1 \
+    hono@4.12.25 \
+    multer@3.0.0-alpha.2 \
+    undici@8.5.0 \
     uuid@13.0.1 \
+    form-data@4.0.6 \
+    protobufjs@8.6.5 \
     nodemailer@9.0.1 \
+    dompurify@3.4.11 \
+    @opentelemetry/core@2.8.0 \
+    file-type@latest \
+    && rm -rf /app/node_modules/gaxios/node_modules/uuid \
+    && mkdir -p /app/node_modules/gaxios/node_modules \
+    && cp -a /app/node_modules/uuid /app/node_modules/gaxios/node_modules/uuid \
     && rm -rf /app/node_modules/@langchain/google-common/node_modules/uuid \
     && mkdir -p /app/node_modules/@langchain/google-common/node_modules \
     && cp -a /app/node_modules/uuid /app/node_modules/@langchain/google-common/node_modules/uuid \
     && rm -rf /app/node_modules/@hyperdx/otel-web-session-recorder/node_modules/protobufjs \
     && mkdir -p /app/node_modules/@hyperdx/otel-web-session-recorder/node_modules \
     && cp -a /app/node_modules/protobufjs /app/node_modules/@hyperdx/otel-web-session-recorder/node_modules/protobufjs \
+    && find /app/node_modules/@opentelemetry -path "*/node_modules/@opentelemetry/core" -type d -prune -exec rm -rf {} + \
+    && find /app/node_modules/@opentelemetry -path "*/node_modules/@opentelemetry" -type d -exec sh -c 'mkdir -p "$1"; cp -a /app/node_modules/@opentelemetry/core "$1/core"' sh {} \; \
     && rm -rf /app/api/node_modules/nodemailer \
     && mkdir -p /app/api/node_modules \
     && cp -a /app/node_modules/nodemailer /app/api/node_modules/nodemailer \
     && rm -f /app/packages/data-provider/react-query/package-lock.json \
+    && rm -f /app/node_modules/@monaco-editor/loader/playground/package-lock.json \
     && npm cache clean --force
 USER root
 # Remove npm tooling from final image for Vanta/AWS Inspector.
