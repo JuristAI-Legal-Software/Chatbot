@@ -133,6 +133,12 @@ async function getAccessToken(page: Page) {
   return refreshResponse.json?.token as string;
 }
 
+async function applyAccessToken(page: Page, accessToken: string) {
+  await page.evaluate((token) => {
+    window.dispatchEvent(new CustomEvent('tokenUpdated', { detail: token }));
+  }, accessToken);
+}
+
 async function fetchAuthorizedJson<T>(page: Page, url: string, accessToken: string) {
   return page.evaluate(
     async ({ accessToken: token, targetUrl }) => {
@@ -187,10 +193,21 @@ async function openEndpointMenu(page: Page, endpoint = endpoints[1]) {
 
   const legacyMenuOpened = await clickIfVisible(page.getByTestId('new-conversation-menu'));
   if (legacyMenuOpened) {
-    await clickIfVisible(page.locator(`#${endpoint}`));
+    await clickIfVisible(page.getByTestId(`endpoint-item-${endpoint}`));
   }
 
-  await expect(page.locator('form').getByRole('textbox')).toBeVisible({ timeout: 15000 });
+  const textInput = page.getByTestId('text-input');
+  if (await textInput.isVisible().catch(() => false)) {
+    await expect(textInput).toBeVisible({ timeout: 15000 });
+    return;
+  }
+
+  const modernMenuOpened = await clickIfVisible(page.getByRole('button', { name: /Select a model/i }));
+  if (modernMenuOpened) {
+    await clickIfVisible(page.getByTestId(`endpoint-item-${endpoint}`));
+  }
+
+  await expect(textInput).toBeVisible({ timeout: 15000 });
 }
 
 async function openMCPMenu(page: Page) {
@@ -276,6 +293,8 @@ test.describe('MCP account data regression', () => {
 
     await page.goto(initialUrl, { timeout: 10000 });
     const accessToken = await getAccessToken(page);
+    await applyAccessToken(page, accessToken);
+    await page.goto(initialUrl, { timeout: 10000 });
 
     const [toolsResponse, serverConfigResponse] = await Promise.all([
       fetchAuthorizedJson<MCPToolsResponse>(page, 'http://localhost:3080/api/mcp/tools', accessToken),

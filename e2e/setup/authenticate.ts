@@ -7,31 +7,67 @@ dotenv.config();
 
 const timeout = Number(process.env.E2E_AUTH_TIMEOUT ?? 15000);
 
-async function register(page: Page, user: User) {
-  await page.getByRole('link', { name: 'Sign up' }).click();
-  await page.getByLabel('Full name').click();
-  await page.getByLabel('Full name').fill(user.name);
-  await page.getByLabel('Email').click();
-  await page.getByLabel('Email').fill(user.email);
-  await page.getByLabel('Email').press('Tab');
-  await page.getByTestId('password').click();
-  await page.getByTestId('password').fill(user.password);
-  await page.getByTestId('confirm_password').click();
-  await page.getByTestId('confirm_password').fill(user.password);
-  await page.getByLabel('Submit registration').click();
+async function registerViaApi(page: Page, user: User) {
+  return page.evaluate(async (payload) => {
+    const response = await fetch('/api/auth/register', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const text = await response.text();
+    let json: unknown;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = undefined;
+    }
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      text,
+      json,
+    };
+  }, {
+    name: user.name,
+    email: user.email,
+    password: user.password,
+    confirm_password: user.password,
+  });
 }
 
-async function registrationErrorIsVisible(page: Page) {
-  return page
-    .getByTestId('registration-error')
-    .isVisible({ timeout: 500 })
-    .catch(() => false);
-}
+async function loginViaApi(page: Page, user: User) {
+  return page.evaluate(async (payload) => {
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
 
-async function login(page: Page, user: User) {
-  await page.getByLabel('Email').fill(user.email);
-  await page.getByLabel('Password').fill(user.password);
-  await page.getByTestId('login-button').click();
+    const text = await response.text();
+    let json: unknown;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = undefined;
+    }
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      text,
+      json,
+    };
+  }, { email: user.email, password: user.password });
 }
 
 function appURL(baseURL: string, pathname = '') {
@@ -59,7 +95,6 @@ async function authenticate(config: FullConfig, user: User) {
       throw new Error('🤖: baseURL is not defined');
     }
     const conversationURL = appURL(baseURL, 'c/new');
-    const loginURL = appURL(baseURL, 'login');
 
     // Set localStorage before navigating to the page
     await page.context().addInitScript(() => {
@@ -68,26 +103,32 @@ async function authenticate(config: FullConfig, user: User) {
     console.log('🤖: ✔️  localStorage: set Nav as Visible', storageState);
 
     await page.goto(baseURL, { timeout });
-    await register(page, user);
-    try {
-      await page.waitForURL(conversationURL, { timeout });
-    } catch (error) {
-      console.error('Error:', error);
-      if (await registrationErrorIsVisible(page)) {
+
+    let registrationResponse = await registerViaApi(page, user);
+    if (!registrationResponse.ok) {
+      if (registrationResponse.status === 400 || registrationResponse.status === 409) {
         console.log('🤖: 🚨  user already exists');
         await cleanupUser(user);
-        await page.goto(baseURL, { timeout });
-        await register(page, user);
-        await page.waitForURL(conversationURL, { timeout });
-      } else {
-        throw new Error('🤖: 🚨  user failed to register');
+        registrationResponse = await registerViaApi(page, user);
       }
+    }
+
+    if (!registrationResponse.ok) {
+      throw new Error(
+        `🤖: 🚨  registration API failed (${registrationResponse.status}): ${registrationResponse.text}`,
+      );
     }
     console.log('🤖: ✔️  user successfully registered');
 
-    await page.goto(loginURL, { timeout });
-    await login(page, user);
-    await page.waitForURL(conversationURL, { timeout });
+    const loginResponse = await loginViaApi(page, user);
+    if (!loginResponse.ok) {
+      throw new Error(
+        `🤖: 🚨  login API failed after registration (${loginResponse.status}): ${loginResponse.text}`,
+      );
+    }
+
+    await page.goto(conversationURL, { timeout });
+
     console.log('🤖: ✔️  user successfully authenticated');
 
     await page.context().storageState({ path: storageState });

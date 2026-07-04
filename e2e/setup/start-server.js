@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const fs = require('fs');
 const net = require('net');
 const path = require('path');
@@ -5,7 +6,32 @@ require('dotenv').config();
 
 const DEFAULT_MONGO_URI = 'mongodb://127.0.0.1:27017/LibreChat-e2e';
 const DEFAULT_RUNTIME_ENV_PATH = path.resolve(__dirname, '../specs/.test-results/runtime-env.json');
+const DEFAULT_BASE_URL = 'http://localhost:3080';
+const GENERATED_CREDS_KEY = crypto.randomBytes(32).toString('hex');
+const GENERATED_CREDS_IV = crypto.randomBytes(16).toString('hex');
+const GENERATED_JWT_SECRET = crypto.randomBytes(32).toString('hex');
+const GENERATED_JWT_REFRESH_SECRET = crypto.randomBytes(32).toString('hex');
 let mongoServer;
+
+function ensureDefaultEnv() {
+  process.env.NODE_ENV = process.env.NODE_ENV || 'CI';
+  process.env.HOST = process.env.HOST || '127.0.0.1';
+  process.env.PORT = process.env.PORT || '3080';
+  process.env.MONGO_URI = process.env.MONGO_URI || DEFAULT_MONGO_URI;
+  process.env.DOMAIN_CLIENT = process.env.DOMAIN_CLIENT || DEFAULT_BASE_URL;
+  process.env.DOMAIN_SERVER = process.env.DOMAIN_SERVER || DEFAULT_BASE_URL;
+  process.env.ALLOW_REGISTRATION = process.env.ALLOW_REGISTRATION || 'true';
+  process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || 'user_provided';
+  process.env.CREDS_KEY = process.env.CREDS_KEY || GENERATED_CREDS_KEY;
+  process.env.CREDS_IV = process.env.CREDS_IV || GENERATED_CREDS_IV;
+  process.env.JWT_SECRET = process.env.JWT_SECRET || GENERATED_JWT_SECRET;
+  process.env.JWT_REFRESH_SECRET =
+    process.env.JWT_REFRESH_SECRET || GENERATED_JWT_REFRESH_SECRET;
+  process.env.SEARCH = process.env.SEARCH || 'false';
+  process.env.EMAIL_HOST = process.env.EMAIL_HOST || '';
+  process.env.SESSION_EXPIRY = process.env.SESSION_EXPIRY || '60000';
+  process.env.REFRESH_TOKEN_EXPIRY = process.env.REFRESH_TOKEN_EXPIRY || '300000';
+}
 
 function decodeMongoValue(value) {
   try {
@@ -167,6 +193,7 @@ process.once('SIGTERM', async () => {
 });
 
 function startServer() {
+  ensureDefaultEnv();
   return maybeStartMemoryMongo()
     .then(() => {
       require(path.resolve(__dirname, '../../api/server/index.js'));

@@ -12,6 +12,7 @@ jest.mock('@librechat/api', () => ({
 jest.mock('@librechat/data-schemas', () => ({
   logger: {
     error: jest.fn(),
+    warn: jest.fn(),
   },
 }));
 
@@ -60,19 +61,32 @@ jest.mock('~/server/services/Files/process', () => ({
   saveBase64Image: jest.fn(),
 }));
 
+jest.mock('~/models', () => ({
+  createToolCall: jest.fn(),
+}));
+
+jest.mock('~/server/services/Files/retention', () => ({
+  getRetentionExpiry: jest.fn().mockResolvedValue({ expiredAt: '2099-01-01T00:00:00.000Z' }),
+}));
+
 describe('createToolEndCallback', () => {
-  let req, res, artifactPromises, createToolEndCallback;
+  let req, res, artifactPromises, createToolEndCallback, createPersistAgentToolCall;
   let logger;
+  let createToolCall;
+  let getRetentionExpiry;
 
   beforeEach(() => {
     jest.clearAllMocks();
 
     // Get the mocked logger
     logger = require('@librechat/data-schemas').logger;
+    createToolCall = require('~/models').createToolCall;
+    getRetentionExpiry = require('~/server/services/Files/retention').getRetentionExpiry;
 
     // Now require the module after all mocks are set up
     const callbacks = require('../callbacks');
     createToolEndCallback = callbacks.createToolEndCallback;
+    createPersistAgentToolCall = callbacks.createPersistAgentToolCall;
 
     req = {
       user: { id: 'user123' },
@@ -82,6 +96,100 @@ describe('createToolEndCallback', () => {
       write: jest.fn(),
     };
     artifactPromises = [];
+  });
+
+  describe('createPersistAgentToolCall', () => {
+    it('persists tool calls with metadata identifiers', async () => {
+      const persistToolCall = createPersistAgentToolCall({ req });
+
+      await persistToolCall({
+        toolId: 'get-case-metadata',
+        toolCallId: 'tool-123',
+        result: { ok: true, caseId: 'juristai' },
+        metadata: {
+          thread_id: 'conv-123',
+          run_id: 'msg-456',
+        },
+        status: 'success',
+      });
+
+      expect(getRetentionExpiry).toHaveBeenCalledWith(req);
+      expect(createToolCall).toHaveBeenCalledWith({
+        toolId: 'get-case-metadata',
+        messageId: 'msg-456',
+        conversationId: 'conv-123',
+        result: { ok: true, caseId: 'juristai' },
+        user: 'user123',
+        expiredAt: '2099-01-01T00:00:00.000Z',
+      });
+    });
+
+    it('falls back to request body identifiers when metadata is missing', async () => {
+      req.body = {
+        conversationId: 'conv-from-body',
+        messageId: 'msg-from-body',
+      };
+      const persistToolCall = createPersistAgentToolCall({ req });
+
+      await persistToolCall({
+        toolId: 'search-documents',
+        toolCallId: 'tool-456',
+        result: 'ok',
+        status: 'success',
+      });
+
+      expect(createToolCall).toHaveBeenCalledWith({
+        toolId: 'search-documents',
+        messageId: 'msg-from-body',
+        conversationId: 'conv-from-body',
+        result: 'ok',
+        user: 'user123',
+        expiredAt: '2099-01-01T00:00:00.000Z',
+      });
+    });
+
+    it('skips persistence when required identifiers are missing', async () => {
+      const persistToolCall = createPersistAgentToolCall({ req: { user: {} } });
+
+      await persistToolCall({
+        toolId: 'search-documents',
+        toolCallId: 'tool-789',
+        result: 'ok',
+        status: 'success',
+      });
+
+      expect(createToolCall).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        '[persistAgentToolCall] Skipping tool-call persistence due to missing identifiers',
+        expect.objectContaining({
+          hasUserId: false,
+          hasConversationId: false,
+          hasMessageId: false,
+          toolId: 'search-documents',
+        }),
+      );
+    });
+
+    it('logs and swallows persistence errors', async () => {
+      createToolCall.mockRejectedValueOnce(new Error('write failed'));
+      const persistToolCall = createPersistAgentToolCall({ req });
+
+      await persistToolCall({
+        toolId: 'get-case-metadata',
+        toolCallId: 'tool-999',
+        result: 'ok',
+        metadata: {
+          thread_id: 'conv-123',
+          run_id: 'msg-456',
+        },
+        status: 'success',
+      });
+
+      expect(logger.error).toHaveBeenCalledWith(
+        '[persistAgentToolCall] Error creating agent tool call',
+        expect.any(Error),
+      );
+    });
   });
 
   describe('ui_resources artifact handling', () => {
