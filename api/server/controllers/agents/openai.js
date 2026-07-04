@@ -38,6 +38,7 @@ const {
   buildSummarizationHandlers,
   markSummarizationUsage,
   createToolEndCallback,
+  createPersistAgentToolCall,
   agentLogHandlerObj,
 } = require('~/server/controllers/agents/callbacks');
 const { loadAgentTools, loadToolsForExecution } = require('~/server/services/ToolService');
@@ -419,6 +420,7 @@ const OpenAIChatCompletionController = async (req, res) => {
     const artifactPromises = [];
 
     const toolEndCallback = createToolEndCallback({ req, res, artifactPromises, streamId: null });
+    const persistToolCall = createPersistAgentToolCall({ req });
 
     /* Stable for the turn: the prime lists are fixed once
        `initializeAgent` resolves. Hoisted out of `loadTools` so tool
@@ -455,6 +457,7 @@ const OpenAIChatCompletionController = async (req, res) => {
         );
       },
       toolEndCallback,
+      persistToolCall,
       ...getSkillToolDeps(),
     };
 

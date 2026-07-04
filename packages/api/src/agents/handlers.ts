@@ -39,6 +39,17 @@ export type ToolEndCallback = (
   metadata: ToolEndCallbackMetadata,
 ) => Promise<void>;
 
+export type PersistToolCallInput = {
+  toolId: string;
+  toolCallId: string;
+  result: unknown;
+  artifact?: unknown;
+  metadata?: ToolEndCallbackMetadata;
+  status: 'success' | 'error';
+};
+
+export type PersistToolCall = (input: PersistToolCallInput) => Promise<void>;
+
 export interface ToolExecuteOptions {
   /** Loads tools by name, using agentId to look up agent-specific context */
   loadTools: (
@@ -51,6 +62,8 @@ export interface ToolExecuteOptions {
   }>;
   /** Callback to process tool artifacts (code output files, file citations, etc.) */
   toolEndCallback?: ToolEndCallback;
+  /** Optional persistence hook for executed agent tool calls */
+  persistToolCall?: PersistToolCall;
   /**
    * Loads a skill by name with ACL constraint (returns full body for injection).
    *
@@ -1176,7 +1189,19 @@ async function handleSkillToolCall(
  * executes them in parallel, and resolves with the results.
  */
 export function createToolExecuteHandler(options: ToolExecuteOptions): EventHandler {
-  const { loadTools, toolEndCallback } = options;
+  const { loadTools, toolEndCallback, persistToolCall } = options;
+
+  const persistResult = async (input: PersistToolCallInput) => {
+    if (!persistToolCall) {
+      return;
+    }
+
+    try {
+      await persistToolCall(input);
+    } catch (error) {
+      logger.error('[ON_TOOL_EXECUTE] Failed to persist tool call', error);
+    }
+  };
 
   return {
     handle: async (_event: string, data: ToolExecuteBatchRequest) => {
@@ -1222,6 +1247,18 @@ export function createToolExecuteHandler(options: ToolExecuteOptions): EventHand
                     );
                   }
 
+                  await persistResult({
+                    toolId: tc.name,
+                    toolCallId: tc.id,
+                    result:
+                      handlerResult.status === 'error'
+                        ? `Tool call failed: ${handlerResult.errorMessage || handlerResult.content || 'Unknown error'}`
+                        : handlerResult.content,
+                    artifact: handlerResult.artifact,
+                    metadata,
+                    status: handlerResult.status,
+                  });
+
                   return handlerResult;
                 }
 
@@ -1231,6 +1268,13 @@ export function createToolExecuteHandler(options: ToolExecuteOptions): EventHand
                   logger.warn(
                     `[ON_TOOL_EXECUTE] Tool "${tc.name}" not found. Available: ${[...toolMap.keys()].map((k) => `"${k}"`).join(', ')}`,
                   );
+                  await persistResult({
+                    toolId: tc.name,
+                    toolCallId: tc.id,
+                    result: `Tool call failed: Tool ${tc.name} not found`,
+                    metadata,
+                    status: 'error',
+                  });
                   return {
                     toolCallId: tc.id,
                     status: 'error' as const,
@@ -1375,6 +1419,15 @@ export function createToolExecuteHandler(options: ToolExecuteOptions): EventHand
                     );
                   }
 
+                  await persistResult({
+                    toolId: tc.name,
+                    toolCallId: tc.id,
+                    result: cleanedContent,
+                    artifact: result.artifact,
+                    metadata,
+                    status: 'success',
+                  });
+
                   return {
                     toolCallId: tc.id,
                     content: cleanedContent,
@@ -1387,6 +1440,13 @@ export function createToolExecuteHandler(options: ToolExecuteOptions): EventHand
                     ...logContext,
                     toolCallArgsShape: getValueShape(tc.args),
                     toolInputSchemaKind: getToolInputSchemaKind(tool),
+                  });
+                  await persistResult({
+                    toolId: tc.name,
+                    toolCallId: tc.id,
+                    result: `Tool call failed: ${message}`,
+                    metadata,
+                    status: 'error',
                   });
                   return {
                     toolCallId: tc.id,

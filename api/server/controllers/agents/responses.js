@@ -47,6 +47,7 @@ const {
   buildSummarizationHandlers,
   markSummarizationUsage,
   createToolEndCallback,
+  createPersistAgentToolCall,
   agentLogHandlerObj,
 } = require('~/server/controllers/agents/callbacks');
 const { loadAgentTools, loadToolsForExecution } = require('~/server/services/ToolService');
@@ -622,6 +623,7 @@ const createResponse = async (req, res) => {
         tracker,
         artifactPromises,
       });
+      const persistToolCall = createPersistAgentToolCall({ req });
 
       // Create tool execute options for event-driven tool execution
       const toolExecuteOptions = {
@@ -648,6 +650,7 @@ const createResponse = async (req, res) => {
           );
         },
         toolEndCallback,
+        persistToolCall,
         ...getSkillToolDeps(),
       };
 
@@ -802,6 +805,7 @@ const createResponse = async (req, res) => {
       /** @type {Promise<import('librechat-data-provider').TAttachment | null>[]} */
       const artifactPromises = [];
       const toolEndCallback = createToolEndCallback({ req, res, artifactPromises, streamId: null });
+      const persistToolCall = createPersistAgentToolCall({ req });
 
       const toolExecuteOptions = {
         loadTools: async (toolNames, agentId) => {
@@ -827,6 +831,7 @@ const createResponse = async (req, res) => {
           );
         },
         toolEndCallback,
+        persistToolCall,
         ...getSkillToolDeps(),
       };
 

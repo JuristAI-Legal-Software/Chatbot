@@ -14,9 +14,11 @@ const {
   writeAttachmentEvent,
   createToolExecuteHandler,
 } = require('@librechat/api');
+const { createToolCall } = require('~/models');
 const { processFileCitations } = require('~/server/services/Files/Citations');
 const { processCodeOutput, runPreviewFinalize } = require('~/server/services/Files/Code/process');
 const { saveBase64Image } = require('~/server/services/Files/process');
+const { getRetentionExpiry } = require('~/server/services/Files/retention');
 
 class ModelEndHandler {
   /**
@@ -730,6 +732,53 @@ function createToolEndCallback({ req, res, artifactPromises, streamId = null }) 
 }
 
 /**
+ * Persists agent-driven tool execution outcomes so `/api/agents/tools/calls`
+ * can report the concrete tools the model actually invoked.
+ *
+ * @param {object} params
+ * @param {ServerRequest} params.req
+ * @returns {(payload: {
+ *   toolId: string;
+ *   toolCallId: string;
+ *   result: unknown;
+ *   artifact?: unknown;
+ *   metadata?: Record<string, unknown>;
+ *   status: 'success' | 'error';
+ * }) => Promise<void>}
+ */
+function createPersistAgentToolCall({ req }) {
+  return async ({ toolId, result, metadata }) => {
+    const userId = req?.user?.id;
+    const conversationId =
+      metadata?.thread_id ?? req?.body?.conversationId ?? req?.body?.conversation_id ?? null;
+    const messageId = metadata?.run_id ?? req?.body?.messageId ?? req?.body?.message_id ?? null;
+
+    if (!userId || !conversationId || !messageId || !toolId) {
+      logger.warn('[persistAgentToolCall] Skipping tool-call persistence due to missing identifiers', {
+        hasUserId: Boolean(userId),
+        hasConversationId: Boolean(conversationId),
+        hasMessageId: Boolean(messageId),
+        toolId,
+      });
+      return;
+    }
+
+    try {
+      await createToolCall({
+        toolId,
+        messageId,
+        conversationId,
+        result,
+        user: userId,
+        ...(await getRetentionExpiry(req)),
+      });
+    } catch (error) {
+      logger.error('[persistAgentToolCall] Error creating agent tool call', error);
+    }
+  };
+}
+
+/**
  * Helper to write attachment events in Open Responses format (librechat:attachment)
  * @param {ServerResponse} res - The server response object
  * @param {Object} tracker - The response tracker with sequence number
@@ -1065,6 +1114,7 @@ module.exports = {
   agentLogHandlerObj,
   getDefaultHandlers,
   createToolEndCallback,
+  createPersistAgentToolCall,
   isStreamWritable,
   markSummarizationUsage,
   buildSummarizationHandlers,

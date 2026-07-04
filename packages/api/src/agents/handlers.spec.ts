@@ -40,12 +40,14 @@ function createHandler(
 function invokeHandler(
   handler: ReturnType<typeof createToolExecuteHandler>,
   toolCalls: ToolCallRequest[],
+  requestOverrides: Partial<ToolExecuteBatchRequest> = {},
 ): Promise<ToolExecuteResult[]> {
   return new Promise((resolve, reject) => {
     const request: ToolExecuteBatchRequest = {
       toolCalls,
       resolve,
       reject,
+      ...requestOverrides,
     };
     handler.handle('on_tool_execute', request);
   });
@@ -66,6 +68,95 @@ function skillsInScope(): unknown[] {
 }
 
 describe('createToolExecuteHandler', () => {
+  describe('tool call persistence hook', () => {
+    it('persists successful tool executions', async () => {
+      const capturedConfigs: Record<string, unknown>[] = [];
+      const persistToolCall = jest.fn(async () => undefined);
+      const mockTools = [createMockTool(Constants.EXECUTE_CODE, capturedConfigs)];
+      const loadTools: ToolExecuteOptions['loadTools'] = jest.fn(async () => ({
+        loadedTools: mockTools as never[],
+      }));
+      const handler = createToolExecuteHandler({ loadTools, persistToolCall });
+
+      await invokeHandler(
+        handler,
+        [
+          {
+            id: 'call_persist_success',
+            name: Constants.EXECUTE_CODE,
+            args: { lang: 'python', code: 'print("hi")' },
+          },
+        ],
+        {
+          metadata: {
+            thread_id: 'conv-persist-success',
+            run_id: 'msg-persist-success',
+          } as never,
+        },
+      );
+
+      expect(persistToolCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolId: Constants.EXECUTE_CODE,
+          toolCallId: 'call_persist_success',
+          result: expect.stringContaining('execute_code executed'),
+          metadata: expect.objectContaining({
+            thread_id: 'conv-persist-success',
+            run_id: 'msg-persist-success',
+          }),
+          status: 'success',
+        }),
+      );
+    });
+
+    it('persists failed tool executions', async () => {
+      const persistToolCall = jest.fn(async () => undefined);
+      const loadTools: ToolExecuteOptions['loadTools'] = jest.fn(async () => ({
+        loadedTools: [
+          {
+            name: Constants.EXECUTE_CODE,
+            schema: undefined,
+            invoke: jest.fn(async () => {
+              throw new Error('boom');
+            }),
+          },
+        ] as never[],
+      }));
+      const handler = createToolExecuteHandler({ loadTools, persistToolCall });
+
+      const [result] = await invokeHandler(
+        handler,
+        [
+          {
+            id: 'call_persist_error',
+            name: Constants.EXECUTE_CODE,
+            args: { lang: 'python', code: 'raise SystemExit(1)' },
+          },
+        ],
+        {
+          metadata: {
+            thread_id: 'conv-persist-error',
+            run_id: 'msg-persist-error',
+          } as never,
+        },
+      );
+
+      expect(result.status).toBe('error');
+      expect(persistToolCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolId: Constants.EXECUTE_CODE,
+          toolCallId: 'call_persist_error',
+          result: 'Tool call failed: boom',
+          metadata: expect.objectContaining({
+            thread_id: 'conv-persist-error',
+            run_id: 'msg-persist-error',
+          }),
+          status: 'error',
+        }),
+      );
+    });
+  });
+
   describe('code execution session context passthrough', () => {
     it('passes session_id and _injected_files from codeSessionContext to toolCallConfig', async () => {
       const capturedConfigs: Record<string, unknown>[] = [];

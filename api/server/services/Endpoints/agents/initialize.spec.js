@@ -35,6 +35,7 @@ jest.mock('@librechat/api', () => ({
 let capturedToolExecuteOptions;
 jest.mock('~/server/controllers/agents/callbacks', () => ({
   createToolEndCallback: jest.fn(() => jest.fn()),
+  createPersistAgentToolCall: jest.fn(() => jest.fn()),
   getDefaultHandlers: jest.fn((opts) => {
     capturedToolExecuteOptions = opts?.toolExecuteOptions;
     return {};
@@ -449,6 +450,17 @@ describe('initializeClient — subagent loading', () => {
     expect(arg.toolRegistry).toBeInstanceOf(Map);
     expect(arg.tool_resources).toEqual({ file_search: { file_ids: ['file_1'] } });
     expect(arg.actionsEnabled).toBe(true);
+  });
+
+  it('wires a persistence hook into toolExecuteOptions', async () => {
+    await initializeClient({
+      req: makeSubagentReq(),
+      res: { write: jest.fn() },
+      signal: new AbortController().signal,
+      endpointOption: makeEndpointOption(),
+    });
+
+    expect(typeof capturedToolExecuteOptions?.persistToolCall).toBe('function');
   });
 
   it('deduplicates repeated ids in subagents.agent_ids', async () => {

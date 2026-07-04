@@ -25,6 +25,7 @@ const {
 } = require('librechat-data-provider');
 const {
   createToolEndCallback,
+  createPersistAgentToolCall,
   getDefaultHandlers,
 } = require('~/server/controllers/agents/callbacks');
 const { loadAgentTools, loadToolsForExecution } = require('~/server/services/ToolService');
@@ -128,6 +129,7 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
   const artifactPromises = [];
   const { contentParts, aggregateContent } = createContentAggregator();
   const toolEndCallback = createToolEndCallback({ req, res, artifactPromises, streamId });
+  const persistToolCall = createPersistAgentToolCall({ req });
 
   /** Query accessible skill IDs once per run (shared across all agents).
    *  Skills activate under strict opt-in semantics — see
@@ -205,6 +207,7 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
       );
     },
     toolEndCallback,
+    persistToolCall,
     ...getSkillToolDeps(),
   };
 
