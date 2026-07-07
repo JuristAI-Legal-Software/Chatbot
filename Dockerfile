@@ -121,7 +121,8 @@ ENV BUILD_DATE=${BUILD_DATE}
 # Node API setup
 EXPOSE 3080
 ENV HOST=0.0.0.0
-CMD ["npm", "run", "backend"]
+ENV NODE_ENV=production
+CMD ["node", "api/server/index.js"]
 
 # Optional: for client with nginx routing
 # FROM nginx:stable-alpine AS nginx-client
