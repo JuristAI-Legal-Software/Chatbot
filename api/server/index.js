@@ -100,6 +100,19 @@ const startServer = async () => {
   }
 
   await runAsSystem(seedDatabase);
+  /* Re-assert the JuristAI agent's django-tools Action binding on every boot
+   * (idempotent — no-ops when already bound). Keeps the binding enforced by
+   * code so image rollouts and agent edits can't silently strip it
+   * (#CHAT-AGENT-NO-TOOLS-BOUND). Opt out with JURISTAI_ENSURE_AGENT_ACTION=false.
+   * Non-fatal: fresh installs without the agent just log and continue. */
+  if (process.env.JURISTAI_ENSURE_AGENT_ACTION !== 'false') {
+    const { ensureJuristaiAgentAction } = require('../../config/ensure-juristai-agent-action');
+    await runAsSystem(() =>
+      ensureJuristaiAgentAction({ dryRun: false, deps: { connect: async () => undefined } }),
+    ).catch((err) => {
+      logger.warn(`[ensureJuristaiAgentAction] Skipped at startup: ${err.message}`);
+    });
+  }
   /* Recover stuck `status: 'pending'` records from a crash mid-render.
    * `runAsSystem` is required — `File` is tenant-isolated and strict
    * mode rejects unscoped queries. Lazy sweep in the preview endpoint
