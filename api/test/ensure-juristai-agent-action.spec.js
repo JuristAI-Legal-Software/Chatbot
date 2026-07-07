@@ -1,0 +1,141 @@
+/**
+ * Integration test for the idempotent agent-action seed script
+ * (config/ensure-juristai-agent-action.js), the infra-as-code guard for QA
+ * finding #CHAT-AGENT-NO-TOOLS-BOUND. Exercises the real array-construction +
+ * idempotency logic against a real in-memory Mongo and the real data-schemas
+ * Agent/Action methods. Only the deterministic ActionService domain encoders
+ * and the DB connect helper are injected, since ActionService's live import
+ * chain (flow manager, agents) is not loadable in a unit env.
+ */
+
+const mongoose = require('mongoose');
+const { MongoMemoryServer } = require('mongodb-memory-server');
+const { createMethods, agentSchema, actionSchema } = require('@librechat/data-schemas');
+
+const { ensureJuristaiAgentAction } = require('../../config/ensure-juristai-agent-action');
+
+const AGENT_ID = 'agent_test_juristai';
+const DOMAIN = 'https://api-dev.juristai.org';
+const SPEC_PATH = require('path').resolve(
+  __dirname,
+  '..',
+  '..',
+  'config',
+  'juristai-agent-action-spec.json',
+);
+
+describe('ensure-juristai-agent-action (infra-as-code guard)', () => {
+  let mongoServer;
+  let Agent;
+  let Action;
+  let methods;
+
+  const baseDeps = () => ({
+    connect: async () => undefined,
+    getAgent: methods.getAgent,
+    updateAgent: methods.updateAgent,
+    getActions: methods.getActions,
+    updateAction: methods.updateAction,
+    // Deterministic stand-ins for ActionService's domain encoders.
+    domainParser: async (domain) => domain.replace(/[^a-zA-Z0-9]/g, '_'),
+    legacyDomainEncode: (domain) => domain.replace(/\./g, '_'),
+    encryptMetadata: async (metadata) => metadata,
+    agentId: AGENT_ID,
+    actionDomain: DOMAIN,
+    specPath: SPEC_PATH,
+  });
+
+  beforeAll(async () => {
+    mongoServer = await MongoMemoryServer.create();
+    await mongoose.connect(mongoServer.getUri());
+    Agent = mongoose.models.Agent || mongoose.model('Agent', agentSchema);
+    Action = mongoose.models.Action || mongoose.model('Action', actionSchema);
+    methods = createMethods(mongoose);
+  }, 60000);
+
+  afterAll(async () => {
+    await mongoose.disconnect();
+    await mongoServer.stop();
+  });
+
+  beforeEach(async () => {
+    await Agent.deleteMany({});
+    await Action.deleteMany({});
+    await Agent.create({
+      id: AGENT_ID,
+      name: 'JuristAI Test Agent',
+      provider: 'openAI',
+      model: 'gpt-4.1',
+      author: new mongoose.Types.ObjectId(),
+      tools: [],
+      actions: [],
+    });
+  });
+
+  test('dry-run reports the plan without writing to the agent', async () => {
+    const result = await ensureJuristaiAgentAction({ dryRun: true, deps: baseDeps() });
+
+    expect(result.dryRun).toBe(true);
+    expect(result.changed).toBe(false);
+    expect(result.functionCount).toBe(15);
+
+    const agent = await Agent.findOne({ id: AGENT_ID }).lean();
+    expect(agent.tools).toHaveLength(0);
+    expect(agent.actions).toHaveLength(0);
+    expect(await Action.countDocuments({})).toBe(0);
+  });
+
+  test('apply mode binds all 15 tools and one action to the agent', async () => {
+    const result = await ensureJuristaiAgentAction({ dryRun: false, deps: baseDeps() });
+
+    expect(result.changed).toBe(true);
+    expect(result.reusedExistingAction).toBe(false);
+    expect(result.functionCount).toBe(15);
+
+    const agent = await Agent.findOne({ id: AGENT_ID }).lean();
+    expect(agent.tools).toHaveLength(15);
+    expect(agent.actions).toHaveLength(1);
+    expect(agent.actions[0]).toContain(result.action_id);
+
+    const actions = await Action.find({ agent_id: AGENT_ID }).lean();
+    expect(actions).toHaveLength(1);
+    expect(actions[0].metadata.domain).toBe(DOMAIN);
+    expect(actions[0].metadata.raw_spec).toContain('openapi');
+  });
+
+  test('re-running after a successful bind is an idempotent no-op', async () => {
+    await ensureJuristaiAgentAction({ dryRun: false, deps: baseDeps() });
+    const second = await ensureJuristaiAgentAction({ dryRun: false, deps: baseDeps() });
+
+    expect(second.changed).toBe(false);
+    expect(second.alreadyBound).toBe(true);
+    expect(second.reusedExistingAction).toBe(true);
+
+    const agent = await Agent.findOne({ id: AGENT_ID }).lean();
+    expect(agent.tools).toHaveLength(15);
+    expect(agent.actions).toHaveLength(1);
+    expect(await Action.countDocuments({ agent_id: AGENT_ID })).toBe(1);
+  });
+
+  test('heals an agent whose tools were wiped, reusing the same action_id', async () => {
+    const first = await ensureJuristaiAgentAction({ dryRun: false, deps: baseDeps() });
+    await Agent.updateOne({ id: AGENT_ID }, { tools: [], actions: [] });
+
+    const healed = await ensureJuristaiAgentAction({ dryRun: false, deps: baseDeps() });
+
+    expect(healed.changed).toBe(true);
+    expect(healed.reusedExistingAction).toBe(true);
+    expect(healed.action_id).toBe(first.action_id);
+
+    const agent = await Agent.findOne({ id: AGENT_ID }).lean();
+    expect(agent.tools).toHaveLength(15);
+    expect(await Action.countDocuments({ agent_id: AGENT_ID })).toBe(1);
+  });
+
+  test('throws a clear error when the agent does not exist', async () => {
+    await Agent.deleteMany({});
+    await expect(ensureJuristaiAgentAction({ dryRun: false, deps: baseDeps() })).rejects.toThrow(
+      /Agent not found/,
+    );
+  });
+});

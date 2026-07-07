@@ -1,0 +1,755 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "JuristAI Tools",
+    "description": "JuristAI legal-platform tools for the chat agent.",
+    "version": "1.0.0"
+  },
+  "servers": [{ "url": "https://api-dev.juristai.org" }],
+  "paths": {
+    "/api/billing/cases/{caseId}/summary": {
+      "get": {
+        "operationId": "retrieve-case-billing-summary",
+        "summary": "Retrieve a billing summary for a case.",
+        "description": "Returns a billing summary for a case and billing window the authenticated user can access. summaryText is a JSON-encoded digest with billingHeader, overview metrics, topBillers, topTasks, missedOpportunities (completed work not captured in the total, e.g. no hourly rate set or no time logged), upcoming work due in the next 7 days, and a plainText fallback for direct quoting. Exposed to the LibreChat assistant as a callable tool.",
+        "parameters": [
+          { "in": "path", "name": "caseId", "schema": { "type": "string" }, "required": true }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "userId": { "type": "string" },
+                    "caseId": { "type": "string" },
+                    "appId": { "type": "string", "default": "2" },
+                    "billingWeekStart": { "type": "string", "format": "date" },
+                    "billingWeekEnd": { "type": "string", "format": "date" },
+                    "dateFrom": { "type": "string", "format": "date", "nullable": true },
+                    "dateTo": { "type": "string", "format": "date", "nullable": true },
+                    "resultLimit": { "type": "integer", "minimum": 1, "nullable": true }
+                  },
+                  "required": ["billingWeekEnd", "billingWeekStart", "caseId", "userId"]
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/core/assign-user-to-case/": {
+      "post": {
+        "operationId": "assign-user-to-case",
+        "summary": "Assign a user to a case.",
+        "description": "Assigns the authenticated user, or an admin-selected user, to a case.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "caseId": { "type": "string" }, "userId": { "type": "string" } },
+                "required": ["caseId"]
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": { "caseId": { "type": "string" }, "userId": { "type": "string" } },
+                "required": ["caseId"]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": { "caseId": { "type": "string" }, "userId": { "type": "string" } },
+                "required": ["caseId"]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": { "200": { "description": "No response body" } }
+      }
+    },
+    "/api/core/case-calendar/": {
+      "get": {
+        "operationId": "get-case-calendar",
+        "summary": "Get a calendar view for a case.",
+        "description": "Returns case deadlines and docket events for a case the authenticated user can access.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "caseId",
+            "schema": { "type": "string", "minLength": 1 },
+            "required": true
+          },
+          { "in": "query", "name": "contains", "schema": { "type": "string", "minLength": 1 } },
+          { "in": "query", "name": "dateFrom", "schema": { "type": "string", "minLength": 1 } },
+          { "in": "query", "name": "dateTo", "schema": { "type": "string", "minLength": 1 } },
+          {
+            "in": "query",
+            "name": "resultLimit",
+            "schema": { "type": "integer", "maximum": 100, "minimum": 1 }
+          }
+        ],
+        "responses": { "200": { "description": "No response body" } }
+      }
+    },
+    "/api/core/case-timeline/": {
+      "get": {
+        "operationId": "list-case-timeline",
+        "summary": "List docket timeline entries for a case.",
+        "description": "Lists docket timeline entries for a case the authenticated user can access.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "caseId",
+            "schema": { "type": "string", "minLength": 1 },
+            "required": true
+          },
+          { "in": "query", "name": "contains", "schema": { "type": "string", "minLength": 1 } },
+          { "in": "query", "name": "dateFrom", "schema": { "type": "string", "minLength": 1 } },
+          { "in": "query", "name": "dateTo", "schema": { "type": "string", "minLength": 1 } },
+          {
+            "in": "query",
+            "name": "resultLimit",
+            "schema": { "type": "integer", "maximum": 100, "minimum": 1 }
+          }
+        ],
+        "responses": { "200": { "description": "No response body" } }
+      }
+    },
+    "/api/core/cases/{caseId}/signatures": {
+      "get": {
+        "operationId": "list-case-signatures",
+        "summary": "List case signatures.",
+        "description": "Lists signature requests for a case the authenticated user can access.",
+        "parameters": [
+          { "in": "path", "name": "caseId", "schema": { "type": "string" }, "required": true },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": { "type": "integer", "minimum": 1, "nullable": true }
+          },
+          {
+            "in": "query",
+            "name": "sourceType",
+            "schema": {
+              "enum": [
+                "interview_artifact",
+                "uploaded_case_file",
+                "uploaded_file",
+                "billing_artifact",
+                "engagement_letter"
+              ],
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "* `interview_artifact` - interview_artifact\n* `uploaded_case_file` - uploaded_case_file\n* `uploaded_file` - uploaded_file\n* `billing_artifact` - billing_artifact\n* `engagement_letter` - engagement_letter"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "PREPARED",
+                "SENT",
+                "VIEWED",
+                "PARTIALLY_SIGNED",
+                "COMPLETED",
+                "DECLINED",
+                "EXPIRED",
+                "VOIDED",
+                "SYNC_REQUIRED",
+                "FAILED"
+              ],
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "* `DRAFT` - DRAFT\n* `PREPARED` - PREPARED\n* `SENT` - SENT\n* `VIEWED` - VIEWED\n* `PARTIALLY_SIGNED` - PARTIALLY_SIGNED\n* `COMPLETED` - COMPLETED\n* `DECLINED` - DECLINED\n* `EXPIRED` - EXPIRED\n* `VOIDED` - VOIDED\n* `SYNC_REQUIRED` - SYNC_REQUIRED\n* `FAILED` - FAILED"
+          }
+        ],
+        "responses": { "200": { "description": "No response body" } }
+      }
+    },
+    "/api/core/get-case-metadata/": {
+      "post": {
+        "operationId": "get-case-metadata",
+        "summary": "Retrieve metadata for a specific case or docket.",
+        "description": "Returns structured metadata for a case identified by docket id or related lookup fields. Exposed to the LibreChat assistant as a callable tool.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "caseId": { "type": "string" }, "docketId": { "type": "string" } }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": { "caseId": { "type": "string" }, "docketId": { "type": "string" } }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": { "caseId": { "type": "string" }, "docketId": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "caseId": { "type": "string" }, "docketId": { "type": "string" } }
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/core/latest-docket-entry/": {
+      "get": {
+        "operationId": "get-latest-docket-entry",
+        "summary": "Get the most recent docket entry for a case.",
+        "description": "Returns the most recent docket entry for a case the authenticated user can access.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "caseId",
+            "schema": { "type": "string", "minLength": 1 },
+            "required": true
+          },
+          { "in": "query", "name": "contains", "schema": { "type": "string", "minLength": 1 } },
+          { "in": "query", "name": "dateFrom", "schema": { "type": "string", "minLength": 1 } },
+          { "in": "query", "name": "dateTo", "schema": { "type": "string", "minLength": 1 } },
+          {
+            "in": "query",
+            "name": "resultLimit",
+            "schema": { "type": "integer", "maximum": 100, "minimum": 1 }
+          }
+        ],
+        "responses": { "200": { "description": "No response body" } }
+      }
+    },
+    "/api/core/legal-team-members/": {
+      "get": {
+        "operationId": "list-legal-team-members",
+        "summary": "List members of a legal team.",
+        "description": "Lists members of a legal team the authenticated user belongs to or can administer.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "appId",
+            "schema": { "type": "string", "minLength": 1 },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "legalTeamId",
+            "schema": { "type": "string", "minLength": 1 },
+            "required": true
+          }
+        ],
+        "responses": { "200": { "description": "No response body" } }
+      }
+    },
+    "/api/core/organization-members/": {
+      "get": {
+        "operationId": "list-organization-members",
+        "summary": "List organization members for the authenticated user's organization.",
+        "description": "Lists organization members for the authenticated user's organization, or an explicitly requested organization when it matches.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "organizationId",
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        ],
+        "responses": { "200": { "description": "No response body" } }
+      }
+    },
+    "/api/core/read-people-dossiers/": {
+      "post": {
+        "operationId": "read-people-dossiers",
+        "summary": "Read people dossier records.",
+        "description": "Retrieves full people dossier data for supported case-linked people records. Exposed to the LibreChat assistant as a callable tool.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "caseId": { "type": "string" },
+                  "email": { "type": "string", "format": "email" }
+                },
+                "required": ["caseId", "email"]
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "caseId": { "type": "string" },
+                  "email": { "type": "string", "format": "email" }
+                },
+                "required": ["caseId", "email"]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "caseId": { "type": "string" },
+                  "email": { "type": "string", "format": "email" }
+                },
+                "required": ["caseId", "email"]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "caseId": { "type": "string" },
+                    "email": { "type": "string", "format": "email" }
+                  },
+                  "required": ["caseId", "email"]
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/core/remove-user-from-case/": {
+      "post": {
+        "operationId": "remove-user-from-case",
+        "summary": "Remove a user from a case.",
+        "description": "Removes the authenticated user, or an admin-selected user, from a case.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "caseId": { "type": "string" }, "userId": { "type": "string" } },
+                "required": ["caseId"]
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": { "caseId": { "type": "string" }, "userId": { "type": "string" } },
+                "required": ["caseId"]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": { "caseId": { "type": "string" }, "userId": { "type": "string" } },
+                "required": ["caseId"]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": { "200": { "description": "No response body" } }
+      }
+    },
+    "/api/core/signatures/requests": {
+      "post": {
+        "operationId": "create-signature-request",
+        "summary": "Create a signature request.",
+        "description": "Creates a case-scoped or workspace-scoped signature request.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "caseId": { "type": "string", "nullable": true },
+                  "appId": { "type": "string", "default": "" },
+                  "organizationId": { "type": "string", "default": "" },
+                  "legalTeamId": { "type": "string", "default": "" },
+                  "createdByUserId": { "type": "string", "default": "" },
+                  "createdByEmail": { "type": "string", "format": "email", "default": "" },
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "interview_artifact",
+                          "uploaded_case_file",
+                          "uploaded_file",
+                          "billing_artifact",
+                          "engagement_letter"
+                        ],
+                        "type": "string",
+                        "description": "* `interview_artifact` - interview_artifact\n* `uploaded_case_file` - uploaded_case_file\n* `uploaded_file` - uploaded_file\n* `billing_artifact` - billing_artifact\n* `engagement_letter` - engagement_letter"
+                      },
+                      "artifactId": { "type": "string" },
+                      "fileId": { "type": "string" },
+                      "templateId": { "type": "string" },
+                      "downloadUrl": { "type": "string" }
+                    },
+                    "required": ["type"]
+                  },
+                  "sourceType": {
+                    "enum": [
+                      "interview_artifact",
+                      "uploaded_case_file",
+                      "uploaded_file",
+                      "billing_artifact",
+                      "engagement_letter"
+                    ],
+                    "type": "string",
+                    "description": "* `interview_artifact` - interview_artifact\n* `uploaded_case_file` - uploaded_case_file\n* `uploaded_file` - uploaded_file\n* `billing_artifact` - billing_artifact\n* `engagement_letter` - engagement_letter"
+                  },
+                  "sourceArtifactId": { "type": "string" },
+                  "sourceFileId": { "type": "string" },
+                  "sourceTemplateId": { "type": "string" },
+                  "sourceDownloadUrl": { "type": "string" },
+                  "templateLaunchRef": { "type": "string", "default": "" },
+                  "document": {
+                    "type": "object",
+                    "properties": {
+                      "name": { "type": "string", "default": "" },
+                      "note": { "type": "string", "default": "" }
+                    }
+                  },
+                  "documentName": { "type": "string", "default": "" },
+                  "description": { "type": "string", "default": "" },
+                  "customMessage": { "type": "string", "default": "" },
+                  "mode": {
+                    "enum": ["guest", "guest_otp", "mixed", "self"],
+                    "type": "string",
+                    "description": "* `guest` - guest\n* `guest_otp` - guest_otp\n* `mixed` - mixed\n* `self` - self"
+                  },
+                  "signingMode": { "type": "string", "default": "" },
+                  "sendInOrder": { "type": "boolean" },
+                  "sendInOrderStrict": { "type": "boolean", "default": false },
+                  "expiresInDays": { "type": "integer", "minimum": 1, "default": 15 },
+                  "automaticReminders": { "type": "boolean", "default": false },
+                  "autoReminders": { "type": "boolean" },
+                  "remindOnceInEveryDays": { "type": "integer", "minimum": 1, "default": 5 },
+                  "remindEveryDays": { "type": "integer", "minimum": 1 },
+                  "allowModifications": { "type": "boolean", "default": false },
+                  "notifyOnSignatures": { "type": "boolean", "default": false },
+                  "sendNativeInviteEmails": { "type": "boolean", "default": false },
+                  "redirectUrl": { "type": "string", "default": "" },
+                  "enableOtp": { "type": "boolean", "default": false },
+                  "signers": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "signerId": { "type": "string" },
+                        "role": { "type": "string", "default": "" },
+                        "name": { "type": "string" },
+                        "email": { "type": "string", "format": "email" },
+                        "userId": { "type": "string", "nullable": true },
+                        "contactId": { "type": "string", "nullable": true },
+                        "isGuest": { "type": "boolean", "default": false },
+                        "sequence": { "type": "integer", "minimum": 1, "default": 1 },
+                        "widgetType": { "type": "string", "default": "signature" }
+                      },
+                      "required": ["email", "name"]
+                    }
+                  },
+                  "cc": { "type": "array", "items": { "type": "string", "format": "email" } },
+                  "bcc": { "type": "array", "items": { "type": "string", "format": "email" } },
+                  "idempotencyKey": { "type": "string", "default": "", "maxLength": 128 }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "caseId": { "type": "string", "nullable": true },
+                  "appId": { "type": "string", "default": "" },
+                  "organizationId": { "type": "string", "default": "" },
+                  "legalTeamId": { "type": "string", "default": "" },
+                  "createdByUserId": { "type": "string", "default": "" },
+                  "createdByEmail": { "type": "string", "format": "email", "default": "" },
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "interview_artifact",
+                          "uploaded_case_file",
+                          "uploaded_file",
+                          "billing_artifact",
+                          "engagement_letter"
+                        ],
+                        "type": "string",
+                        "description": "* `interview_artifact` - interview_artifact\n* `uploaded_case_file` - uploaded_case_file\n* `uploaded_file` - uploaded_file\n* `billing_artifact` - billing_artifact\n* `engagement_letter` - engagement_letter"
+                      },
+                      "artifactId": { "type": "string" },
+                      "fileId": { "type": "string" },
+                      "templateId": { "type": "string" },
+                      "downloadUrl": { "type": "string" }
+                    },
+                    "required": ["type"]
+                  },
+                  "sourceType": {
+                    "enum": [
+                      "interview_artifact",
+                      "uploaded_case_file",
+                      "uploaded_file",
+                      "billing_artifact",
+                      "engagement_letter"
+                    ],
+                    "type": "string",
+                    "description": "* `interview_artifact` - interview_artifact\n* `uploaded_case_file` - uploaded_case_file\n* `uploaded_file` - uploaded_file\n* `billing_artifact` - billing_artifact\n* `engagement_letter` - engagement_letter"
+                  },
+                  "sourceArtifactId": { "type": "string" },
+                  "sourceFileId": { "type": "string" },
+                  "sourceTemplateId": { "type": "string" },
+                  "sourceDownloadUrl": { "type": "string" },
+                  "templateLaunchRef": { "type": "string", "default": "" },
+                  "document": {
+                    "type": "object",
+                    "properties": {
+                      "name": { "type": "string", "default": "" },
+                      "note": { "type": "string", "default": "" }
+                    }
+                  },
+                  "documentName": { "type": "string", "default": "" },
+                  "description": { "type": "string", "default": "" },
+                  "customMessage": { "type": "string", "default": "" },
+                  "mode": {
+                    "enum": ["guest", "guest_otp", "mixed", "self"],
+                    "type": "string",
+                    "description": "* `guest` - guest\n* `guest_otp` - guest_otp\n* `mixed` - mixed\n* `self` - self"
+                  },
+                  "signingMode": { "type": "string", "default": "" },
+                  "sendInOrder": { "type": "boolean" },
+                  "sendInOrderStrict": { "type": "boolean", "default": false },
+                  "expiresInDays": { "type": "integer", "minimum": 1, "default": 15 },
+                  "automaticReminders": { "type": "boolean", "default": false },
+                  "autoReminders": { "type": "boolean" },
+                  "remindOnceInEveryDays": { "type": "integer", "minimum": 1, "default": 5 },
+                  "remindEveryDays": { "type": "integer", "minimum": 1 },
+                  "allowModifications": { "type": "boolean", "default": false },
+                  "notifyOnSignatures": { "type": "boolean", "default": false },
+                  "sendNativeInviteEmails": { "type": "boolean", "default": false },
+                  "redirectUrl": { "type": "string", "default": "" },
+                  "enableOtp": { "type": "boolean", "default": false },
+                  "signers": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "signerId": { "type": "string" },
+                        "role": { "type": "string", "default": "" },
+                        "name": { "type": "string" },
+                        "email": { "type": "string", "format": "email" },
+                        "userId": { "type": "string", "nullable": true },
+                        "contactId": { "type": "string", "nullable": true },
+                        "isGuest": { "type": "boolean", "default": false },
+                        "sequence": { "type": "integer", "minimum": 1, "default": 1 },
+                        "widgetType": { "type": "string", "default": "signature" }
+                      },
+                      "required": ["email", "name"]
+                    }
+                  },
+                  "cc": { "type": "array", "items": { "type": "string", "format": "email" } },
+                  "bcc": { "type": "array", "items": { "type": "string", "format": "email" } },
+                  "idempotencyKey": { "type": "string", "default": "", "maxLength": 128 }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "caseId": { "type": "string", "nullable": true },
+                  "appId": { "type": "string", "default": "" },
+                  "organizationId": { "type": "string", "default": "" },
+                  "legalTeamId": { "type": "string", "default": "" },
+                  "createdByUserId": { "type": "string", "default": "" },
+                  "createdByEmail": { "type": "string", "format": "email", "default": "" },
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "interview_artifact",
+                          "uploaded_case_file",
+                          "uploaded_file",
+                          "billing_artifact",
+                          "engagement_letter"
+                        ],
+                        "type": "string",
+                        "description": "* `interview_artifact` - interview_artifact\n* `uploaded_case_file` - uploaded_case_file\n* `uploaded_file` - uploaded_file\n* `billing_artifact` - billing_artifact\n* `engagement_letter` - engagement_letter"
+                      },
+                      "artifactId": { "type": "string" },
+                      "fileId": { "type": "string" },
+                      "templateId": { "type": "string" },
+                      "downloadUrl": { "type": "string" }
+                    },
+                    "required": ["type"]
+                  },
+                  "sourceType": {
+                    "enum": [
+                      "interview_artifact",
+                      "uploaded_case_file",
+                      "uploaded_file",
+                      "billing_artifact",
+                      "engagement_letter"
+                    ],
+                    "type": "string",
+                    "description": "* `interview_artifact` - interview_artifact\n* `uploaded_case_file` - uploaded_case_file\n* `uploaded_file` - uploaded_file\n* `billing_artifact` - billing_artifact\n* `engagement_letter` - engagement_letter"
+                  },
+                  "sourceArtifactId": { "type": "string" },
+                  "sourceFileId": { "type": "string" },
+                  "sourceTemplateId": { "type": "string" },
+                  "sourceDownloadUrl": { "type": "string" },
+                  "templateLaunchRef": { "type": "string", "default": "" },
+                  "document": {
+                    "type": "object",
+                    "properties": {
+                      "name": { "type": "string", "default": "" },
+                      "note": { "type": "string", "default": "" }
+                    }
+                  },
+                  "documentName": { "type": "string", "default": "" },
+                  "description": { "type": "string", "default": "" },
+                  "customMessage": { "type": "string", "default": "" },
+                  "mode": {
+                    "enum": ["guest", "guest_otp", "mixed", "self"],
+                    "type": "string",
+                    "description": "* `guest` - guest\n* `guest_otp` - guest_otp\n* `mixed` - mixed\n* `self` - self"
+                  },
+                  "signingMode": { "type": "string", "default": "" },
+                  "sendInOrder": { "type": "boolean" },
+                  "sendInOrderStrict": { "type": "boolean", "default": false },
+                  "expiresInDays": { "type": "integer", "minimum": 1, "default": 15 },
+                  "automaticReminders": { "type": "boolean", "default": false },
+                  "autoReminders": { "type": "boolean" },
+                  "remindOnceInEveryDays": { "type": "integer", "minimum": 1, "default": 5 },
+                  "remindEveryDays": { "type": "integer", "minimum": 1 },
+                  "allowModifications": { "type": "boolean", "default": false },
+                  "notifyOnSignatures": { "type": "boolean", "default": false },
+                  "sendNativeInviteEmails": { "type": "boolean", "default": false },
+                  "redirectUrl": { "type": "string", "default": "" },
+                  "enableOtp": { "type": "boolean", "default": false },
+                  "signers": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "signerId": { "type": "string" },
+                        "role": { "type": "string", "default": "" },
+                        "name": { "type": "string" },
+                        "email": { "type": "string", "format": "email" },
+                        "userId": { "type": "string", "nullable": true },
+                        "contactId": { "type": "string", "nullable": true },
+                        "isGuest": { "type": "boolean", "default": false },
+                        "sequence": { "type": "integer", "minimum": 1, "default": 1 },
+                        "widgetType": { "type": "string", "default": "signature" }
+                      },
+                      "required": ["email", "name"]
+                    }
+                  },
+                  "cc": { "type": "array", "items": { "type": "string", "format": "email" } },
+                  "bcc": { "type": "array", "items": { "type": "string", "format": "email" } },
+                  "idempotencyKey": { "type": "string", "default": "", "maxLength": 128 }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "No response body" } }
+      }
+    },
+    "/api/core/signatures/requests/{signatureRequestId}": {
+      "get": {
+        "operationId": "get-signature-request-detail",
+        "summary": "Get signature request detail.",
+        "description": "Retrieves detail for a specific signature request.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signatureRequestId",
+            "schema": { "type": "string" },
+            "required": true
+          }
+        ],
+        "responses": { "200": { "description": "No response body" } }
+      }
+    },
+    "/api/core/signatures/requests/{signatureRequestId}/send-reminder": {
+      "post": {
+        "operationId": "send-signature-reminder",
+        "summary": "Send a signature reminder.",
+        "description": "Sends a reminder for an existing signature request.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signatureRequestId",
+            "schema": { "type": "string" },
+            "required": true
+          }
+        ],
+        "responses": { "200": { "description": "No response body" } }
+      }
+    },
+    "/api/core/signatures/requests/{signatureRequestId}/void": {
+      "post": {
+        "operationId": "void-signature-request",
+        "summary": "Void a signature request.",
+        "description": "Voids an existing signature request.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signatureRequestId",
+            "schema": { "type": "string" },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "reason": { "type": "string", "default": "" } }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": { "reason": { "type": "string", "default": "" } }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": { "reason": { "type": "string", "default": "" } }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "No response body" } }
+      }
+    }
+  }
+}
