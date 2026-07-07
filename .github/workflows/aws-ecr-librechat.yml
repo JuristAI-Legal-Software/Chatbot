@@ -55,3 +55,74 @@ jobs:
           IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
           IMAGE_TAG="${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
           echo "Pushed $IMAGE_URI:$IMAGE_TAG"
+
+  deploy-ecs:
+    name: Deploy image to ECS
+    needs: build-and-push-ecr
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+
+    env:
+      ECS_CLUSTER: juristai-librechat-ecs-cluster
+      ECS_SERVICE: librechat-service
+      ECS_TASK_FAMILY: librechat-task
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Register new task definition revision with the pushed image
+        id: register
+        run: |
+          IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
+          IMAGE_TAG="${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
+          NEW_IMAGE="$IMAGE_URI:$IMAGE_TAG"
+          echo "Deploying image: $NEW_IMAGE"
+
+          # Pull the live task definition so all env vars / secrets / roles are preserved,
+          # swap only the librechat container image, and re-register a new revision.
+          aws ecs describe-task-definition --task-definition "$ECS_TASK_FAMILY" \
+            --query 'taskDefinition' --output json > td.json
+
+          python3 - "$NEW_IMAGE" "$IMAGE_URI" <<'PY'
+          import json, sys
+          new_image, repo = sys.argv[1], sys.argv[2]
+          td = json.load(open("td.json"))
+          for c in td["containerDefinitions"]:
+              if c["image"].rsplit(":", 1)[0] == repo:
+                  c["image"] = new_image
+          # register-task-definition only accepts a subset of the describe output.
+          allowed = {
+              "family", "taskRoleArn", "executionRoleArn", "networkMode",
+              "containerDefinitions", "volumes", "placementConstraints",
+              "requiresCompatibilities", "cpu", "memory", "tags", "pidMode",
+              "ipcMode", "proxyConfiguration", "inferenceAccelerators",
+              "ephemeralStorage", "runtimePlatform",
+          }
+          clean = {k: v for k, v in td.items() if k in allowed}
+          json.dump(clean, open("td_new.json", "w"))
+          PY
+
+          NEW_TD_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://td_new.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "Registered $NEW_TD_ARN"
+          echo "task_def_arn=$NEW_TD_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Update service and wait for stability
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "${{ steps.register.outputs.task_def_arn }}" \
+            --query 'service.{status:status,taskDefinition:taskDefinition}' --output json
+          echo "Waiting for service to reach steady state..."
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+          echo "Deploy complete and service is stable."
