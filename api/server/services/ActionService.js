@@ -37,6 +37,64 @@ const toolNameRegex = /^[a-zA-Z0-9_-]+$/;
 const protocolRegex = /^https?:\/\//;
 const replaceSeparatorRegex = new RegExp(actionDomainSeparator, 'g');
 
+const CHAT_MINTED_TOKEN_ISSUER = 'librechat';
+const CHAT_MINTED_TOKEN_TTL = '5m';
+const DEFAULT_CHAT_MINTED_ACTION_DOMAINS = 'juristai.org';
+
+/**
+ * Domains whose actions receive a per-user chat-minted JWT when no explicit
+ * auth is configured. Django validates these via ChatMintedJWTAuthentication
+ * (iss="librechat", HS256, shared CHAT_SECRET), resolving the acting user by
+ * sub or email claim so tool calls run as the chatting user, not a service
+ * account.
+ * @returns {string[]}
+ */
+function getChatMintedActionDomains() {
+  const raw = process.env.CHAT_MINTED_ACTION_DOMAINS ?? DEFAULT_CHAT_MINTED_ACTION_DOMAINS;
+  return raw
+    .split(',')
+    .map((domain) => domain.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/**
+ * @param {string | undefined} domain - Action metadata domain (may include protocol).
+ * @returns {boolean}
+ */
+function isChatMintedActionDomain(domain) {
+  if (!domain) {
+    return false;
+  }
+  const hostname = String(domain).toLowerCase().replace(protocolRegex, '').split('/')[0];
+  if (!hostname) {
+    return false;
+  }
+  return getChatMintedActionDomains().some(
+    (allowed) => hostname === allowed || hostname.endsWith(`.${allowed}`),
+  );
+}
+
+/**
+ * Mints a short-lived per-user JWT accepted by django's
+ * ChatMintedJWTAuthentication. Returns null when no signing secret or user
+ * email is available.
+ * @param {{ id?: string; _id?: { toString(): string }; email?: string }} user
+ * @returns {string | null}
+ */
+function generateChatMintedToken(user) {
+  const secret = process.env.CHAT_SECRET || process.env.JWT_SECRET;
+  const email = user?.email;
+  if (!secret || !email) {
+    return null;
+  }
+  const sub = String(user.id ?? user._id ?? '') || email;
+  return jwt.sign({ sub, email }, secret, {
+    issuer: CHAT_MINTED_TOKEN_ISSUER,
+    expiresIn: CHAT_MINTED_TOKEN_TTL,
+    algorithm: 'HS256',
+  });
+}
+
 /**
  * Validates tool name against regex pattern and updates if necessary.
  * @param {object} params - The parameters for the function.
@@ -192,6 +250,7 @@ async function createActionTool({
   useSSRFProtection = false,
   allowedAddresses,
   injectParams = null,
+  user = null,
 }) {
   const ssrfAgents = useSSRFProtection ? createSSRFSafeAgents(allowedAddresses) : undefined;
   /** @type {(toolInput: Object | string, config: GraphRunnableConfig) => Promise<unknown>} */
@@ -389,6 +448,23 @@ async function createActionTool({
         }
       }
 
+      if (
+        (!metadata.auth || metadata.auth.type === AuthTypeEnum.None) &&
+        isChatMintedActionDomain(metadata.domain)
+      ) {
+        const mintedToken = generateChatMintedToken(user);
+        if (mintedToken && preparedExecutor && typeof preparedExecutor === 'object') {
+          preparedExecutor.authHeaders = {
+            ...(preparedExecutor.authHeaders ?? {}),
+            Authorization: `Bearer ${mintedToken}`,
+          };
+        } else if (!mintedToken) {
+          logger.warn(
+            `[Actions] Chat-minted auth unavailable for domain ${action.metadata.domain} (missing secret or user email); executing unauthenticated`,
+          );
+        }
+      }
+
       const response = await preparedExecutor.execute(ssrfAgents);
 
       if (typeof response.data === 'object') {
@@ -523,4 +599,6 @@ module.exports = {
   decryptMetadata,
   loadActionSets,
   domainParser,
+  isChatMintedActionDomain,
+  generateChatMintedToken,
 };

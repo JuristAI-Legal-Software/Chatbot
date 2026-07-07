@@ -434,6 +434,7 @@ async function processRequiredActions(client, requiredActions) {
       const _allowedAddresses = appConfig?.actions?.allowedAddresses;
       tool = await createActionTool({
         userId: client.req.user.id,
+        user: client.req.user,
         res: client.res,
         action,
         requestBuilder,
@@ -1266,6 +1267,7 @@ async function loadAgentTools({
     const _allowedAddresses = appConfig?.actions?.allowedAddresses;
     const tool = await createActionTool({
       userId: req.user.id,
+      user: req.user,
       res,
       action,
       requestBuilder,
@@ -1610,6 +1612,7 @@ async function loadActionToolsForExecution({
     const injectParams = buildActionInjectParams(requestCaseId, functionSignature);
     const tool = await createActionTool({
       userId: req.user.id,
+      user: req.user,
       res,
       action,
       streamId,
