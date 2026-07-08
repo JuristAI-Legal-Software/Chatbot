@@ -33,6 +33,17 @@ WORKDIR /app
 
 USER node
 
+# AWS DocumentDB/RDS TLS CA bundle. Public, non-secret (AWS publishes it at
+# this well-known URL) — mongoose's connection options reference it as a
+# relative path ("global-bundle.pem"), resolved against WORKDIR at runtime.
+# A prior refactor dropped this without anyone noticing because every build
+# since has crashed earlier in boot (npm/CMD, then a find-glob deleting
+# @opentelemetry/core, then a missing mongodb dependency, then sharp's musl
+# binary) - this is the first build to actually reach the Mongo connection
+# and surface "ENOENT: no such file or directory, open 'global-bundle.pem'".
+RUN wget -q -O global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+    && test -s global-bundle.pem
+
 COPY --chown=node:node package.json package-lock.json ./
 COPY --chown=node:node api/package.json ./api/package.json
 COPY --chown=node:node client/package.json ./client/package.json
@@ -116,8 +127,10 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
 # just placed nodemailer/file-type at, matching how api/server and
 # stream-file-type actually require() them at runtime.
 RUN node -e '\
+const fs = require("fs"); \
 const rootOnly = ["mongodb", "hono", "multer", "undici", "uuid", "form-data", "protobufjs", "@opentelemetry/core", "module-alias", "express", "mongoose"]; \
 const pathed = [["nodemailer", ["/app/api"]], ["file-type", ["/app/node_modules/stream-file-type"]]]; \
+const files = ["/app/global-bundle.pem"]; \
 const failures = []; \
 for (const name of rootOnly) { \
   try { require.resolve(name); } catch (err) { failures.push(`${name}: ${err.message}`); } \
@@ -126,11 +139,14 @@ for (const [name, paths] of pathed) { \
   try { require.resolve(name, { paths }); } catch (err) { failures.push(`${name} (expected under ${paths.join(",")}): ${err.message}`); } \
 } \
 try { require("sharp"); } catch (err) { failures.push(`sharp (native binary load): ${String(err.message).split("\n")[0]}`); } \
+for (const file of files) { \
+  if (!fs.existsSync(file) || fs.statSync(file).size === 0) { failures.push(`${file}: missing or empty`); } \
+} \
 if (failures.length) { \
   console.error("Build-time dependency check FAILED - missing from final image:\n" + failures.join("\n")); \
   process.exit(1); \
 } \
-console.log(`Build-time dependency check passed (${rootOnly.length + pathed.length} packages).`); \
+console.log(`Build-time dependency check passed (${rootOnly.length + pathed.length + files.length} checks).`); \
 '
 USER root
 # Remove npm tooling from final image for Vanta/AWS Inspector.
