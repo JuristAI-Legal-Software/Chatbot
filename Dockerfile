@@ -69,6 +69,15 @@ RUN \
     npm cache clean --force
 
 # Re-apply patched package versions after npm prune for Vanta high/medium findings.
+# mongodb is pinned explicitly here too (not just a Vanta patch target): it's
+# a real `dependencies` entry in api/package.json but only a
+# peerDependency+devDependency in packages/api/package.json, and that split
+# declaration has been observed to make `npm prune --production` followed by
+# this targeted forced reinstall drop the hoisted copy entirely, crashing
+# every boot with "Cannot find module 'mongodb'" (packages/api/dist/index.js
+# requires it directly). Force-reinstalling it here alongside the other
+# prune-fragile packages keeps a guaranteed root copy regardless of how npm's
+# workspace-aware prune/install reconciliation treats the peer-vs-dev split.
 RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.parse(fs.readFileSync(p,"utf8")); const names=["hono","multer","undici","uuid","form-data","protobufjs","nodemailer","dompurify","@opentelemetry/core","file-type"]; if (pkg.overrides) { for (const n of names) delete pkg.overrides[n]; } fs.writeFileSync(p, JSON.stringify(pkg,null,2));' \
     && npm install --force --legacy-peer-deps --ignore-scripts --no-audit --omit=dev --save=false \
     hono@4.12.25 \
@@ -81,6 +90,7 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
     dompurify@3.4.11 \
     @opentelemetry/core@2.8.0 \
     file-type@21.3.2 \
+    mongodb@6.14.2 \
     && rm -rf /app/node_modules/gaxios/node_modules/uuid \
     && mkdir -p /app/node_modules/gaxios/node_modules \
     && cp -a /app/node_modules/uuid /app/node_modules/gaxios/node_modules/uuid \
@@ -101,6 +111,34 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
     && rm -f /app/packages/data-provider/react-query/package-lock.json \
     && rm -f /app/node_modules/@monaco-editor/loader/playground/package-lock.json \
     && npm cache clean --force
+
+# Guard rail: the surgery above (prune, forced pinned-version reinstall,
+# nested-copy find/rm/cp) has repeatedly broken unrelated production
+# dependencies without failing the build — npm's CMD silently pointed at a
+# removed binary, an over-broad find glob deleted the root
+# @opentelemetry/core it meant to redistribute, and mongodb went missing
+# entirely. Each one only surfaced as a silent ECS crash-loop that rolled
+# back to the prior image minutes after the workflow reported success. Fail
+# the build here instead, while node_modules is still intact and npm/npx are
+# still present to debug with. Paths mirror the exact locations this block
+# just placed nodemailer/file-type at, matching how api/server and
+# stream-file-type actually require() them at runtime.
+RUN node -e '\
+const rootOnly = ["mongodb", "hono", "multer", "undici", "uuid", "form-data", "protobufjs", "@opentelemetry/core", "module-alias", "express", "mongoose"]; \
+const pathed = [["nodemailer", ["/app/api"]], ["file-type", ["/app/node_modules/stream-file-type"]]]; \
+const failures = []; \
+for (const name of rootOnly) { \
+  try { require.resolve(name); } catch (err) { failures.push(`${name}: ${err.message}`); } \
+} \
+for (const [name, paths] of pathed) { \
+  try { require.resolve(name, { paths }); } catch (err) { failures.push(`${name} (expected under ${paths.join(",")}): ${err.message}`); } \
+} \
+if (failures.length) { \
+  console.error("Build-time dependency check FAILED - missing from final image:\n" + failures.join("\n")); \
+  process.exit(1); \
+} \
+console.log(`Build-time dependency check passed (${rootOnly.length + pathed.length} packages).`); \
+'
 USER root
 # Remove npm tooling from final image for Vanta/AWS Inspector.
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/lib/node_modules/npm /usr/bin/npm /usr/bin/npx /home/node/.npm
