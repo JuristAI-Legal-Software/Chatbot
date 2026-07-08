@@ -69,15 +69,6 @@ RUN \
     npm cache clean --force
 
 # Re-apply patched package versions after npm prune for Vanta high/medium findings.
-# mongodb is pinned explicitly here too (not just a Vanta patch target): it's
-# a real `dependencies` entry in api/package.json but only a
-# peerDependency+devDependency in packages/api/package.json, and that split
-# declaration has been observed to make `npm prune --production` followed by
-# this targeted forced reinstall drop the hoisted copy entirely, crashing
-# every boot with "Cannot find module 'mongodb'" (packages/api/dist/index.js
-# requires it directly). Force-reinstalling it here alongside the other
-# prune-fragile packages keeps a guaranteed root copy regardless of how npm's
-# workspace-aware prune/install reconciliation treats the peer-vs-dev split.
 RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.parse(fs.readFileSync(p,"utf8")); const names=["hono","multer","undici","uuid","form-data","protobufjs","nodemailer","dompurify","@opentelemetry/core","file-type"]; if (pkg.overrides) { for (const n of names) delete pkg.overrides[n]; } fs.writeFileSync(p, JSON.stringify(pkg,null,2));' \
     && npm install --force --legacy-peer-deps --ignore-scripts --no-audit --omit=dev --save=false \
     hono@4.12.25 \
@@ -90,7 +81,6 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
     dompurify@3.4.11 \
     @opentelemetry/core@2.8.0 \
     file-type@21.3.2 \
-    mongodb@6.14.2 \
     && rm -rf /app/node_modules/gaxios/node_modules/uuid \
     && mkdir -p /app/node_modules/gaxios/node_modules \
     && cp -a /app/node_modules/uuid /app/node_modules/gaxios/node_modules/uuid \
