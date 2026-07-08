@@ -81,6 +81,8 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
     dompurify@3.4.11 \
     @opentelemetry/core@2.8.0 \
     file-type@21.3.2 \
+    @img/sharp-linuxmusl-x64@0.33.5 \
+    @img/sharp-libvips-linuxmusl-x64@1.0.4 \
     && rm -rf /app/node_modules/gaxios/node_modules/uuid \
     && mkdir -p /app/node_modules/gaxios/node_modules \
     && cp -a /app/node_modules/uuid /app/node_modules/gaxios/node_modules/uuid \
@@ -123,6 +125,7 @@ for (const name of rootOnly) { \
 for (const [name, paths] of pathed) { \
   try { require.resolve(name, { paths }); } catch (err) { failures.push(`${name} (expected under ${paths.join(",")}): ${err.message}`); } \
 } \
+try { require("sharp"); } catch (err) { failures.push(`sharp (native binary load): ${String(err.message).split("\n")[0]}`); } \
 if (failures.length) { \
   console.error("Build-time dependency check FAILED - missing from final image:\n" + failures.join("\n")); \
   process.exit(1); \
