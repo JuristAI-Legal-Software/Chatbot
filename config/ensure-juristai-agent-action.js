@@ -124,10 +124,18 @@ async function ensureJuristaiAgentAction({ dryRun = true, deps } = {}) {
     .filter((ref) => ref.split(actionDelimiter)[1] !== action_id)
     .concat(actionRef);
 
+  // Comparing tool *names* alone is not sufficient: two catalog builds can
+  // share the exact same operationIds while differing in parameter schemas
+  // (a required-field fix, a new property, a changed enum). A name-only
+  // check would silently skip re-applying a schema-only fix on every future
+  // deploy, exactly like it did the first time this class of bug shipped.
+  const specUnchanged = domainAction?.metadata?.raw_spec === rawSpec;
+
   const alreadyBound =
     !!domainAction &&
     sameToolSet(agent.tools || [], nextTools) &&
-    (agent.actions || []).includes(actionRef);
+    (agent.actions || []).includes(actionRef) &&
+    specUnchanged;
 
   const plan = {
     agentId,
@@ -136,6 +144,7 @@ async function ensureJuristaiAgentAction({ dryRun = true, deps } = {}) {
     reusedExistingAction: !!domainAction,
     functionCount: functions.length,
     toolNames: functions.map((fn) => fn.function.name),
+    specUnchanged,
     alreadyBound,
   };
 

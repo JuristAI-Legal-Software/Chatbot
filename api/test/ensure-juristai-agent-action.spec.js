@@ -123,6 +123,26 @@ describe('ensure-juristai-agent-action (infra-as-code guard)', () => {
     expect(await Action.countDocuments({ agent_id: AGENT_ID })).toBe(1);
   });
 
+  test('re-binds when the spec content changes even if tool names are unchanged', async () => {
+    const first = await ensureJuristaiAgentAction({ dryRun: false, deps: baseDeps() });
+    await Action.updateOne(
+      { agent_id: AGENT_ID, action_id: first.action_id },
+      { $set: { 'metadata.raw_spec': '{"openapi":"3.0.3","paths":{}}' } },
+    );
+
+    const resynced = await ensureJuristaiAgentAction({ dryRun: false, deps: baseDeps() });
+
+    expect(resynced.specUnchanged).toBe(false);
+    expect(resynced.changed).toBe(true);
+    expect(resynced.reusedExistingAction).toBe(true);
+    expect(resynced.action_id).toBe(first.action_id);
+
+    const actions = await Action.find({ agent_id: AGENT_ID }).lean();
+    expect(actions).toHaveLength(1);
+    expect(actions[0].metadata.raw_spec).toContain('openapi');
+    expect(actions[0].metadata.raw_spec).not.toBe('{"openapi":"3.0.3","paths":{}}');
+  });
+
   test('heals an agent whose tools were wiped, reusing the same action_id', async () => {
     const first = await ensureJuristaiAgentAction({ dryRun: false, deps: baseDeps() });
     await Agent.updateOne({ id: AGENT_ID }, { tools: [], actions: [] });
