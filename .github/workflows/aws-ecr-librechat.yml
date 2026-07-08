@@ -5,6 +5,16 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# Without this, every push starts a fully independent build+deploy run, and
+# ECS deploys from stacked pushes race each other for the same service -
+# observed directly during the 2026-07-08 crash-loop fix chain, where a
+# build that succeeded had its ECS deploy step preempted (and reported
+# failed) by a newer push's deploy landing first. Only the latest push's
+# result matters for `main`, so cancel anything superseded by a newer one.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
 env:
   AWS_REGION: us-east-1
   AWS_ACCOUNT_ID: "730335261767"
