@@ -23,6 +23,12 @@ const SPEC_PATH = require('path').resolve(
   'config',
   'juristai-agent-action-spec.json',
 );
+// Derived from the spec instead of hardcoded, so this test tracks the real
+// django llm-tools catalog size instead of needing a manual bump every time
+// an operation is added or removed.
+const EXPECTED_TOOL_COUNT = Object.values(
+  JSON.parse(require('fs').readFileSync(SPEC_PATH, 'utf8')).paths,
+).reduce((count, methods) => count + Object.keys(methods).length, 0);
 
 describe('ensure-juristai-agent-action (infra-as-code guard)', () => {
   let mongoServer;
@@ -77,7 +83,7 @@ describe('ensure-juristai-agent-action (infra-as-code guard)', () => {
 
     expect(result.dryRun).toBe(true);
     expect(result.changed).toBe(false);
-    expect(result.functionCount).toBe(15);
+    expect(result.functionCount).toBe(EXPECTED_TOOL_COUNT);
 
     const agent = await Agent.findOne({ id: AGENT_ID }).lean();
     expect(agent.tools).toHaveLength(0);
@@ -85,15 +91,15 @@ describe('ensure-juristai-agent-action (infra-as-code guard)', () => {
     expect(await Action.countDocuments({})).toBe(0);
   });
 
-  test('apply mode binds all 15 tools and one action to the agent', async () => {
+  test('apply mode binds every catalog tool and one action to the agent', async () => {
     const result = await ensureJuristaiAgentAction({ dryRun: false, deps: baseDeps() });
 
     expect(result.changed).toBe(true);
     expect(result.reusedExistingAction).toBe(false);
-    expect(result.functionCount).toBe(15);
+    expect(result.functionCount).toBe(EXPECTED_TOOL_COUNT);
 
     const agent = await Agent.findOne({ id: AGENT_ID }).lean();
-    expect(agent.tools).toHaveLength(15);
+    expect(agent.tools).toHaveLength(EXPECTED_TOOL_COUNT);
     expect(agent.actions).toHaveLength(1);
     expect(agent.actions[0]).toContain(result.action_id);
 
@@ -112,7 +118,7 @@ describe('ensure-juristai-agent-action (infra-as-code guard)', () => {
     expect(second.reusedExistingAction).toBe(true);
 
     const agent = await Agent.findOne({ id: AGENT_ID }).lean();
-    expect(agent.tools).toHaveLength(15);
+    expect(agent.tools).toHaveLength(EXPECTED_TOOL_COUNT);
     expect(agent.actions).toHaveLength(1);
     expect(await Action.countDocuments({ agent_id: AGENT_ID })).toBe(1);
   });
@@ -128,7 +134,7 @@ describe('ensure-juristai-agent-action (infra-as-code guard)', () => {
     expect(healed.action_id).toBe(first.action_id);
 
     const agent = await Agent.findOne({ id: AGENT_ID }).lean();
-    expect(agent.tools).toHaveLength(15);
+    expect(agent.tools).toHaveLength(EXPECTED_TOOL_COUNT);
     expect(await Action.countDocuments({ agent_id: AGENT_ID })).toBe(1);
   });
 
