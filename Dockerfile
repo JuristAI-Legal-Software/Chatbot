@@ -90,8 +90,8 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
     && rm -rf /app/node_modules/@hyperdx/otel-web-session-recorder/node_modules/protobufjs \
     && mkdir -p /app/node_modules/@hyperdx/otel-web-session-recorder/node_modules \
     && cp -a /app/node_modules/protobufjs /app/node_modules/@hyperdx/otel-web-session-recorder/node_modules/protobufjs \
-    && find /app/node_modules/@opentelemetry -path "*/node_modules/@opentelemetry/core" -type d -prune -exec rm -rf {} + \
-    && find /app/node_modules/@opentelemetry -path "*/node_modules/@opentelemetry" -type d -exec sh -c 'mkdir -p "$1"; cp -a /app/node_modules/@opentelemetry/core "$1/core"' sh {} \; \
+    && find /app/node_modules/@opentelemetry -mindepth 2 -path "*/node_modules/@opentelemetry/core" -type d -prune -exec rm -rf {} + \
+    && find /app/node_modules/@opentelemetry -mindepth 1 -path "*/node_modules/@opentelemetry" -type d -exec sh -c 'mkdir -p "$1"; cp -a /app/node_modules/@opentelemetry/core "$1/core"' sh {} \; \
     && rm -rf /app/api/node_modules/nodemailer \
     && mkdir -p /app/api/node_modules \
     && cp -a /app/node_modules/nodemailer /app/api/node_modules/nodemailer \
