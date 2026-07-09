@@ -19,6 +19,7 @@ env:
   AWS_REGION: us-east-1
   AWS_ACCOUNT_ID: "730335261767"
   ECR_REPOSITORY: librechat
+  MCP_ECR_REPOSITORY: juristai-mcp-server
 
 jobs:
   build-and-push-ecr:
@@ -66,9 +67,63 @@ jobs:
           IMAGE_TAG="${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
           echo "Pushed $IMAGE_URI:$IMAGE_TAG"
 
+  # Builds the juristai-django MCP server sidecar (vendored copy of
+  # django-hub/mcp_server - that repo has no AWS credentials of its own, see
+  # #CHAT-TOOLS-MCP-NOT-DEPLOYED, so this repo's existing ECR/ECS access
+  # builds+deploys it instead). Runs as a second container in the SAME
+  # librechat-task (awsvpc networking), reachable at 127.0.0.1:8001 per
+  # librechat.yaml's mcpServers.juristai-django.url.
+  build-and-push-mcp-server-ecr:
+    name: Build and push MCP server AWS ECR image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to AWS ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Ensure ECR repository exists
+        run: |
+          aws ecr describe-repositories --repository-names "$MCP_ECR_REPOSITORY" \
+            || aws ecr create-repository --repository-name "$MCP_ECR_REPOSITORY"
+
+      - name: Build Docker image
+        run: |
+          IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${MCP_ECR_REPOSITORY}"
+          IMAGE_TAG="${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
+          docker build --no-cache --pull \
+            -f mcp_server/Dockerfile \
+            -t "$IMAGE_URI:$IMAGE_TAG" \
+            .
+
+      - name: Push Docker image
+        run: |
+          IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${MCP_ECR_REPOSITORY}"
+          IMAGE_TAG="${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
+          docker push "$IMAGE_URI:$IMAGE_TAG"
+
+      - name: Print pushed image
+        run: |
+          IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${MCP_ECR_REPOSITORY}"
+          IMAGE_TAG="${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
+          echo "Pushed $IMAGE_URI:$IMAGE_TAG"
+
   deploy-ecs:
     name: Deploy image to ECS
-    needs: build-and-push-ecr
+    needs: [build-and-push-ecr, build-and-push-mcp-server-ecr]
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -79,6 +134,7 @@ jobs:
       ECS_CLUSTER: juristai-librechat-ecs-cluster
       ECS_SERVICE: librechat-service
       ECS_TASK_FAMILY: librechat-task
+      MCP_CONTAINER_NAME: mcp-server-container
 
     steps:
       - name: Configure AWS credentials
@@ -88,26 +144,61 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Register new task definition revision with the pushed image
+      - name: Register new task definition revision with the pushed images
         id: register
         run: |
           IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
           IMAGE_TAG="${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
           NEW_IMAGE="$IMAGE_URI:$IMAGE_TAG"
+
+          MCP_IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${MCP_ECR_REPOSITORY}"
+          NEW_MCP_IMAGE="$MCP_IMAGE_URI:$IMAGE_TAG"
           echo "Deploying image: $NEW_IMAGE"
+          echo "Deploying MCP server sidecar image: $NEW_MCP_IMAGE"
 
           # Pull the live task definition so all env vars / secrets / roles are preserved,
-          # swap only the librechat container image, and re-register a new revision.
+          # swap only the librechat container image, add/update the MCP server sidecar
+          # container, and re-register a new revision.
           aws ecs describe-task-definition --task-definition "$ECS_TASK_FAMILY" \
             --query 'taskDefinition' --output json > td.json
 
-          python3 - "$NEW_IMAGE" "$IMAGE_URI" <<'PY'
+          python3 - "$NEW_IMAGE" "$IMAGE_URI" "$NEW_MCP_IMAGE" "$MCP_CONTAINER_NAME" <<'PY'
           import json, sys
-          new_image, repo = sys.argv[1], sys.argv[2]
+          new_image, repo, new_mcp_image, mcp_container_name = sys.argv[1:5]
           td = json.load(open("td.json"))
-          for c in td["containerDefinitions"]:
+          containers = td["containerDefinitions"]
+          for c in containers:
               if c["image"].rsplit(":", 1)[0] == repo:
                   c["image"] = new_image
+
+          mcp_container = next((c for c in containers if c["name"] == mcp_container_name), None)
+          if mcp_container is None:
+              borrowed_log_config = next(
+                  (c.get("logConfiguration") for c in containers if c.get("logConfiguration")),
+                  None,
+              )
+              log_config = json.loads(json.dumps(borrowed_log_config)) if borrowed_log_config else None
+              if log_config and log_config.get("options", {}).get("awslogs-stream-prefix"):
+                  log_config["options"]["awslogs-stream-prefix"] = mcp_container_name
+              mcp_container = {
+                  "name": mcp_container_name,
+                  "essential": True,
+                  "portMappings": [
+                      {"containerPort": 8001, "hostPort": 8001, "protocol": "tcp"},
+                  ],
+                  "logConfiguration": log_config,
+              }
+              containers.append(mcp_container)
+          mcp_container["image"] = new_mcp_image
+          mcp_container["memory"] = 256
+
+          # Bump task-level resources so the new sidecar doesn't shrink librechat's
+          # existing (unbounded, task-ceiling-shared) headroom.
+          if int(td.get("cpu", 0) or 0) < 1024:
+              td["cpu"] = "1024"
+          if int(td.get("memory", 0) or 0) < 2048:
+              td["memory"] = "2048"
+
           # register-task-definition only accepts a subset of the describe output.
           allowed = {
               "family", "taskRoleArn", "executionRoleArn", "networkMode",

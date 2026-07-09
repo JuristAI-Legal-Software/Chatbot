@@ -1,3 +1,7 @@
+### python (mcp_server) ###
+__pycache__/
+*.pyc
+
 ### node etc ###
 
 # Logs
@@ -74,6 +78,10 @@ bower_components/
 #config file
 librechat.yaml
 librechat.yml
+# Except: our deployed config is tracked so it actually reaches the built
+# image (see #CHAT-TOOLS-MCP-NOT-DEPLOYED) - local overrides still work,
+# `git status` will just show them as normal uncommitted changes.
+!librechat.yaml
 
 # Environment
 .npmrc
