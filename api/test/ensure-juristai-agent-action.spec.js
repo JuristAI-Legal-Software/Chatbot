@@ -165,3 +165,41 @@ describe('ensure-juristai-agent-action (infra-as-code guard)', () => {
     );
   });
 });
+
+describe('juristai agent action spec — parity denylist', () => {
+  const spec = JSON.parse(require('fs').readFileSync(SPEC_PATH, 'utf8'));
+  const operationIds = Object.values(spec.paths).flatMap((methods) =>
+    Object.values(methods).map((op) => op.operationId),
+  );
+
+  // Destructive access-control / data-loss operations that must never be reachable
+  // from the chat agent (mirrored in the email agent's denylist).
+  const DENYLIST = [
+    'delete-legal-team',
+    'remove-legal-team-member',
+    'remove-user-from-case',
+    'delete-motion-template',
+    'delete-motion-template_2',
+    'delete-case-important-date',
+  ];
+
+  test('none of the denylisted operations are published to the agent', () => {
+    const leaked = DENYLIST.filter((op) => operationIds.includes(op));
+    expect(leaked).toEqual([]);
+  });
+
+  test('legitimate high-value tools remain published (full parity, not staged-safe-66)', () => {
+    for (const op of [
+      'generate-motion',
+      'generate-lawsuit',
+      'create-new-case',
+      'doc-critique',
+      'summarize-document',
+      'retrieve-document-summary',
+      'send-client-invoice',
+    ]) {
+      expect(operationIds).toContain(op);
+    }
+    expect(operationIds.length).toBeGreaterThanOrEqual(90);
+  });
+});
