@@ -2679,7 +2679,7 @@
     "/api/core/read-people-dossiers/": {
       "post": {
         "operationId": "read-people-dossiers",
-        "description": "Retrieves full people dossier data for case-linked people. Provide caseId and email for one person. For a name-only request, provide caseId and includeAll=true, use the returned displayName/email to identify the person, and only then answer from that dossier.",
+        "description": "Retrieves full people dossier data for case-linked people. Provide caseId and name for a specific person lookup. The tool resolves the case individual and generates a missing dossier before returning; provide email when already known. Use includeAll=true only when the user explicitly asks for the full people list.",
         "summary": "Read people dossier records.",
         "tags": [
           "llm-tools"
@@ -6925,9 +6925,13 @@
             "type": "string",
             "format": "email"
           },
+          "name": {
+            "type": "string",
+            "description": "Display name for a specific case individual; use this for name-only requests so a missing dossier can be generated."
+          },
           "includeAll": {
             "type": "boolean",
-            "description": "Use true when the person is identified by name rather than email; select the matching dossier from the returned list before responding."
+            "description": "Use true only when the user explicitly asks for the full people list."
           }
         },
         "required": [
