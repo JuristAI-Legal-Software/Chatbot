@@ -5038,7 +5038,7 @@
           "billingTimezone",
           "billingWeekEnd",
           "billingWeekStart",
-          "caseId"
+
         ]
       },
       "BookingManage": {
