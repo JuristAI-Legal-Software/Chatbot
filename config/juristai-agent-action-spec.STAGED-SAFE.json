@@ -2679,7 +2679,7 @@
     "/api/core/read-people-dossiers/": {
       "post": {
         "operationId": "read-people-dossiers",
-        "description": "Retrieves full people dossier data for supported case-linked people records. Exposed to the LibreChat assistant as a callable tool.",
+        "description": "Retrieves full people dossier data for case-linked people. Provide caseId and email for one person. For a name-only request, provide caseId and includeAll=true, use the returned displayName/email to identify the person, and only then answer from that dossier.",
         "summary": "Read people dossier records.",
         "tags": [
           "llm-tools"
@@ -6924,11 +6924,14 @@
           "email": {
             "type": "string",
             "format": "email"
+          },
+          "includeAll": {
+            "type": "boolean",
+            "description": "Use true when the person is identified by name rather than email; select the matching dossier from the returned list before responding."
           }
         },
         "required": [
-          "caseId",
-          "email"
+          "caseId"
         ]
       },
       "CreateSignatureRequestModeEnum": {
