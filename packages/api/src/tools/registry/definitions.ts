@@ -484,3 +484,48 @@ export function getAllToolDefinitions(): ToolRegistryDefinition[] {
 export function getToolSchema(toolName: string): ExtendedJsonSchema | undefined {
   return getToolDefinition(toolName)?.schema;
 }
+
+export const SERIESAI_TOOL_NAMES = [
+  'triggerSafeDraft', 'sendRoundUpdate', 'queryCapTableOwnership',
+  'scheduleComplianceDeadline', 'requestSignaturesViaEmail', 'inviteExternalParticipant',
+] as const;
+export type SeriesAIToolName = (typeof SERIESAI_TOOL_NAMES)[number];
+export type SeriesAIContext = { appId?: string | number; organizationId?: string; workspaceMode?: string; practiceArea?: string; lifecycleStage?: string };
+export const SERIESAI_DISCLAIMER = 'SeriesAI outputs are informational and require review by the responsible decision-maker; they are not legal, tax, accounting, or investment advice.';
+export function hasSeriesAIContext(context: SeriesAIContext | undefined): context is SeriesAIContext & Required<Pick<SeriesAIContext, 'appId' | 'organizationId'>> {
+  return ['3', '4'].includes(String(context?.appId ?? '').trim()) && Boolean(context?.organizationId?.trim());
+}
+export function isSeriesAITool(toolName: string): toolName is SeriesAIToolName {
+  return (SERIESAI_TOOL_NAMES as readonly string[]).includes(toolName);
+}
+const seriesAIContextProperties: Record<string, ExtendedJsonSchema> = {
+  appId: { type: 'string', enum: ['3', '4'], description: 'Canonical SeriesAI appId.' },
+  organizationId: { type: 'string', minLength: 1, description: 'Active organization scope.' },
+};
+const seriesAISchemas: Record<SeriesAIToolName, ExtendedJsonSchema> = {
+  triggerSafeDraft: { type: 'object', properties: { ...seriesAIContextProperties, investorName: { type: 'string', minLength: 1 }, investorEmail: { type: 'string', format: 'email' }, investmentAmount: { type: 'number', minimum: 0 }, valuationCap: { type: 'number', minimum: 0 }, discountRate: { type: 'number', minimum: 0, maximum: 100 }, proRataRights: { type: 'boolean' }, roundId: { type: 'string' } }, required: ['appId', 'organizationId', 'investorName', 'investorEmail', 'investmentAmount'], additionalProperties: false },
+  sendRoundUpdate: { type: 'object', properties: { ...seriesAIContextProperties, roundId: { type: 'string', minLength: 1 }, message: { type: 'string' }, includeCapTableSummary: { type: 'boolean' } }, required: ['appId', 'organizationId', 'roundId'], additionalProperties: false },
+  queryCapTableOwnership: { type: 'object', properties: { ...seriesAIContextProperties, asOf: { type: 'string', format: 'date-time' }, sendToEmail: { type: 'boolean' }, includeScenarios: { type: 'boolean' } }, required: ['appId', 'organizationId'], additionalProperties: false },
+  scheduleComplianceDeadline: { type: 'object', properties: { ...seriesAIContextProperties, deadlineType: { type: 'string', enum: ['83b_election', 'form_d', 'delaware_franchise_tax', 'board_meeting', 'option_grant_409a', 'round_closing'] }, dueDate: { type: 'string', format: 'date' }, linkedObjectId: { type: 'string' }, linkedObjectType: { type: 'string' }, notes: { type: 'string' } }, required: ['appId', 'organizationId', 'deadlineType', 'dueDate'], additionalProperties: false },
+  requestSignaturesViaEmail: { type: 'object', properties: { ...seriesAIContextProperties, documentInstanceId: { type: 'string', minLength: 1 }, signers: { type: 'array', minItems: 1, items: { type: 'object', properties: { name: { type: 'string', minLength: 1 }, email: { type: 'string', format: 'email' }, role: { type: 'string' }, signingOrder: { type: 'integer', minimum: 1 } }, required: ['name', 'email'], additionalProperties: false } }, message: { type: 'string' }, expiresInDays: { type: 'integer', minimum: 1, maximum: 365 } }, required: ['appId', 'organizationId', 'documentInstanceId', 'signers'], additionalProperties: false },
+  inviteExternalParticipant: { type: 'object', properties: { ...seriesAIContextProperties, participantType: { type: 'string', enum: ['Accelerator', 'VC Investor', 'Angel Investor', 'Deal Ops Team', 'VC Lawyer', 'Startup Lawyer', 'Accounting Firm', 'Corporate Secretary'] }, organizationName: { type: 'string', minLength: 1 }, primaryContactName: { type: 'string', minLength: 1 }, primaryContactEmail: { type: 'string', format: 'email' }, roleInDeal: { type: 'string', minLength: 1 }, accessScope: { type: 'string', enum: ['view_only', 'review_comment', 'deal_execution', 'legal_review', 'signature_coordination', 'admin'] }, associatedRoundId: { type: 'string' }, expiresInDays: { type: 'integer', minimum: 1 } }, required: ['appId', 'organizationId', 'participantType', 'organizationName', 'primaryContactName', 'primaryContactEmail', 'roleInDeal', 'accessScope'], additionalProperties: false },
+};
+for (const name of SERIESAI_TOOL_NAMES) {
+  toolDefinitions[name] = { name, description: `SeriesAI organization-scoped action: ${name}.`, schema: seriesAISchemas[name], toolType: 'action' };
+}
+export function buildSeriesAIContextInstructions(context?: SeriesAIContext): string {
+  if (!hasSeriesAIContext(context)) return "";
+  const lines = [
+    `SeriesAI workspace context: appId=${String(context.appId)}, organizationId=${context.organizationId}.`,
+    context.workspaceMode ? `Workspace mode: ${context.workspaceMode}.` : "",
+    context.practiceArea ? `Practice area: ${context.practiceArea}.` : "",
+    context.lifecycleStage ? `Lifecycle stage: ${context.lifecycleStage}.` : "",
+    `Mandatory disclaimer: ${SERIESAI_DISCLAIMER}`,
+  ].filter(Boolean);
+  return lines.join("\n");
+}
+
+export function getSeriesAIToolDefinitions(context?: SeriesAIContext): ToolRegistryDefinition[] {
+  if (!hasSeriesAIContext(context)) return [];
+  return SERIESAI_TOOL_NAMES.map((name) => toolDefinitions[name]);
+}

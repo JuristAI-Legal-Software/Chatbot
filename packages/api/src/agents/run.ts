@@ -35,6 +35,7 @@ import { getProviderConfig } from '~/endpoints/config/providers';
 import { resolveHeaders, createSafeUser } from '~/utils/env';
 import { getOpenAIConfig } from '~/endpoints/openai/config';
 import { isUserProvided } from '~/utils/common';
+import { buildSeriesAIContextInstructions } from '~/tools/registry/definitions';
 
 /** Expected shape of JSON tool search results */
 interface ToolSearchJsonResult {
@@ -873,8 +874,16 @@ export async function createRun({
 
     const toolInstructions = joinInstructionMap(agent.toolContextMap);
     const dynamicToolInstructions = joinInstructionMap(agent.dynamicToolContextMap);
+    const requestContext = (requestBody ?? {}) as Record<string, unknown>;
+    const seriesAIContextInstructions = buildSeriesAIContextInstructions({
+      appId: requestContext.appId as string | number | undefined,
+      organizationId: requestContext.organizationId as string | undefined,
+      workspaceMode: requestContext.workspaceMode as string | undefined,
+      practiceArea: requestContext.practiceArea as string | undefined,
+      lifecycleStage: requestContext.lifecycleStage as string | undefined,
+    });
 
-    const systemContent = [toolInstructions, agent.instructions ?? ''].join('\n').trim();
+    const systemContent = [toolInstructions, seriesAIContextInstructions, agent.instructions ?? ''].filter(Boolean).join('\n').trim();
 
     const additionalInstructions = [dynamicToolInstructions, agent.additional_instructions ?? '']
       .join('\n')

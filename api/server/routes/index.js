@@ -69,3 +69,6 @@ module.exports = {
   staticRoute,
   accessPermissions,
 };
+
+module.exports.seriesai = require('./seriesai');
+
