@@ -4,10 +4,8 @@ import logger from '~/config/winston';
 import { createTempChatExpirationDate } from '~/utils/tempChatRetention';
 import { createFallbackRetentionDate } from '~/utils/retention';
 import { tenantSafeBulkWrite } from '~/utils/tenantBulkWrite';
+import { isValidConversationId } from '~/utils/conversationId';
 import type { AppConfig, IMessage } from '~/types';
-
-/** Simple UUID v4 regex to replace zod validation */
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface MessageMethods {
   saveMessage(
@@ -78,7 +76,7 @@ export function createMessageMethods(mongoose: typeof import('mongoose')): Messa
     }
 
     const conversationId = params.conversationId as string | undefined;
-    if (!conversationId || !UUID_REGEX.test(conversationId)) {
+    if (!isValidConversationId(conversationId)) {
       logger.warn(`Invalid conversation ID: ${conversationId}`);
       logger.info(`---\`saveMessage\` context: ${metadata?.context}`);
       logger.info(`---Invalid conversation ID Params: ${JSON.stringify(params, null, 2)}`);

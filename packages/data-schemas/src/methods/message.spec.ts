@@ -1095,3 +1095,90 @@ describe('Message Operations', () => {
     });
   });
 });
+
+/**
+ * Regression coverage for the production incident where every chat history came
+ * back empty. `saveMessage` guarded on a bare-UUID regex and silently returned
+ * for the composite conversation ids the product actually uses, so no message
+ * was ever persisted, while `saveConvo` had no such guard and kept creating the
+ * conversation document.
+ */
+describe('composite conversationId persistence', () => {
+  const userId = 'user123';
+  const ctx = { userId };
+  const PROD_CONVERSATION_ID =
+    'userId:84083408-a051-70d1-f910-749d49645793|caseId:juristai|threadId:conv_69d2f08c97ac8194bf592f3eed58b7fe0fe37d745495bce4|tag:research|customId:crsh0js0x7h';
+
+  beforeEach(async () => {
+    await Message.deleteMany({});
+  });
+
+  it('persists a message saved against the production composite conversationId', async () => {
+    const result = await saveMessage(ctx, {
+      messageId: 'composite-user-msg',
+      conversationId: PROD_CONVERSATION_ID,
+      text: 'hello',
+      isCreatedByUser: true,
+      user: userId,
+    });
+
+    expect(result?.messageId).toBe('composite-user-msg');
+
+    const stored = await Message.findOne({ messageId: 'composite-user-msg' });
+    expect(stored).toBeTruthy();
+    expect(stored?.conversationId).toBe(PROD_CONVERSATION_ID);
+  });
+
+  it('returns the full turn from getMessages, the query GET /api/messages/:id runs', async () => {
+    await saveMessage(ctx, {
+      messageId: 'turn-user',
+      conversationId: PROD_CONVERSATION_ID,
+      text: 'hello',
+      isCreatedByUser: true,
+      user: userId,
+    });
+    await saveMessage(ctx, {
+      messageId: 'turn-assistant',
+      conversationId: PROD_CONVERSATION_ID,
+      parentMessageId: 'turn-user',
+      text: 'Hello — how can I help with this matter?',
+      isCreatedByUser: false,
+      user: userId,
+    });
+
+    const history = await getMessages({ conversationId: PROD_CONVERSATION_ID, user: userId });
+
+    expect(history).toHaveLength(2);
+    expect(history.map((message) => message.messageId)).toEqual([
+      'turn-user',
+      'turn-assistant',
+    ]);
+  });
+
+  it('still persists messages for upstream UUID conversation ids', async () => {
+    const uuidConversationId = uuidv4();
+    await saveMessage(ctx, {
+      messageId: 'uuid-msg',
+      conversationId: uuidConversationId,
+      text: 'still works',
+      user: userId,
+    });
+
+    const history = await getMessages({ conversationId: uuidConversationId, user: userId });
+    expect(history).toHaveLength(1);
+  });
+
+  it('still discards messages for ids that are neither UUID nor composite', async () => {
+    for (const badId of ['new', 'not-a-conversation', 'userId:abc|tag:research']) {
+      const result = await saveMessage(ctx, {
+        messageId: `bad-${badId}`,
+        conversationId: badId,
+        text: 'should not persist',
+        user: userId,
+      });
+
+      expect(result).toBeUndefined();
+      expect(await Message.findOne({ messageId: `bad-${badId}` })).toBeNull();
+    }
+  });
+});

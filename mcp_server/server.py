@@ -112,9 +112,12 @@ async def _patch(ctx: Context, path: str, body: dict) -> dict[str, Any]:
         return r.json()
 
 
-async def _delete(ctx: Context, path: str) -> dict[str, Any]:
+async def _delete(ctx: Context, path: str, params: dict | None = None) -> dict[str, Any]:
     async with _client(_token(ctx)) as c:
-        r = await c.delete(_resolve_path(path))
+        r = await c.delete(
+            _resolve_path(path),
+            params={k: v for k, v in (params or {}).items() if v is not None},
+        )
         r.raise_for_status()
         return r.json() if r.content else {"status": "deleted"}
 
@@ -253,7 +256,15 @@ async def get_latest_docket_entry(ctx: Context, case_id: str) -> dict:
     return await _get(ctx, "/api/latest-docket-entry/", {"caseId": case_id})
 
 
-@mcp.tool(description="Retrieve billing summary totals and narrative for a case.")
+@mcp.tool(
+    description=(
+        "Retrieve a billing summary for a case. Returns billableTaskCount and summaryText, "
+        "where summaryText is a JSON-encoded digest with billingHeader, overview metrics, "
+        "topBillers, topTasks, missedOpportunities (completed work not billed, e.g. no hourly "
+        "rate set or no time logged), upcoming work due in the next 7 days, and a plainText "
+        "field. Quote the plainText field when summarizing for the user."
+    ),
+)
 async def retrieve_case_billing_summary(ctx: Context, case_id: str) -> dict:
     return await _get(ctx, f"/api/billing/cases/{case_id}/summary")
 
@@ -324,6 +335,29 @@ async def search_documents(
     if top_k is not None:
         payload["top_k"] = top_k
     return await _post(ctx, "/api/rag-query-proxy/", payload)
+
+
+@mcp.tool(description="List documents uploaded to the authenticated user's case workspace.")
+async def list_uploaded_documents(ctx: Context, case_id: str) -> dict:
+    return await _post(ctx, "/api/user-document-delivery/", {"mode": "list", "caseId": case_id})
+
+
+@mcp.tool(
+    description=(
+        "Email one or more previously uploaded case documents to the authenticated user; "
+        "multiple files are sent as a ZIP."
+    ),
+)
+async def send_uploaded_documents(
+    ctx: Context,
+    case_id: str,
+    file_ids: list[str] | None = None,
+    zip_requested: bool | None = None,
+) -> dict:
+    payload: dict[str, object] = {"mode": "send", "caseId": case_id, "zip": bool(zip_requested)}
+    if file_ids:
+        payload["fileIds"] = file_ids
+    return await _post(ctx, "/api/user-document-delivery/", payload)
 
 
 @mcp.tool(description="Search case documents and return excerpt-oriented matches for a case.")
@@ -1087,15 +1121,26 @@ async def list_host_scheduling_bookings(ctx: Context) -> dict:
 
 
 @mcp.tool(description="Create a scheduling booking from a reservation.")
-async def create_scheduling_booking(ctx: Context, reservation_id: str, attendee: dict) -> dict:
-    return await _post(
-        ctx,
-        "/api/scheduling/bookings/",
-        {
-            "reservationId": reservation_id,
-            "attendee": attendee,
-        },
-    )
+async def create_scheduling_booking(  # noqa: PLR0913 - MCP tool schema is intentionally flat
+    ctx: Context,
+    event_type_id: str,
+    reservation_uid: str,
+    reservation_token: str,
+    attendee: dict,
+    time_zone: str,
+    guests: list[str] | None = None,
+    booking_answers: dict | None = None,
+) -> dict:
+    payload: dict[str, object] = {
+        "eventTypeId": event_type_id,
+        "reservationUid": reservation_uid,
+        "reservationToken": reservation_token,
+        "attendee": attendee,
+        "timeZone": time_zone,
+    }
+    _set_payload_value(payload, "guests", guests)
+    _set_payload_value(payload, "bookingAnswers", booking_answers)
+    return await _post(ctx, "/api/scheduling/bookings/", payload)
 
 
 @mcp.tool(description="Cancel a scheduling booking.")
@@ -1288,8 +1333,12 @@ async def create_scheduling_reservation(  # noqa: PLR0913 - MCP tool schema is i
 
 
 @mcp.tool(description="Delete (release) a scheduling slot reservation.")
-async def delete_scheduling_reservation(ctx: Context, reservation_uid: str) -> dict:
-    return await _delete(ctx, f"/api/scheduling/slots/reservations/{reservation_uid}/")
+async def delete_scheduling_reservation(ctx: Context, reservation_uid: str, reservation_token: str) -> dict:
+    return await _delete(
+        ctx,
+        f"/api/scheduling/slots/reservations/{reservation_uid}/",
+        {"reservationToken": reservation_token},
+    )
 
 
 @mcp.tool(description="Reconcile a signature request's state with the e-signature provider.")

@@ -5,4 +5,5 @@ export * from './retention';
 export { tenantSafeBulkWrite } from './tenantBulkWrite';
 export * from './transactions';
 export * from './objectId';
+export * from './conversationId';
 export * from './yaml';

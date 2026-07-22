@@ -8,6 +8,7 @@ services:
     container_name: LibreChat-API
     ports:
       - 3080:3080
+      - 8001:8001
     depends_on:
       - mongodb
       - rag_api
@@ -84,5 +85,21 @@ services:
     env_file:
       - .env
 
+  mcp_server:
+    container_name: mcp-server-container
+    build:
+      context: .
+      dockerfile: mcp_server/Dockerfile
+    network_mode: service:api
+    depends_on:
+      - api
+    environment:
+      - DJANGO_API_BASE_URL=${DJANGO_API_BASE_URL:-https://api-dev.juristai.org}
+      - MCP_SERVER_SECRET=${MCP_SERVER_SECRET:-}
+      - MCP_DJANGO_CONNECT_TIMEOUT=${MCP_DJANGO_CONNECT_TIMEOUT:-5}
+      - MCP_DJANGO_READ_TIMEOUT=${MCP_DJANGO_READ_TIMEOUT:-60}
+    env_file:
+      - .env
+    restart: always
 volumes:
   pgdata2:

@@ -3,6 +3,7 @@ import { RetentionMode } from 'librechat-data-provider';
 import { createTempChatExpirationDate } from '~/utils/tempChatRetention';
 import { buildRetentionVisibilityFilter, createFallbackRetentionDate } from '~/utils/retention';
 import { tenantSafeBulkWrite } from '~/utils/tenantBulkWrite';
+import { isValidConversationId } from '~/utils/conversationId';
 import logger from '~/config/winston';
 import type { AppConfig, IConversation } from '~/types';
 import type { MessageMethods } from './message';
@@ -204,6 +205,17 @@ export function createConversationMethods(
 
       if (metadata?.context) {
         logger.debug(`[saveConvo] ${metadata.context}`);
+      }
+
+      /**
+       * Mirrors the `saveMessage` guard. Without it, an id that messages cannot be
+       * persisted against still creates a conversation document, leaving a
+       * permanently empty history that the client polls forever.
+       */
+      if (!isValidConversationId(newConversationId ?? conversationId)) {
+        logger.warn(`[saveConvo] Invalid conversation ID: ${newConversationId ?? conversationId}`);
+        logger.info(`---\`saveConvo\` context: ${metadata?.context}`);
+        return null;
       }
 
       const messages = await getMessages({ conversationId, user: userId }, '_id');

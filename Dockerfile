@@ -82,14 +82,22 @@ RUN \
 # Re-apply patched package versions after npm prune for Vanta high/medium findings.
 RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.parse(fs.readFileSync(p,"utf8")); const names=["hono","multer","undici","uuid","form-data","protobufjs","nodemailer","dompurify","@opentelemetry/core","file-type"]; if (pkg.overrides) { for (const n of names) delete pkg.overrides[n]; } fs.writeFileSync(p, JSON.stringify(pkg,null,2));' \
     && npm install --force --legacy-peer-deps --ignore-scripts --no-audit --omit=dev --save=false \
-    hono@4.12.25 \
+    hono@4.12.31 \
     multer@3.0.0-alpha.2 \
     undici@8.5.0 \
     uuid@13.0.1 \
     form-data@4.0.6 \
-    protobufjs@8.6.5 \
+    protobufjs@8.6.6 \
     nodemailer@9.0.1 \
-    dompurify@3.4.11 \
+    dompurify@3.4.12 \
+    brace-expansion@5.0.7 \
+    svgo@2.8.3 \
+    fast-uri@3.1.4 \
+    @opentelemetry/propagator-jaeger@2.9.0 \
+    @hono/node-server@2.0.11 \
+    js-yaml@4.3.0 \
+    body-parser@2.3.0 \
+    axios@1.18.1 \
     @opentelemetry/core@2.8.0 \
     file-type@21.3.2 \
     @img/sharp-linuxmusl-x64@0.33.5 \
@@ -128,7 +136,7 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
 # stream-file-type actually require() them at runtime.
 RUN node -e '\
 const fs = require("fs"); \
-const rootOnly = ["mongodb", "hono", "multer", "undici", "uuid", "form-data", "protobufjs", "@opentelemetry/core", "module-alias", "express", "mongoose"]; \
+const rootOnly = ["mongodb","hono","multer","undici","uuid","form-data","protobufjs","@opentelemetry/core","module-alias","express","mongoose","axios","dompurify","body-parser","js-yaml","@hono/node-server","@opentelemetry/propagator-jaeger","fast-uri","svgo","brace-expansion"]; \
 const pathed = [["nodemailer", ["/app/api"]], ["file-type", ["/app/node_modules/stream-file-type"]]]; \
 const files = ["/app/global-bundle.pem"]; \
 const failures = []; \

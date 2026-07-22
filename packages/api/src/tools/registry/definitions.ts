@@ -491,7 +491,7 @@ export const SERIESAI_TOOL_NAMES = [
 ] as const;
 export type SeriesAIToolName = (typeof SERIESAI_TOOL_NAMES)[number];
 export type SeriesAIContext = { appId?: string | number; organizationId?: string; workspaceMode?: string; practiceArea?: string; lifecycleStage?: string };
-export const SERIESAI_DISCLAIMER = 'SeriesAI outputs are informational and require review by the responsible decision-maker; they are not legal, tax, accounting, or investment advice.';
+export const SERIESAI_DISCLAIMER = "SeriesAI is Venture Intelligent AI. It is not a law firm and does not provide legal advice. It is not a broker-dealer, investment adviser, or financial-services firm and does not offer or recommend securities. All legal, tax, and investment decisions remain the user's responsibility.";
 export function hasSeriesAIContext(context: SeriesAIContext | undefined): context is SeriesAIContext & Required<Pick<SeriesAIContext, 'appId' | 'organizationId'>> {
   return ['3', '4'].includes(String(context?.appId ?? '').trim()) && Boolean(context?.organizationId?.trim());
 }
