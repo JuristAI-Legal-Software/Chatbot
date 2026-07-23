@@ -123,6 +123,13 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
     && rm -f /app/node_modules/@monaco-editor/loader/playground/package-lock.json \
     && npm cache clean --force
 
+# Remove vulnerable nested copies reintroduced by parent-specific npm ranges.
+RUN set -eux; \
+    rm -rf /app/node_modules/@modelcontextprotocol/sdk/node_modules/@hono/node-server; \
+    rm -rf /app/node_modules/@opentelemetry/sdk-node/node_modules/@opentelemetry/propagator-jaeger; \
+    test ! -e /app/node_modules/@modelcontextprotocol/sdk/node_modules/@hono/node-server; \
+    test ! -e /app/node_modules/@opentelemetry/sdk-node/node_modules/@opentelemetry/propagator-jaeger
+
 # Guard rail: the surgery above (prune, forced pinned-version reinstall,
 # nested-copy find/rm/cp) has repeatedly broken unrelated production
 # dependencies without failing the build — npm's CMD silently pointed at a
