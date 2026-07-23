@@ -74,9 +74,10 @@ COPY --chown=node:node . .
 
 RUN \
     # React client build with configurable memory
-    NODE_OPTIONS="--max-old-space-size=${NODE_MAX_OLD_SPACE_SIZE}" npm run frontend; \
-    npm prune --production; \
-    rm -rf /usr/local/include/node; \
+    NODE_OPTIONS="--max-old-space-size=${NODE_MAX_OLD_SPACE_SIZE}" npm run frontend && \
+    test -s /app/client/dist/index.html && \
+    npm prune --production && \
+    rm -rf /usr/local/include/node && \
     npm cache clean --force
 
 # Re-apply patched package versions after npm prune for Vanta high/medium findings.
