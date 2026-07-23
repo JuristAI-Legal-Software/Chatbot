@@ -70,6 +70,13 @@ RUN \
         sleep 10 ; \
     done
 
+# npm can omit esbuild's platform package when the lockfile was generated on a
+# different OS. Install the binary required by this Alpine/x64 image explicitly
+# before Vite loads its config.
+RUN ESBUILD_VERSION="$(node -p "require('./node_modules/esbuild/package.json').version")" && \
+    npm install --no-save --package-lock=false --legacy-peer-deps --ignore-scripts --no-audit \
+    "@esbuild/linux-x64@${ESBUILD_VERSION}"
+
 COPY --chown=node:node . .
 
 RUN \
