@@ -263,14 +263,42 @@ in `CLAUDE.md`.
 
 ## 5. Tool Coverage Map (extends `docs/librechat-tool-calling-coverage.md`)
 
+**How these are registered.** JuristAI has one tool registry shared by the
+chatbot, the email agent and proactive emails:
+`config/juristai-agent-action-spec.json`. SeriesAI tools are entries in that
+spec pointing at the django `/api/core/` SeriesAI endpoints — there is no
+separate TypeScript tool module to write. `api/test/ensure-juristai-agent-action.spec.js`
+guards the spec (run it from the `api/` workspace).
+
+Because all six actions share one django endpoint, they are exposed as a single
+`seriesai-execute-tool` operation whose `toolName` enum selects the action, plus
+the standalone REST operations for reading and resolving pending actions and
+compliance deadlines.
+
 | Tool name | Status | SeriesAI appId | `intentHandler` intent backed |
 |---|---|---|---|
-| `triggerSafeDraft` | Not started | 3 + 4 | `document_generation_request` |
-| `sendRoundUpdate` | Not started | 3 + 4 | `round_status_query` (outbound) |
-| `queryCapTableOwnership` | Not started | 3 + 4 | `ownership_query` |
-| `scheduleComplianceDeadline` | Not started | 3 + 4 | `deadline_acknowledgment` (reverse) |
-| `requestSignaturesViaEmail` | Partial (existing `create_signature_request`) | 3 + 4 | `signature_approval` |
-| `inviteExternalParticipant` | Not started | 3 + 4 | (django-hub signal, no intent route) |
+| `triggerSafeDraft` | Live (`seriesai-execute-tool`) | 3 + 4 | `document_generation_request` |
+| `sendRoundUpdate` | Live (`seriesai-execute-tool`) | 3 + 4 | `round_status_query` (outbound) |
+| `queryCapTableOwnership` | Live (`seriesai-execute-tool`) | 3 + 4 | `ownership_query` |
+| `scheduleComplianceDeadline` | Live (`seriesai-execute-tool`) | 3 + 4 | `deadline_acknowledgment` (reverse) |
+| `requestSignaturesViaEmail` | Live — real `create_signature_request` packet | 3 + 4 | `signature_approval` |
+| `inviteExternalParticipant` | Live (`seriesai-execute-tool`) | 3 + 4 | (django-hub signal, no intent route) |
+| `listDocumentTemplates` | Live — V1 template catalog | 3 + 4 | (read-only) |
+| `generateDocument` | Live — Interview Engine run | 3 + 4 | `document_generation_request` |
+
+`listDocumentTemplates` / `generateDocument` were added beyond the original six:
+drafting incorporation documents and SAFEs from chat is the founder's primary
+job, and both route to `Lambda_cap_table_document_coordinator.py` against the
+catalog in `Atticus-Back-End/docs/contracts/seriesai_provisioning_contract.md`.
+`generateDocument` returns `status: "inputs_required"` with `missingInputs`
+rather than emitting a document with unfilled placeholders.
+
+| Read/resolve operation | Path |
+|---|---|
+| `seriesai-list-pending-actions` | `GET /api/core/pending-actions/` |
+| `seriesai-resolve-pending-action` | `POST /api/core/pending-actions/{requestId}/resolve/` |
+| `seriesai-list-compliance-deadlines` | `GET /api/core/compliance-deadlines/` |
+| `seriesai-create-compliance-deadline` | `POST /api/core/compliance-deadlines/` |
 
 LitigAI tools (`retrieve_case_*`, `start_motion_generation`, etc.) are unchanged
 and continue to apply when `appId` is 1 or 2.

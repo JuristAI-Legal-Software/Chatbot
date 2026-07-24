@@ -4687,6 +4687,261 @@
           }
         }
       }
+    },
+    "/api/core/tools/execute/": {
+      "post": {
+        "operationId": "seriesai-execute-tool",
+        "summary": "Run a SeriesAI venture-operations action.",
+        "description": "Single entry point for SeriesAI (appId 3 and 4) venture operations: drafting incorporation documents and SAFEs, querying the cap table, scheduling compliance deadlines, requesting signatures, sending round updates and inviting external deal participants. Pick the action with toolName; the other properties are that action's parameters. Actions that email anyone outside the workspace are queued for the user's approval and return a requestId plus approvalToken - report that the action is awaiting approval rather than claiming it was sent. Only valid for SeriesAI sessions; LitigAI and fedcrim sessions (appId 1 and 2) must not call it. SeriesAI is Venture Intelligent AI: it is not a law firm and does not provide legal advice, and it is not a broker-dealer or investment adviser. Reproduce that disclaimer in any reply containing cap-table figures, financial projections or generated documents.",
+        "tags": [
+          "llm-tools"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesAIToolExecute"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesAIToolExecute"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesAIToolExecute"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "chatMintedBearerAuth": []
+          },
+          {
+            "basicAuth": []
+          },
+          {
+            "juristBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Action result, or the queued pending action."
+          }
+        },
+        "x-llm-callable": true
+      }
+    },
+    "/api/core/pending-actions/": {
+      "get": {
+        "operationId": "seriesai-list-pending-actions",
+        "summary": "List SeriesAI actions awaiting the user's approval.",
+        "description": "Returns queued SeriesAI outbound actions with awaitingUserResponse true - SAFE drafts, signature requests and other messages that will not go out until the user approves them. Use this to answer 'what is waiting on me?'.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "appId",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "3",
+                "4"
+              ]
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "organizationId",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "llm-tools"
+        ],
+        "security": [
+          {
+            "chatMintedBearerAuth": []
+          },
+          {
+            "basicAuth": []
+          },
+          {
+            "juristBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pending actions for the organization."
+          }
+        },
+        "x-llm-callable": true
+      }
+    },
+    "/api/core/pending-actions/{requestId}/resolve/": {
+      "post": {
+        "operationId": "seriesai-resolve-pending-action",
+        "summary": "Approve or reject a queued SeriesAI action.",
+        "description": "Approving releases the queued email; rejecting suppresses it. Requires the approvalToken issued when the action was created. Only call this when the user has clearly said to approve or reject that specific action.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requestId",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "llm-tools"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesAIPendingActionResolve"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesAIPendingActionResolve"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesAIPendingActionResolve"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "chatMintedBearerAuth": []
+          },
+          {
+            "basicAuth": []
+          },
+          {
+            "juristBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resolved status for the pending action."
+          }
+        },
+        "x-llm-callable": true
+      }
+    },
+    "/api/core/compliance-deadlines/": {
+      "get": {
+        "operationId": "seriesai-list-compliance-deadlines",
+        "summary": "List SeriesAI compliance deadlines.",
+        "description": "Corporate compliance deadlines for the company - 83(b) elections, Form D, Delaware franchise tax, board meetings, 409A option grants and round closings. Optionally filter by status. The 83(b) 30-day deadline cannot be extended, so flag any that are close or overdue.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "appId",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "3",
+                "4"
+              ]
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "organizationId",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "tags": [
+          "llm-tools"
+        ],
+        "security": [
+          {
+            "chatMintedBearerAuth": []
+          },
+          {
+            "basicAuth": []
+          },
+          {
+            "juristBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compliance deadlines for the organization."
+          }
+        },
+        "x-llm-callable": true
+      },
+      "post": {
+        "operationId": "seriesai-create-compliance-deadline",
+        "summary": "Create a SeriesAI compliance deadline.",
+        "description": "Creates a compliance deadline and schedules its email reminders. Idempotent on organization, type, due date and linked object.",
+        "tags": [
+          "llm-tools"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesAIComplianceDeadlineCreate"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesAIComplianceDeadlineCreate"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesAIComplianceDeadlineCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "chatMintedBearerAuth": []
+          },
+          {
+            "basicAuth": []
+          },
+          {
+            "juristBearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The created deadline."
+          }
+        },
+        "x-llm-callable": true
+      }
     }
   },
   "components": {
@@ -7297,6 +7552,268 @@
             "$ref": "#/components/schemas/PeriodEnum"
           }
         }
+      },
+      "SeriesAIToolExecute": {
+        "type": "object",
+        "description": "SeriesAI tool invocation. appId must be '3' (portfolio / deal lawyers) or '4' (founders / startup ops), and organizationId must be the active company.",
+        "properties": {
+          "toolName": {
+            "type": "string",
+            "enum": [
+              "triggerSafeDraft",
+              "sendRoundUpdate",
+              "queryCapTableOwnership",
+              "scheduleComplianceDeadline",
+              "requestSignaturesViaEmail",
+              "inviteExternalParticipant",
+              "listDocumentTemplates",
+              "generateDocument"
+            ],
+            "description": "Which SeriesAI action to run. triggerSafeDraft: queue a SAFE draft for the founder's approval (never sent to the investor until approved); requires investorName, investorEmail, investmentAmount, and optionally valuationCap, discountRate, roundId. sendRoundUpdate: email a round progress summary to external deal participants; requires roundId. queryCapTableOwnership: ownership percentages from the committed ledger; optional asOf and includeScenarios (scenario figures come back labelled [PROJECTION - not committed to cap table] and must be quoted that way). scheduleComplianceDeadline: create a deadline and its reminder schedule; requires deadlineType and dueDate. requestSignaturesViaEmail: create a signature packet for named signers; requires signers (each with name and email) and a document source (sourceArtifactId from a generated document, or sourceFileId / sourceDownloadUrl for an uploaded one). inviteExternalParticipant: add an external deal participant with scoped access and email them an invite. listDocumentTemplates: the V1 document template catalog, optionally filtered by lifecycleStage - call this before generateDocument if unsure of templateId. generateDocument: draft a document from a catalog template; requires templateId (or documentType) and answers. If the response status is 'inputs_required', ask the user for the fields named in missingInputs and call again -- do not invent values."
+          },
+          "appId": {
+            "type": "string",
+            "enum": [
+              "3",
+              "4"
+            ]
+          },
+          "organizationId": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "Idempotency key. Reuse the same value to retry without duplicating the action."
+          },
+          "investorName": {
+            "type": "string"
+          },
+          "investorEmail": {
+            "type": "string"
+          },
+          "investmentAmount": {
+            "type": "number"
+          },
+          "valuationCap": {
+            "type": "number"
+          },
+          "discountRate": {
+            "type": "number"
+          },
+          "proRataRights": {
+            "type": "boolean"
+          },
+          "roundId": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "includeCapTableSummary": {
+            "type": "boolean"
+          },
+          "asOf": {
+            "type": "string",
+            "description": "ISO date; defaults to now."
+          },
+          "includeScenarios": {
+            "type": "boolean"
+          },
+          "deadlineType": {
+            "type": "string",
+            "enum": [
+              "83b_election",
+              "form_d",
+              "delaware_franchise_tax",
+              "board_meeting",
+              "option_grant_409a",
+              "round_closing"
+            ]
+          },
+          "dueDate": {
+            "type": "string",
+            "description": "ISO date."
+          },
+          "linkedObjectId": {
+            "type": "string"
+          },
+          "linkedObjectType": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "documentName": {
+            "type": "string"
+          },
+          "signers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "email": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "signingOrder": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name",
+                "email"
+              ]
+            }
+          },
+          "sourceArtifactId": {
+            "type": "string"
+          },
+          "sourceFileId": {
+            "type": "string"
+          },
+          "sourceDownloadUrl": {
+            "type": "string"
+          },
+          "participantType": {
+            "type": "string",
+            "enum": [
+              "Accelerator",
+              "VC Investor",
+              "Angel Investor",
+              "Deal Ops Team",
+              "VC Lawyer",
+              "Startup Lawyer",
+              "Accounting Firm",
+              "Corporate Secretary"
+            ]
+          },
+          "organizationName": {
+            "type": "string"
+          },
+          "primaryContactName": {
+            "type": "string"
+          },
+          "primaryContactEmail": {
+            "type": "string"
+          },
+          "roleInDeal": {
+            "type": "string"
+          },
+          "accessScope": {
+            "type": "string",
+            "enum": [
+              "view_only",
+              "review_comment",
+              "deal_execution",
+              "legal_review",
+              "signature_coordination",
+              "admin"
+            ]
+          },
+          "associatedRoundId": {
+            "type": "string"
+          },
+          "expiresInDays": {
+            "type": "integer"
+          },
+          "templateId": {
+            "type": "string"
+          },
+          "documentType": {
+            "type": "string"
+          },
+          "lifecycleStage": {
+            "type": "string"
+          },
+          "answers": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Template field values, keyed by field name."
+          },
+          "companyProfile": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Known company facts used to prefill the template."
+          }
+        },
+        "required": [
+          "toolName",
+          "appId",
+          "organizationId"
+        ]
+      },
+      "SeriesAIPendingActionResolve": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "string",
+            "enum": [
+              "3",
+              "4"
+            ]
+          },
+          "organizationId": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ]
+          },
+          "approvalToken": {
+            "type": "string",
+            "description": "The approvalToken returned when the pending action was created."
+          }
+        },
+        "required": [
+          "appId",
+          "organizationId",
+          "decision",
+          "approvalToken"
+        ]
+      },
+      "SeriesAIComplianceDeadlineCreate": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "string",
+            "enum": [
+              "3",
+              "4"
+            ]
+          },
+          "organizationId": {
+            "type": "string"
+          },
+          "deadlineType": {
+            "type": "string"
+          },
+          "dueDate": {
+            "type": "string"
+          },
+          "linkedObjectId": {
+            "type": "string"
+          },
+          "linkedObjectType": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "appId",
+          "organizationId",
+          "deadlineType",
+          "dueDate"
+        ]
       }
     }
   }
