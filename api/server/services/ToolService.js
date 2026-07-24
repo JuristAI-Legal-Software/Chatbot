@@ -70,7 +70,6 @@ const { redactMessage } = require('~/config/parsers');
 const { findPluginAuthsByKeys } = require('~/models');
 const { getFlowStateManager, getMCPServersRegistry } = require('~/config');
 const { getLogStores } = require('~/cache');
-const { SERIESAI_TOOL_NAMES, getSeriesAIContext } = require('../../app/clients/tools/seriesai');
 
 const domainSeparatorRegex = new RegExp(actionDomainSeparator, 'g');
 
@@ -511,8 +510,7 @@ const isBuiltInTool = (toolName) =>
   Boolean(
     manifestToolMap[toolName] ||
     toolkits.some((t) => t.pluginKey === toolName) ||
-    nativeTools.has(toolName) ||
-    SERIESAI_TOOL_NAMES.has(toolName),
+    nativeTools.has(toolName),
   );
 
 /**
@@ -584,7 +582,6 @@ async function loadToolDefinitionsWrapper({ req, res, agent, streamId = null, to
   }
 
   const appConfig = req.config;
-  const seriesAIContext = getSeriesAIContext(req);
   const enabledCapabilities = await resolveAgentCapabilities(req, appConfig, agent.id);
 
   const checkCapability = (capability) => enabledCapabilities.has(capability);
@@ -798,8 +795,6 @@ async function loadToolDefinitionsWrapper({ req, res, agent, streamId = null, to
   let { toolDefinitions, toolRegistry, hasDeferredTools } = await loadToolDefinitions(
     {
       userId: req.user.id,
-      appId: seriesAIContext?.appId,
-      organizationId: seriesAIContext?.organizationId,
       agentId: agent.id,
       tools: filteredTools,
       toolOptions: agent.tool_options,
@@ -856,8 +851,6 @@ async function loadToolDefinitionsWrapper({ req, res, agent, streamId = null, to
       const reloadResult = await loadToolDefinitions(
         {
           userId: req.user.id,
-          appId: seriesAIContext?.appId,
-          organizationId: seriesAIContext?.organizationId,
           agentId: agent.id,
           tools: filteredTools,
           toolOptions: agent.tool_options,

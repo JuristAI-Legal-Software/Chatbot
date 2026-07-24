@@ -11,7 +11,7 @@ import type { LCToolRegistry, JsonSchemaType, LCTool, GenericTool } from '@libre
 import type { ToolDefinition } from './classification';
 import { resolveJsonSchemaRefs, normalizeJsonSchema } from '~/mcp/zod';
 import { buildToolClassification } from './classification';
-import { getSeriesAIToolDefinitions, getToolDefinition } from './registry/definitions';
+import { getToolDefinition } from './registry/definitions';
 import { toolkitExpansion } from './toolkits/mapping';
 
 export interface MCPServerTool {
@@ -27,9 +27,6 @@ export type MCPServerTools = Record<string, MCPServerTool>;
 export interface LoadToolDefinitionsParams {
   /** User ID for MCP server tool lookup */
   userId: string;
-  /** Canonical SeriesAI workspace context, when applicable */
-  appId?: string | number;
-  organizationId?: string;
   /** Agent ID for tool classification */
   agentId: string;
   /** Agent's tool list (tool names/identifiers) */
@@ -80,8 +77,6 @@ export async function loadToolDefinitions(
 ): Promise<LoadToolDefinitionsResult> {
   const {
     userId,
-    appId,
-    organizationId,
     agentId,
     tools,
     toolOptions = {},
@@ -98,16 +93,13 @@ export async function loadToolDefinitions(
   };
 
   const requestedTools = tools || [];
-  if (requestedTools.length === 0 && !(appId !== undefined && organizationId)) {
+  if (requestedTools.length === 0) {
     return emptyResult;
   }
 
   const mcpServerToolsCache = new Map<string, MCPServerTools>();
   const mcpToolDefs: ToolDefinition[] = [];
   const builtInToolDefs: ToolDefinition[] = [];
-  if (appId !== undefined && organizationId) {
-    builtInToolDefs.push(...(getSeriesAIToolDefinitions({ appId, organizationId }) as ToolDefinition[]));
-  }
   let actionToolDefs: ToolDefinition[] = [];
   const actionToolNames: string[] = [];
 
@@ -209,8 +201,6 @@ export async function loadToolDefinitions(
 
   const classificationResult = await buildToolClassification({
     userId,
-    appId,
-    organizationId,
     agentId,
     loadedTools,
     deferredToolsEnabled,

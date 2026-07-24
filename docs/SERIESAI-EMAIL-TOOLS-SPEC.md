@@ -245,7 +245,9 @@ in `OutboundEmailTable`, the Chatbot must:
    - Key parameters summary
    - Two buttons: **Approve** and **Reject**
 3. Clicking Approve/Reject calls a new backend endpoint:
-   `POST /api/seriesai/pending-actions/:requestId/resolve`
+   `POST /api/core/pending-actions/:requestId/resolve/` (django-hub's shared
+   `/api/core/` surface -- same base URL as every other tool call, not a
+   separate app-specific route)
    with `{ decision: "approved" | "rejected" }`.
 4. The backend endpoint updates `OutboundEmailTable` and, if approved, invokes
    `Lambda_outboundEmailOrchestrator.py` to release the queued email.

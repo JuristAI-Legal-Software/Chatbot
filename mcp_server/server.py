@@ -1390,6 +1390,178 @@ async def cr_action_items_gen(
     return await _post(ctx, "/api/cr-action-items-gen/", payload)
 
 
+@mcp.tool(description="Start a SAFE draft workflow for a SeriesAI investor and queue it for user approval.")
+async def series_ai_trigger_safe_draft(  # noqa: PLR0913 - MCP tool schema is intentionally flat
+    ctx: Context,
+    app_id: str,
+    organization_id: str,
+    investor_name: str,
+    investor_email: str,
+    investment_amount: float,
+    valuation_cap: float | None = None,
+    discount_rate: float | None = None,
+    pro_rata_rights: bool | None = None,
+    round_id: str | None = None,
+) -> dict:
+    payload: dict[str, object] = {
+        "toolName": "triggerSafeDraft",
+        "appId": app_id,
+        "organizationId": organization_id,
+        "investorName": investor_name,
+        "investorEmail": investor_email,
+        "investmentAmount": investment_amount,
+    }
+    optional_values = (
+        ("valuationCap", valuation_cap),
+        ("discountRate", discount_rate),
+        ("proRataRights", pro_rata_rights),
+        ("roundId", round_id),
+    )
+    for key, value in optional_values:
+        _set_payload_value(payload, key, value)
+    return await _post(ctx, "/api/tools/execute/", payload)
+
+
+@mcp.tool(description="Queue a round update email to SeriesAI investors, optionally including a cap table summary.")
+async def series_ai_send_round_update(
+    ctx: Context,
+    app_id: str,
+    organization_id: str,
+    round_id: str,
+    message: str | None = None,
+    include_cap_table_summary: bool | None = None,
+) -> dict:
+    payload: dict[str, object] = {
+        "toolName": "sendRoundUpdate",
+        "appId": app_id,
+        "organizationId": organization_id,
+        "roundId": round_id,
+    }
+    _set_payload_value(payload, "message", message)
+    _set_payload_value(payload, "includeCapTableSummary", include_cap_table_summary)
+    return await _post(ctx, "/api/tools/execute/", payload)
+
+
+@mcp.tool(description="Read-only query of a SeriesAI organization's committed cap table ownership.")
+async def series_ai_query_cap_table_ownership(
+    ctx: Context,
+    app_id: str,
+    organization_id: str,
+    as_of: str | None = None,
+    include_scenarios: bool | None = None,
+) -> dict:
+    payload: dict[str, object] = {
+        "toolName": "queryCapTableOwnership",
+        "appId": app_id,
+        "organizationId": organization_id,
+    }
+    _set_payload_value(payload, "asOf", as_of)
+    _set_payload_value(payload, "includeScenarios", include_scenarios)
+    return await _post(ctx, "/api/tools/execute/", payload)
+
+
+@mcp.tool(description="Schedule a SeriesAI compliance deadline (83(b) election, Form D, franchise tax, etc.).")
+async def series_ai_schedule_compliance_deadline(  # noqa: PLR0913 - MCP tool schema is intentionally flat
+    ctx: Context,
+    app_id: str,
+    organization_id: str,
+    deadline_type: str,
+    due_date: str,
+    linked_object_id: str | None = None,
+    linked_object_type: str | None = None,
+    notes: str | None = None,
+) -> dict:
+    payload: dict[str, object] = {
+        "toolName": "scheduleComplianceDeadline",
+        "appId": app_id,
+        "organizationId": organization_id,
+        "deadlineType": deadline_type,
+        "dueDate": due_date,
+    }
+    optional_values = (
+        ("linkedObjectId", linked_object_id),
+        ("linkedObjectType", linked_object_type),
+        ("notes", notes),
+    )
+    for key, value in optional_values:
+        _set_payload_value(payload, key, value)
+    return await _post(ctx, "/api/tools/execute/", payload)
+
+
+@mcp.tool(description="Request signatures on a SeriesAI document instance and queue it for user approval.")
+async def series_ai_request_signatures_via_email(  # noqa: PLR0913 - MCP tool schema is intentionally flat
+    ctx: Context,
+    app_id: str,
+    organization_id: str,
+    document_instance_id: str,
+    signers: list[dict],
+    message: str | None = None,
+    expires_in_days: int | None = None,
+) -> dict:
+    payload: dict[str, object] = {
+        "toolName": "requestSignaturesViaEmail",
+        "appId": app_id,
+        "organizationId": organization_id,
+        "documentInstanceId": document_instance_id,
+        "signers": signers,
+    }
+    _set_payload_value(payload, "message", message)
+    _set_payload_value(payload, "expiresInDays", expires_in_days)
+    return await _post(ctx, "/api/tools/execute/", payload)
+
+
+@mcp.tool(description="Invite an external deal participant (investor, accelerator, or deal-side lawyer) to a SeriesAI organization workspace.")
+async def series_ai_invite_external_participant(  # noqa: PLR0913 - MCP tool schema is intentionally flat
+    ctx: Context,
+    app_id: str,
+    organization_id: str,
+    participant_type: str,
+    organization_name: str,
+    primary_contact_name: str,
+    primary_contact_email: str,
+    role_in_deal: str,
+    access_scope: str,
+    associated_round_id: str | None = None,
+    expires_in_days: int | None = None,
+) -> dict:
+    payload: dict[str, object] = {
+        "toolName": "inviteExternalParticipant",
+        "appId": app_id,
+        "organizationId": organization_id,
+        "participantType": participant_type,
+        "organizationName": organization_name,
+        "primaryContactName": primary_contact_name,
+        "primaryContactEmail": primary_contact_email,
+        "roleInDeal": role_in_deal,
+        "accessScope": access_scope,
+    }
+    optional_values = (
+        ("associatedRoundId", associated_round_id),
+        ("expiresInDays", expires_in_days),
+    )
+    for key, value in optional_values:
+        _set_payload_value(payload, key, value)
+    return await _post(ctx, "/api/tools/execute/", payload)
+
+
+@mcp.tool(description="Approve or reject a pending SeriesAI action (e.g. a queued SAFE draft or signature request).")
+async def series_ai_resolve_pending_action(
+    ctx: Context,
+    request_id: str,
+    app_id: str,
+    organization_id: str,
+    decision: str,
+    approval_token: str | None = None,
+) -> dict:
+    payload: dict[str, object] = {
+        "appId": app_id,
+        "organizationId": organization_id,
+        "decision": decision,
+    }
+    _set_payload_value(payload, "approvalToken", approval_token)
+    return await _post(ctx, f"/api/pending-actions/{request_id}/resolve/", payload)
+
+
 @mcp.tool(description="Create a brand-new case record.")
 async def create_new_case(  # noqa: PLR0913 - MCP tool schema is intentionally flat
     ctx: Context,
