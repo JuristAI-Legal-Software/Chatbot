@@ -4942,6 +4942,267 @@
         },
         "x-llm-callable": true
       }
+    },
+    "/api/core/integrations/slack": {
+      "get": {
+        "operationId": "list-slack-workspaces",
+        "description": "Which Slack workspaces this user has connected and whether each is still authorized. Call this when a Slack read returns 'not_connected' so you can tell the user to connect Slack rather than reporting that nothing was found.",
+        "summary": "List the user's connected Slack workspaces.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "appId",
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "description": "Optional app scope, e.g. the current product's appId."
+          }
+        ],
+        "tags": [
+          "llm-tools"
+        ],
+        "security": [
+          {
+            "chatMintedBearerAuth": []
+          },
+          {
+            "basicAuth": []
+          },
+          {
+            "juristBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "x-llm-callable": true
+      }
+    },
+    "/api/core/integrations/slack/channels": {
+      "get": {
+        "operationId": "list-slack-channels",
+        "description": "Public channels in the user's connected Slack workspace, with topic, purpose, member count and isMember (whether the JuristAI bot is in the channel). Messages can only be read from channels where isMember is true. Use this to resolve a channel name to a channelId before reading history, and to explain why a channel returned nothing.",
+        "summary": "List Slack channels in the connected workspace.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "appId",
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "description": "Optional app scope, e.g. the current product's appId."
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            },
+            "required": false,
+            "description": "How many channels to return. Defaults to 50; clamped to 1-50."
+          }
+        ],
+        "tags": [
+          "llm-tools"
+        ],
+        "security": [
+          {
+            "chatMintedBearerAuth": []
+          },
+          {
+            "basicAuth": []
+          },
+          {
+            "juristBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "x-llm-callable": true
+      }
+    },
+    "/api/core/integrations/slack/messages": {
+      "get": {
+        "operationId": "search-slack-messages",
+        "description": "Keyword search across the Slack channels the JuristAI bot is a member of. query is required and is matched as plain case-insensitive text, NOT Slack's own search syntax -- from:/in:/has: operators will not work, so pass distinctive words and use channelId to narrow to one channel. Channels the bot has not been invited to are returned in skippedChannels; when that list is non-empty, say the search could not cover those channels rather than reporting that nothing was found. truncated:true means the result cap was hit and there may be more matches.",
+        "summary": "Search message text in the connected Slack workspace.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "The words to look for in message text."
+          },
+          {
+            "in": "query",
+            "name": "appId",
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "description": "Optional app scope, e.g. the current product's appId."
+          },
+          {
+            "in": "query",
+            "name": "channelId",
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "description": "Optional: search only this channel."
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "schema": {
+              "type": "integer"
+            },
+            "required": false,
+            "description": "Lookback window in days. Defaults to 30; clamped to 1-365."
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            },
+            "required": false,
+            "description": "Maximum matches to return. Defaults to 20; clamped to 1-50."
+          }
+        ],
+        "tags": [
+          "llm-tools"
+        ],
+        "security": [
+          {
+            "chatMintedBearerAuth": []
+          },
+          {
+            "basicAuth": []
+          },
+          {
+            "juristBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "x-llm-callable": true
+      }
+    },
+    "/api/core/integrations/slack/history": {
+      "get": {
+        "operationId": "get-slack-channel-messages",
+        "description": "Recent messages in a single Slack channel, newest first, with sender names resolved. Pass channelId, or channelName with or without the leading '#'. An empty message list means the JuristAI bot is not a member of that channel -- say it needs inviting rather than concluding the channel is quiet.",
+        "summary": "Read recent messages from one Slack channel.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "channelId",
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "description": "The channel id from list-slack-channels."
+          },
+          {
+            "in": "query",
+            "name": "channelName",
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "description": "Channel name instead of an id, e.g. 'general' or '#general'."
+          },
+          {
+            "in": "query",
+            "name": "appId",
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "description": "Optional app scope, e.g. the current product's appId."
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "schema": {
+              "type": "integer"
+            },
+            "required": false,
+            "description": "Lookback window in days. Defaults to 7; clamped to 1-365."
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            },
+            "required": false,
+            "description": "Maximum messages to return. Defaults to 50; clamped to 1-200."
+          }
+        ],
+        "tags": [
+          "llm-tools"
+        ],
+        "security": [
+          {
+            "chatMintedBearerAuth": []
+          },
+          {
+            "basicAuth": []
+          },
+          {
+            "juristBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "x-llm-callable": true
+      }
     }
   },
   "components": {
@@ -7567,9 +7828,16 @@
               "requestSignaturesViaEmail",
               "inviteExternalParticipant",
               "listDocumentTemplates",
-              "generateDocument"
+              "generateDocument",
+              "getRevenueMetrics",
+              "getRecentSales",
+              "getMarketingPerformance",
+              "getWebAnalytics",
+              "getConnectorStatus",
+              "listUpcomingCampaigns",
+              "listMarketingAutomations"
             ],
-            "description": "Which SeriesAI action to run. triggerSafeDraft: queue a SAFE draft for the founder's approval (never sent to the investor until approved); requires investorName, investorEmail, investmentAmount, and optionally valuationCap, discountRate, roundId. sendRoundUpdate: email a round progress summary to external deal participants; requires roundId. queryCapTableOwnership: ownership percentages from the committed ledger; optional asOf and includeScenarios (scenario figures come back labelled [PROJECTION - not committed to cap table] and must be quoted that way). scheduleComplianceDeadline: create a deadline and its reminder schedule; requires deadlineType and dueDate. requestSignaturesViaEmail: create a signature packet for named signers; requires signers (each with name and email) and a document source (sourceArtifactId from a generated document, or sourceFileId / sourceDownloadUrl for an uploaded one). inviteExternalParticipant: add an external deal participant with scoped access and email them an invite. listDocumentTemplates: the V1 document template catalog, optionally filtered by lifecycleStage - call this before generateDocument if unsure of templateId. generateDocument: draft a document from a catalog template; requires templateId (or documentType) and answers. If the response status is 'inputs_required', ask the user for the fields named in missingInputs and call again -- do not invent values."
+            "description": "Which SeriesAI action to run. triggerSafeDraft: queue a SAFE draft for the founder's approval (never sent to the investor until approved); requires investorName, investorEmail, investmentAmount, and optionally valuationCap, discountRate, roundId. sendRoundUpdate: email a round progress summary to external deal participants; requires roundId. queryCapTableOwnership: ownership percentages from the committed ledger; optional asOf and includeScenarios (scenario figures come back labelled [PROJECTION - not committed to cap table] and must be quoted that way). scheduleComplianceDeadline: create a deadline and its reminder schedule; requires deadlineType and dueDate. requestSignaturesViaEmail: create a signature packet for named signers; requires signers (each with name and email) and a document source (sourceArtifactId from a generated document, or sourceFileId / sourceDownloadUrl for an uploaded one). inviteExternalParticipant: add an external deal participant with scoped access and email them an invite. listDocumentTemplates: the V1 document template catalog, optionally filtered by lifecycleStage - call this before generateDocument if unsure of templateId. generateDocument: draft a document from a catalog template; requires templateId (or documentType) and answers. If the response status is 'inputs_required', ask the user for the fields named in missingInputs and call again -- do not invent values. getRevenueMetrics: the company's current recurring revenue from its connected Stripe account -- mrr, arr, currency, subscription/customer counts, syncedAt, and a daily MRR series when one has accumulated. getRecentSales: the recent transaction detail behind that revenue -- payment intents, subscriptions, customers, payouts, product list and balances, all from the last Stripe sync. getMarketingPerformance: recent Mailchimp campaign results for the company -- sends, opens, clicks and rates per campaign; optional count (1-100, default 25) sets how many campaigns to return. getWebAnalytics: Google Analytics 4 traffic for the company; optional days (1-365, default 28) sets the lookback window. All of these connector reads are read-only and reflect only what the company has connected: when a provider is not linked they return status 'not_connected' -- say the connector is not set up rather than reporting zero or guessing a figure, and never present a stale syncedAt as live. Quote figures with their currency and their syncedAt date. getConnectorStatus: which connectors (Stripe, Mailchimp, Google Analytics) the company has linked and whether each is healthy -- when any connector read comes back 'not_connected', call this and tell the user exactly which connector to set up rather than saying the figure is zero or unavailable. listUpcomingCampaigns: the Mailchimp campaigns the company has scheduled or drafted but has NOT sent yet, soonest first -- use for 'what is going out next' or 'do we have anything scheduled'; status 'schedule' means a send time is set (scheduledFor), 'save' means an unscheduled draft; optional count (1-100, default 25). It is read-only: it never schedules or sends a campaign, so if the user wants one scheduled or sent, tell them to do it in Mailchimp. listMarketingAutomations: the company's Mailchimp automations/customer journeys with status and entry and completion counts, for 'what drip campaigns are running'; an account with no classic automations returns an empty list, which is not an error."
           },
           "appId": {
             "type": "string",
@@ -7618,6 +7886,18 @@
           },
           "includeScenarios": {
             "type": "boolean"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "getMarketingPerformance and listUpcomingCampaigns only: how many campaigns to return. Defaults to 25; values outside 1-100 are clamped."
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365,
+            "description": "getWebAnalytics only: lookback window in days. Defaults to 28; values outside 1-365 are clamped."
           },
           "deadlineType": {
             "type": "string",

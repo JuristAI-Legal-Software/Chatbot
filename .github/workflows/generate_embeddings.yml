@@ -1,11 +1,6 @@
 name: 'generate_embeddings'
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'docs/**'
 
 permissions:
   contents: read
@@ -15,7 +10,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: supabase/embeddings-generator@v0.0.5
+      - id: config
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::SUPABASE_URL is not set; skipping doc embeddings generation.'
+          else
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.config.outputs.configured == 'true'
+        uses: supabase/embeddings-generator@v0.0.5
         with:
           supabase-url: ${{ secrets.SUPABASE_URL }}
           supabase-service-role-key: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
