@@ -11,7 +11,7 @@
     }
   ],
   "paths": {
-    "/api/billing/cases/{caseId}/generate": {
+    "/api/core/billing/cases/{caseId}/generate": {
       "post": {
         "operationId": "generate-case-bill",
         "description": "Generates or regenerates a case bill for a billing window the authenticated user can access. Exposed to the LibreChat assistant as a callable tool.",
@@ -75,7 +75,7 @@
         "x-llm-callable": true
       }
     },
-    "/api/billing/cases/{caseId}/summary": {
+    "/api/core/billing/cases/{caseId}/summary": {
       "get": {
         "operationId": "retrieve-case-billing-summary",
         "description": "Returns a billing summary for a case and billing window the authenticated user can access. summaryText is a JSON-encoded digest with billingHeader, overview metrics, topBillers, topTasks, missedOpportunities (completed work not captured in the total, e.g. no hourly rate set or no time logged), upcoming work due in the next 7 days, and a plainText fallback for direct quoting. Exposed to the LibreChat assistant as a callable tool.",
