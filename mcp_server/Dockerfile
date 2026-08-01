@@ -8,7 +8,8 @@ FROM python:3.12.7-slim-bookworm
 WORKDIR /app
 
 COPY mcp_server/requirements.txt ./mcp_server/requirements.txt
-RUN pip install --no-cache-dir -r mcp_server/requirements.txt
+RUN pip install --no-cache-dir -r mcp_server/requirements.txt \
+    && python -c "from mcp.server.fastmcp import FastMCP"
 
 COPY mcp_server ./mcp_server
 
