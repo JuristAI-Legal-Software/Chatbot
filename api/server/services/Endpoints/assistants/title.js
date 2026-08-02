@@ -4,6 +4,7 @@ const { CacheKeys } = require('librechat-data-provider');
 const getLogStores = require('~/cache/getLogStores');
 const initializeClient = require('./initalize');
 const { saveConvo } = require('~/models');
+const { recordUsage } = require('~/server/services/Threads');
 
 /**
  * Generates a conversation title using OpenAI SDK
@@ -11,7 +12,7 @@ const { saveConvo } = require('~/models');
  * @param {OpenAI} params.openai - The OpenAI SDK client instance
  * @param {string} params.text - User's message text
  * @param {string} params.responseText - Assistant's response text
- * @returns {Promise<string>}
+ * @returns {Promise<{ title: string, usage: Object, model: string }>}
  */
 const generateTitle = async ({ openai, text, responseText }) => {
   const titlePrompt = `Please generate a concise title (max 40 characters) for a conversation that starts with:
@@ -33,7 +34,11 @@ Title:`;
   });
 
   const title = completion.choices[0]?.message?.content?.trim() || 'New conversation';
-  return sanitizeTitle(title);
+  return {
+    title: sanitizeTitle(title),
+    usage: completion.usage || {},
+    model: completion.model || 'gpt-4o-mini',
+  };
 };
 
 /**
@@ -60,7 +65,20 @@ const addTitle = async (req, { text, responseText, conversationId }) => {
 
   try {
     const { openai } = await initializeClient({ req });
-    const title = await generateTitle({ openai, text, responseText });
+    const titleResult = await generateTitle({ openai, text, responseText });
+    const title = titleResult.title;
+    try {
+      await recordUsage({
+        prompt_tokens: titleResult.usage.prompt_tokens || 0,
+        completion_tokens: titleResult.usage.completion_tokens || 0,
+        model: titleResult.model,
+        user: req?.user?.id,
+        conversationId,
+        context: 'title',
+      });
+    } catch (usageError) {
+      logger.error('[addTitle] Error recording title usage:', usageError);
+    }
     await titleCache.set(key, title, 120000);
 
     const reqCtx = {
