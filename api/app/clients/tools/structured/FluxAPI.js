@@ -4,7 +4,11 @@ const { v4: uuidv4 } = require('uuid');
 const { logger } = require('@librechat/data-schemas');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { Tool } = require('@librechat/agents/langchain/tools');
-const { createMinimalRetentionRequest } = require('@librechat/api');
+const {
+  createMinimalRetentionRequest,
+  getBalanceConfig,
+  getTransactionsConfig,
+} = require('@librechat/api');
 const { FileContext, ContentTypes } = require('librechat-data-provider');
 
 const fluxApiJsonSchema = {
@@ -103,6 +107,14 @@ class FluxAPI extends Tool {
     FLUX_PRO_1_1_ULTRA_FINETUNED: -0.07, // /v1/flux-pro-1.1-ultra-finetuned
   };
 
+  static getPrice(endpoint) {
+    const normalized = String(endpoint || '').toLowerCase().replace(/\./g, '-');
+    const endpointKey = Object.keys(FluxAPI.PRICING).find((key) =>
+      normalized.includes(key.toLowerCase().replace(/_/g, '-')),
+    );
+    return Math.abs(FluxAPI.PRICING[endpointKey] || 0);
+  }
+
   constructor(fields = {}) {
     super();
 
@@ -110,6 +122,7 @@ class FluxAPI extends Tool {
     this.override = fields.override ?? false;
 
     this.userId = fields.userId;
+    this.request = fields.req;
     this.tenantId = fields.req?.user?.tenantId;
     this.retentionRequest = createMinimalRetentionRequest(fields.req);
     this.fileStrategy = fields.fileStrategy;
@@ -142,6 +155,29 @@ class FluxAPI extends Tool {
     this.baseUrl = process.env.FLUX_API_BASE_URL || 'https://api.us1.bfl.ai';
 
     this.schema = fluxApiJsonSchema;
+  }
+
+  async recordImageCost({ endpoint }) {
+    const cost = FluxAPI.getPrice(endpoint);
+    if (!this.userId || cost <= 0) return;
+
+    try {
+      // Load models only for an actual user-scoped accounting write. This
+      // preserves lightweight tool initialization and existing test doubles.
+      const { createTransaction } = require('~/models');
+      await createTransaction({
+        user: this.userId,
+        model: endpoint,
+        context: 'image_generation',
+        tokenType: 'credits',
+        rawAmount: -cost,
+        balance: getBalanceConfig(this.request?.config),
+        transactions: getTransactionsConfig(this.request?.config),
+      });
+    } catch (error) {
+      // Preserve the generated image if the optional accounting write fails.
+      logger.error('[FluxAPI] Failed to record image cost:', error);
+    }
   }
 
   static get jsonSchema() {
@@ -299,6 +335,8 @@ class FluxAPI extends Tool {
       return this.returnValue('No image data received from Flux API.');
     }
 
+    await this.recordImageCost({ endpoint: imageData.endpoint || '/v1/flux-pro' });
+
     // Try saving the image locally
     const imageUrl = resultData.sample;
     const imageName = `img-${uuidv4()}.png`;
@@ -350,15 +388,6 @@ class FluxAPI extends Tool {
 
       logger.debug('[FluxAPI] Image saved to path:', result.filepath);
 
-      // Calculate cost based on endpoint
-      /**
-       * TODO: Cost handling
-      const endpoint = imageData.endpoint || '/v1/flux-pro';
-      const endpointKey = Object.entries(FluxAPI.PRICING).find(([key, _]) =>
-        endpoint.includes(key.toLowerCase().replace(/_/g, '-')),
-      )?.[0];
-      const cost = FluxAPI.PRICING[endpointKey] || 0;
-       */
       this.result = this.returnMetadata ? result : this.wrapInMarkdown(result.filepath);
       return this.returnValue(this.result);
     } catch (error) {
@@ -532,6 +561,8 @@ class FluxAPI extends Tool {
       logger.error('[FluxAPI] No image data received from API. Response:', resultData);
       return this.returnValue('No image data received from Flux API.');
     }
+
+    await this.recordImageCost({ endpoint });
 
     const imageUrl = resultData.sample;
     const imageName = `img-${uuidv4()}.png`;

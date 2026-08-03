@@ -7,12 +7,57 @@ const { logger } = require('@librechat/data-schemas');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { tool } = require('@librechat/agents/langchain/tools');
 const { ContentTypes, EImageOutputType } = require('librechat-data-provider');
-const { logAxiosError, oaiToolkit, extractBaseURL } = require('@librechat/api');
+const {
+  logAxiosError,
+  oaiToolkit,
+  extractBaseURL,
+  getBalanceConfig,
+  getTransactionsConfig,
+} = require('@librechat/api');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
-const { getFiles } = require('~/models');
+const { getFiles, spendTokens } = require('~/models');
 
 const displayMessage =
   "The tool displayed an image. All generated images are already plainly visible, so don't repeat the descriptions in detail. Do not list download links as they are available in the UI already. The user may download the images by clicking on them, but do not mention anything about downloading to the user.";
+
+/**
+ * Record provider-reported image token usage without making image delivery
+ * depend on the balance/transaction subsystem. Image APIs may omit usage, so
+ * absence remains a valid no-op for providers that do not expose it.
+ */
+async function recordImageUsage({ usage, req, runnableConfig, model }) {
+  const userId = req?.user?.id;
+  if (!userId || !usage) return;
+
+  const promptTokens = Number(
+    usage.input_tokens ?? usage.prompt_tokens ?? usage.inputTokens ?? 0,
+  );
+  const completionTokens = Number(
+    usage.output_tokens ?? usage.completion_tokens ?? usage.outputTokens ?? 0,
+  );
+  if (!Number.isFinite(promptTokens) || !Number.isFinite(completionTokens)) return;
+  if (promptTokens <= 0 && completionTokens <= 0) return;
+
+  try {
+    await spendTokens(
+      {
+        user: userId,
+        conversationId: runnableConfig?.configurable?.thread_id,
+        messageId:
+          runnableConfig?.configurable?.run_id ??
+          runnableConfig?.configurable?.requestBody?.messageId,
+        model,
+        context: 'image_generation',
+        balance: getBalanceConfig(req?.config),
+        transactions: getTransactionsConfig(req?.config),
+      },
+      { promptTokens, completionTokens },
+    );
+  } catch (error) {
+    // Preserve the existing image response if accounting is unavailable.
+    logger.error('[ImageGenOAI] Failed to record image token usage:', error);
+  }
+}
 
 /**
  * Replaces unwanted characters from the input string
@@ -193,7 +238,8 @@ Error Message: ${error.message}`);
       }
 
       // For gpt-image-1, the response contains base64-encoded images
-      // TODO: handle cost in `resp.usage`
+      // When present, provider usage is the authoritative accounting input.
+      await recordImageUsage({ usage: resp.usage, req, runnableConfig, model: imageModel });
       const base64Image = resp.data[0].b64_json;
 
       if (!base64Image) {
