@@ -67,6 +67,14 @@ jest.mock(
   { virtual: true },
 );
 
+jest.mock('~/server/services/initializeMCPs', () => jest.fn().mockResolvedValue(undefined));
+jest.mock('~/server/services/initializeOAuthReconnectManager', () =>
+  jest.fn().mockResolvedValue(undefined),
+);
+jest.mock('~/server/services/start/migration', () => ({
+  checkMigrations: jest.fn().mockResolvedValue(undefined),
+}));
+
 describe('Server metrics route', () => {
   jest.setTimeout(30_000);
 
@@ -124,8 +132,8 @@ describe('Server metrics route', () => {
       await new Promise((resolve) => app.server.close(resolve));
     }
     delete process.env.METRICS_SECRET;
-    await mongoServer.stop();
     await mongoose.disconnect();
+    await mongoServer.stop();
   });
 
   it('returns 401 at /metrics when METRICS_SECRET is unset', async () => {
