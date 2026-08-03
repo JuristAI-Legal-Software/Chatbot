@@ -27,7 +27,6 @@ globalThis.CSS = css;
 // Mock ResizeObserver
 import './resizeObserver.mock';
 
-
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {
   writable: true,

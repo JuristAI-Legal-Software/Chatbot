@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import Image, { _resetImageCaches } from '../Image';
 
 jest.mock('~/utils', () => ({
+  ...jest.requireActual('~/utils/images'),
   cn: (...classes: (string | boolean | undefined | null)[]) =>
     classes
       .flat(Infinity)
