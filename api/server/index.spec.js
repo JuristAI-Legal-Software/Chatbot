@@ -4,7 +4,6 @@ const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
 
-
 jest.mock('@librechat/data-schemas', () => ({
   logger: {
     info: jest.fn(),
@@ -18,11 +17,16 @@ jest.mock('@librechat/data-schemas', () => ({
   getTenantId: jest.fn(),
 }));
 
-jest.mock('~/models', () =>
-  new Proxy({}, {
-    get: (_target, property) =>
-      property === 'seedDatabase' ? jest.fn().mockResolvedValue(undefined) : jest.fn(),
-  }),
+jest.mock(
+  '~/models',
+  () =>
+    new Proxy(
+      {},
+      {
+        get: (_target, property) =>
+          property === 'seedDatabase' ? jest.fn().mockResolvedValue(undefined) : jest.fn(),
+      },
+    ),
 );
 
 jest.mock('~/server/services/Config', () => ({

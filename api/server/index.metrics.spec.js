@@ -46,11 +46,16 @@ jest.mock('@librechat/data-schemas', () => ({
   getTenantId: jest.fn(),
 }));
 
-jest.mock('~/models', () =>
-  new Proxy({}, {
-    get: (_target, property) =>
-      property === 'seedDatabase' ? jest.fn().mockResolvedValue(undefined) : jest.fn(),
-  }),
+jest.mock(
+  '~/models',
+  () =>
+    new Proxy(
+      {},
+      {
+        get: (_target, property) =>
+          property === 'seedDatabase' ? jest.fn().mockResolvedValue(undefined) : jest.fn(),
+      },
+    ),
 );
 
 jest.mock(

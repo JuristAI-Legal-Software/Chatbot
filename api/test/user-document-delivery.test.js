@@ -7,7 +7,9 @@ const sourcePaths = {
   djangoMcp: path.join(repoRoot, 'django-hub', 'mcp_server', 'server.py'),
   djangoView: path.join(repoRoot, 'django-hub', 'jurist_backend', 'core', 'api', 'views.py'),
 };
-const sourcesAvailable = Object.values(sourcePaths).every((sourcePath) => fs.existsSync(sourcePath));
+const sourcesAvailable = Object.values(sourcePaths).every((sourcePath) =>
+  fs.existsSync(sourcePath),
+);
 
 // These files live in sibling repositories in the integrated JuristAI workspace.
 // GitHub Actions checks out this repository alone, so leave the contract suite
@@ -20,9 +22,13 @@ const djangoView = sourcesAvailable ? fs.readFileSync(sourcePaths.djangoView, 'u
 describeIfSourcesAvailable('user document delivery tool contract', () => {
   test('chat proxy publishes list and send tools with exact operation IDs', () => {
     expect(chatProxy).toMatch(/"name": "list_uploaded_documents"/);
-    expect(chatProxy).toMatch(/"operationIds": \["list-uploaded-documents", "user-document-delivery"\]/);
+    expect(chatProxy).toMatch(
+      /"operationIds": \["list-uploaded-documents", "user-document-delivery"\]/,
+    );
     expect(chatProxy).toMatch(/"name": "send_uploaded_documents"/);
-    expect(chatProxy).toMatch(/"operationIds": \["send-uploaded-documents", "user-document-delivery"\]/);
+    expect(chatProxy).toMatch(
+      /"operationIds": \["send-uploaded-documents", "user-document-delivery"\]/,
+    );
   });
 
   test('django-hub MCP registers both tools on the authorized API route', () => {
@@ -35,6 +41,8 @@ describeIfSourcesAvailable('user document delivery tool contract', () => {
 
   test('django derives the send recipient from the authenticated user', () => {
     expect(djangoView).toMatch(/payload\["recipientEmail"\] = email/);
-    expect(djangoView).toMatch(/class UserDocumentDeliveryView\(AuthenticatedCaseScopedLambdaAPIView\)/);
+    expect(djangoView).toMatch(
+      /class UserDocumentDeliveryView\(AuthenticatedCaseScopedLambdaAPIView\)/,
+    );
   });
 });
