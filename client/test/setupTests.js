@@ -17,7 +17,13 @@ import '@testing-library/jest-dom/extend-expect';
 // 'react-lottie' uses canvas
 import 'jest-canvas-mock';
 
-
+// JSDOM does not implement CSS.supports, which Ariakit uses when mounting menus.
+const css = window.CSS ?? {};
+if (typeof css.supports !== 'function') {
+  css.supports = () => false;
+}
+Object.defineProperty(window, 'CSS', { configurable: true, value: css });
+globalThis.CSS = css;
 // Mock ResizeObserver
 import './resizeObserver.mock';
 
