@@ -29,9 +29,7 @@ async function recordImageUsage({ usage, req, runnableConfig, model }) {
   const userId = req?.user?.id;
   if (!userId || !usage) return;
 
-  const promptTokens = Number(
-    usage.input_tokens ?? usage.prompt_tokens ?? usage.inputTokens ?? 0,
-  );
+  const promptTokens = Number(usage.input_tokens ?? usage.prompt_tokens ?? usage.inputTokens ?? 0);
   const completionTokens = Number(
     usage.output_tokens ?? usage.completion_tokens ?? usage.outputTokens ?? 0,
   );

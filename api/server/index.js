@@ -345,6 +345,9 @@ const startServer = async () => {
       process.exit(1);
     }
   });
+  if (process.env.NODE_ENV === 'test') {
+    app.server = server;
+  }
 
   setupGracefulShutdown(server);
 };

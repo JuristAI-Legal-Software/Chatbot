@@ -4,6 +4,27 @@ const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
 
+
+jest.mock('@librechat/data-schemas', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+    error: jest.fn(),
+  },
+  runAsSystem: jest.fn(async (callback) => callback()),
+  createModels: jest.fn(),
+  SystemCapabilities: new Proxy({}, { get: (_target, property) => String(property) }),
+  getTenantId: jest.fn(),
+}));
+
+jest.mock('~/models', () =>
+  new Proxy({}, {
+    get: (_target, property) =>
+      property === 'seedDatabase' ? jest.fn().mockResolvedValue(undefined) : jest.fn(),
+  }),
+);
+
 jest.mock('~/server/services/Config', () => ({
   loadCustomConfig: jest.fn(() => Promise.resolve({})),
   getAppConfig: jest.fn().mockResolvedValue({
@@ -135,6 +156,9 @@ describe('Server Configuration', () => {
   });
 
   afterAll(async () => {
+    if (app?.server) {
+      await new Promise((resolve) => app.server.close(resolve));
+    }
     if (mongoServer) {
       await mongoServer.stop();
     }

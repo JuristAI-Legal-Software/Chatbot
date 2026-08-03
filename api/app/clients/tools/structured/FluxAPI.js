@@ -108,7 +108,9 @@ class FluxAPI extends Tool {
   };
 
   static getPrice(endpoint) {
-    const normalized = String(endpoint || '').toLowerCase().replace(/\./g, '-');
+    const normalized = String(endpoint || '')
+      .toLowerCase()
+      .replace(/\./g, '-');
     const endpointKey = Object.keys(FluxAPI.PRICING).find((key) =>
       normalized.includes(key.toLowerCase().replace(/_/g, '-')),
     );

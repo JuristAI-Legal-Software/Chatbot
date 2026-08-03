@@ -278,6 +278,9 @@ jobs:
       - name: Prepare .env.test file
         run: cp api/test/.env.test.example api/test/.env.test
 
+      - name: Ensure Linux sharp runtime
+        run: SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install --no-save --package-lock=false --include=optional --os=linux --cpu=x64 --libc=glibc sharp
+
       - name: Run unit tests
         run: cd api && npm run test:ci
 
