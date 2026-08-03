@@ -14,6 +14,12 @@ jest.mock('@librechat/data-schemas', () => {
   };
 });
 
+jest.mock('@librechat/api', () => ({
+  getImageBasename: (url) => String(url).split('/').pop(),
+  extractBaseURL: (url) => url,
+  createMinimalRetentionRequest: (req) => req,
+}));
+
 const processFileURL = jest.fn();
 
 const generate = jest.fn();
