@@ -32,6 +32,54 @@ jest.mock('~/config', () => ({
   }),
 }));
 
+jest.mock('@librechat/data-schemas', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+    error: jest.fn(),
+  },
+  runAsSystem: jest.fn(async (callback) => callback()),
+  createModels: jest.fn(),
+  createMethods: jest.fn(() => ({})),
+  SystemCapabilities: new Proxy({}, { get: (_target, property) => String(property) }),
+  getTenantId: jest.fn(),
+}));
+
+jest.mock(
+  '~/models',
+  () =>
+    new Proxy(
+      {},
+      {
+        get: (_target, property) =>
+          property === 'seedDatabase' ? jest.fn().mockResolvedValue(undefined) : jest.fn(),
+      },
+    ),
+);
+
+jest.mock(
+  '@librechat/api/telemetry',
+  () => ({
+    initializeTelemetry: jest.fn(() => ({
+      enabled: false,
+      status: 'disabled',
+      shutdown: jest.fn(),
+    })),
+    telemetryMiddleware: jest.fn((_req, _res, next) => next()),
+    telemetryErrorMiddleware: jest.fn((err, _req, _res, next) => next(err)),
+  }),
+  { virtual: true },
+);
+
+jest.mock('~/server/services/initializeMCPs', () => jest.fn().mockResolvedValue(undefined));
+jest.mock('~/server/services/initializeOAuthReconnectManager', () =>
+  jest.fn().mockResolvedValue(undefined),
+);
+jest.mock('~/server/services/start/migration', () => ({
+  checkMigrations: jest.fn().mockResolvedValue(undefined),
+}));
+
 describe('Server metrics route', () => {
   jest.setTimeout(30_000);
 
@@ -69,7 +117,9 @@ describe('Server metrics route', () => {
       '<!DOCTYPE html><html><head><title>LibreChat</title></head><body><div id="root"></div></body></html>',
     );
 
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await MongoMemoryServer.create({
+      instance: { launchTimeout: 30_000 },
+    });
     process.env.MONGO_URI = mongoServer.getUri();
     process.env.PORT = '0';
     process.env.METRICS_SECRET = 'test-secret';
@@ -83,9 +133,12 @@ describe('Server metrics route', () => {
   });
 
   afterAll(async () => {
+    if (app?.server) {
+      await new Promise((resolve) => app.server.close(resolve));
+    }
     delete process.env.METRICS_SECRET;
-    await mongoServer.stop();
     await mongoose.disconnect();
+    await mongoServer.stop();
   });
 
   it('returns 401 at /metrics when METRICS_SECRET is unset', async () => {

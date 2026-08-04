@@ -37,7 +37,13 @@ jest.mock('path', () => ({
 jest.mock('fs', () => ({
   existsSync: jest.fn().mockReturnValue(true),
   mkdirSync: jest.fn(),
+  readFileSync: jest.fn(),
+  writeFileSync: jest.fn(),
+  copyFileSync: jest.fn(),
   promises: { writeFile: jest.fn(), readFile: jest.fn(), unlink: jest.fn() },
+}));
+jest.mock('~/models', () => ({
+  createTransaction: jest.fn().mockResolvedValue({}),
 }));
 
 const FAKE_BASE64 = 'aGVsbG8=';

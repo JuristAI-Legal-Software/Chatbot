@@ -1,5 +1,5 @@
 const OpenAI = require('openai');
-const createOpenAIImageTools = require('~/app/clients/tools/structured/OpenAIImageTools');
+const mockSpendTokens = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('openai');
 jest.mock('@librechat/data-schemas', () => ({
@@ -12,6 +12,8 @@ jest.mock('@librechat/data-schemas', () => ({
 
 jest.mock('@librechat/api', () => ({
   logAxiosError: jest.fn(),
+  getBalanceConfig: jest.fn(() => ({ enabled: true })),
+  getTransactionsConfig: jest.fn(() => ({ enabled: true })),
   oaiToolkit: {
     image_gen_oai: {
       name: 'image_gen_oai',
@@ -33,7 +35,10 @@ jest.mock('~/server/services/Files/strategies', () => ({
 
 jest.mock('~/models', () => ({
   getFiles: jest.fn().mockResolvedValue([]),
+  spendTokens: mockSpendTokens,
 }));
+
+const createOpenAIImageTools = require('~/app/clients/tools/structured/OpenAIImageTools');
 
 describe('OpenAIImageTools - IMAGE_GEN_OAI_MODEL environment variable', () => {
   let originalEnv;
@@ -91,6 +96,33 @@ describe('OpenAIImageTools - IMAGE_GEN_OAI_MODEL environment variable', () => {
         model: 'gpt-image-1',
       }),
       expect.any(Object),
+    );
+  });
+
+  it('records provider-reported image token usage against the user transaction ledger', async () => {
+    const mockGenerate = jest.fn().mockResolvedValue({
+      usage: { input_tokens: 11, output_tokens: 7 },
+      data: [{ b64_json: 'base64-encoded-image-data' }],
+    });
+    OpenAI.mockImplementation(() => ({
+      images: { generate: mockGenerate },
+    }));
+
+    const [imageGenTool] = createOpenAIImageTools({
+      isAgent: true,
+      override: false,
+      req: { user: { id: 'test-user' }, config: {} },
+    });
+
+    await imageGenTool.func({ prompt: 'test prompt' });
+
+    expect(mockSpendTokens).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user: 'test-user',
+        model: 'gpt-image-1',
+        context: 'image_generation',
+      }),
+      { promptTokens: 11, completionTokens: 7 },
     );
   });
 
