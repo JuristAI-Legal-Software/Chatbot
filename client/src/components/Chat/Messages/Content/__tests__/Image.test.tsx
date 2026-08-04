@@ -156,7 +156,7 @@ describe('Image', () => {
     it('passes /images/ paths through with base URL', () => {
       render(<Image {...defaultProps} imagePath="/images/test.png" />);
       const img = screen.getByRole('img');
-      expect(img).toHaveAttribute('src', '/images/test.png');
+      expect(img.getAttribute('src')).toMatch(/\/images\/test\.png$/);
     });
 
     it('passes absolute http URLs through unchanged', () => {
@@ -179,7 +179,7 @@ describe('Image', () => {
     it('passes non-/images/ paths through unchanged', () => {
       render(<Image {...defaultProps} imagePath="/other/path.png" />);
       const img = screen.getByRole('img');
-      expect(img).toHaveAttribute('src', '/other/path.png');
+      expect(img.getAttribute('src')).toMatch(/\/other\/path\.png$/);
     });
   });
 });

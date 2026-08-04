@@ -22,8 +22,11 @@ const css = window.CSS ?? {};
 if (typeof css.supports !== 'function') {
   css.supports = () => false;
 }
-Object.defineProperty(window, 'CSS', { configurable: true, value: css });
-globalThis.CSS = css;
+Object.defineProperty(window, 'CSS', {
+  configurable: true,
+  writable: true,
+  value: css,
+});
 // Mock ResizeObserver
 import './resizeObserver.mock';
 
