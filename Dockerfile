@@ -93,7 +93,7 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
     && npm install --force --legacy-peer-deps --ignore-scripts --no-audit --omit=dev --save=false \
     hono@4.12.31 \
     multer@3.0.0-alpha.2 \
-    undici@8.5.0 \
+    undici@8.10.0 \
     uuid@13.0.1 \
     form-data@4.0.6 \
     protobufjs@8.6.6 \
