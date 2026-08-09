@@ -99,18 +99,19 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
     protobufjs@8.6.6 \
     nodemailer@9.0.1 \
     dompurify@3.4.12 \
-    brace-expansion@5.0.7 \
     svgo@2.8.3 \
-    fast-uri@3.1.4 \
     @opentelemetry/propagator-jaeger@2.9.0 \
     @hono/node-server@2.0.11 \
-    js-yaml@4.3.0 \
     body-parser@2.3.0 \
     axios@1.18.1 \
     @opentelemetry/core@2.8.0 \
     file-type@21.3.2 \
-    @img/sharp-linuxmusl-x64@0.33.5 \
-    @img/sharp-libvips-linuxmusl-x64@1.0.4 \
+    js-yaml@4.3.1 \
+    brace-expansion@5.0.8 \
+    fast-uri@3.1.5 \
+    ip-address@10.2.1 \
+    pdfjs-dist@5.7.284 \
+    sharp@0.34.5 \
     && rm -rf /app/node_modules/gaxios/node_modules/uuid \
     && mkdir -p /app/node_modules/gaxios/node_modules \
     && cp -a /app/node_modules/uuid /app/node_modules/gaxios/node_modules/uuid \
