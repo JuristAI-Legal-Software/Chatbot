@@ -91,14 +91,16 @@ RUN \
 # Re-apply patched package versions after npm prune for Vanta high/medium findings.
 RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.parse(fs.readFileSync(p,"utf8")); const names=["hono","multer","undici","uuid","form-data","protobufjs","nodemailer","dompurify","@opentelemetry/core","file-type"]; if (pkg.overrides) { for (const n of names) delete pkg.overrides[n]; } fs.writeFileSync(p, JSON.stringify(pkg,null,2));' \
     && npm install --force --legacy-peer-deps --ignore-scripts --no-audit --omit=dev --save=false \
-    hono@4.12.31 \
+    hono@4.12.34 \
     multer@3.0.0-alpha.2 \
+    nanoid@3.3.18 \
     undici@8.10.0 \
     uuid@13.0.1 \
     form-data@4.0.6 \
     protobufjs@8.6.6 \
     nodemailer@9.0.1 \
-    dompurify@3.4.12 \
+    dompurify@3.4.13 \
+    postcss@8.5.26 \
     svgo@2.8.3 \
     @opentelemetry/propagator-jaeger@2.9.0 \
     @hono/node-server@2.0.11 \
