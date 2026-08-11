@@ -105,15 +105,15 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
     @opentelemetry/propagator-jaeger@2.9.0 \
     @hono/node-server@2.0.11 \
     body-parser@2.3.0 \
-    axios@1.18.1 \
+    axios@1.19.0 \
     @opentelemetry/core@2.8.0 \
     file-type@21.3.2 \
     js-yaml@4.3.1 \
-    brace-expansion@5.0.8 \
+    brace-expansion@5.0.9 \
     fast-uri@3.1.5 \
-    ip-address@10.2.1 \
-    pdfjs-dist@5.7.284 \
-    sharp@0.34.5 \
+    ip-address@10.3.1 \
+    pdfjs-dist@6.2.108 \
+    sharp@0.35.0 \
     && rm -rf /app/node_modules/gaxios/node_modules/uuid \
     && mkdir -p /app/node_modules/gaxios/node_modules \
     && cp -a /app/node_modules/uuid /app/node_modules/gaxios/node_modules/uuid \
