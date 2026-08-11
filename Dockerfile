@@ -16,6 +16,10 @@ RUN set -eux; \
     addgroup -S node; \
     adduser -S node -G node
 
+# pdfjs-dist 6.x requires Node >=22.13; fail the image build before runtime if
+# the Alpine repository ever resolves an older Node version.
+RUN node -e 'const [major,minor]=process.versions.node.split(".").map(Number); if (major < 22 || (major === 22 && minor < 13)) throw new Error(`Node ${process.versions.node} is incompatible with pdfjs-dist 6.2.108`);'
+
 # Set environment variable to use jemalloc
 ENV LD_PRELOAD=/usr/lib/libjemalloc.so.2
 
