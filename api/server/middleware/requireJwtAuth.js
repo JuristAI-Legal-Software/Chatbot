@@ -47,7 +47,11 @@ const requireJwtAuth = (req, res, next) => {
   const openIdReuseUserId = getValidOpenIdReuseUserId(parsedCookies);
   const useOpenIdJwt =
     tokenProvider === 'openid' && openidJwtAvailable && openIdReuseUserId != null;
+  const chatMintedJwtAvailable = hasPassportStrategy('chatMintedJwt');
   const strategies = useOpenIdJwt ? ['openidJwt', 'jwt'] : ['jwt'];
+  if (chatMintedJwtAvailable) {
+    strategies.push('chatMintedJwt');
+  }
 
   const authenticateWithStrategy = (index) => {
     const strategy = strategies[index];

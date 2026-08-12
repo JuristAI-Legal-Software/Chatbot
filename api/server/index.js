@@ -37,6 +37,7 @@ const { createAccessLimiters, createFileLimiters, createShareLimiters } = requir
 const createValidateImageRequest = require('./middleware/validateImageRequest');
 const { startExpiredFileSweep } = require('./services/Files/process');
 const { jwtLogin, ldapLogin, passportLogin } = require('~/strategies');
+const chatMintedJwtLogin = require('~/strategies/chatMintedJwtStrategy');
 const { checkMigrations } = require('./services/start/migration');
 const optionalJwtAuth = require('./middleware/optionalJwtAuth');
 const initializeMCPs = require('./services/initializeMCPs');
@@ -196,6 +197,9 @@ const startServer = async () => {
   /* OAUTH */
   app.use(passport.initialize());
   passport.use(jwtLogin());
+  if (process.env.CHAT_SECRET || process.env.JWT_SECRET) {
+    passport.use('chatMintedJwt', chatMintedJwtLogin());
+  }
   passport.use(passportLogin());
 
   /* LDAP Auth */
