@@ -280,8 +280,31 @@ async def list_organization_members(ctx: Context) -> dict:
 
 
 @mcp.tool(description="Answer questions about people involved in a case using dossier metadata.")
-async def read_people_dossiers(ctx: Context, case_id: str, query: str | None = None) -> dict:
-    return await _post(ctx, "/api/read-people-dossiers/", {"caseId": case_id, "query": query})
+async def read_people_dossiers(
+    ctx: Context,
+    case_id: str,
+    query: str | None = None,
+    name: str | None = None,
+    email: str | None = None,
+    include_all: bool = False,
+    app_id: str | None = None,
+) -> dict:
+    """Read a case person's dossier using the API's supported lookup fields.
+
+    ``query`` remains a compatibility alias for existing MCP callers, while
+    the API receives the supported ``name``/``email`` fields and app scope.
+    """
+    body = {"caseId": case_id}
+    resolved_name = name or query
+    if resolved_name is not None:
+        body["name"] = resolved_name
+    if email is not None:
+        body["email"] = email
+    if include_all:
+        body["includeAll"] = True
+    if app_id is not None:
+        body["appId"] = app_id
+    return await _post(ctx, "/api/read-people-dossiers/", body)
 
 
 @mcp.tool(description="Search cases and dockets by keyword or docket number.")
