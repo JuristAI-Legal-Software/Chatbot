@@ -3,6 +3,12 @@ const jwt = require('jsonwebtoken');
 const mockGetUserById = jest.fn();
 const mockCreateUser = jest.fn();
 
+// Keep this strategy unit-testable when the workspace data-provider package has
+// not been built yet. The production package exports the same stable role value.
+jest.mock('librechat-data-provider', () => ({
+  SystemRoles: { USER: 'USER' },
+}), { virtual: true });
+
 jest.mock('~/models', () => ({
   getUserById: (...args) => mockGetUserById(...args),
   createUser: (...args) => mockCreateUser(...args),
