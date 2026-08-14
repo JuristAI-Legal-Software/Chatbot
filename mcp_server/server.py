@@ -559,18 +559,14 @@ async def create_action_item(  # noqa: PLR0913 - MCP tool schema is intentionall
     description: str | None = None,
     due_date: str | None = None,
     assignee_id: str | None = None,
+    priority: str | None = None,
 ) -> dict:
-    return await _post(
-        ctx,
-        "/api/action-items/",
-        {
-            "caseId": case_id,
-            "title": title,
-            "description": description,
-            "dueDate": due_date,
-            "assigneeId": assignee_id,
-        },
-    )
+    payload: dict[str, object] = {"caseId": case_id, "title": title}
+    _set_payload_value(payload, "description", description)
+    _set_payload_value(payload, "suggestedDueDate", due_date)
+    _set_payload_value(payload, "assignedTo", [assignee_id] if assignee_id else None)
+    _set_payload_value(payload, "priority", priority)
+    return await _post(ctx, "/api/action-items/", payload)
 
 
 @mcp.tool(description="Update an existing action item.")
@@ -581,17 +577,14 @@ async def update_action_item(  # noqa: PLR0913 - MCP tool schema is intentionall
     description: str | None = None,
     due_date: str | None = None,
     status: str | None = None,
+    priority: str | None = None,
 ) -> dict:
-    body = {
-        k: v
-        for k, v in {
-            "title": title,
-            "description": description,
-            "dueDate": due_date,
-            "status": status,
-        }.items()
-        if v is not None
-    }
+    body: dict[str, object] = {}
+    _set_payload_value(body, "title", title)
+    _set_payload_value(body, "description", description)
+    _set_payload_value(body, "suggestedDueDate", due_date)
+    _set_payload_value(body, "status", status)
+    _set_payload_value(body, "priority", priority)
     return await _patch(ctx, f"/api/action-items/{item_id}/", body)
 
 

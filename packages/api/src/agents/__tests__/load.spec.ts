@@ -169,6 +169,67 @@ describe('loadAgent', () => {
     expect(result!.version).toBe(1);
   });
 
+  test('should append request instructions to additional_instructions without touching stored instructions', async () => {
+    const userId = new mongoose.Types.ObjectId();
+    const agentId = `agent_${uuidv4()}`;
+
+    await createAgent({
+      id: agentId,
+      name: 'Case Agent',
+      provider: 'openai',
+      model: 'gpt-4',
+      author: userId,
+      instructions: 'Stored author instructions.',
+    });
+
+    const mockReq = {
+      user: { id: userId.toString() },
+      body: { instructions: 'Case context: the user is working inside case "73181283".' },
+    };
+
+    const result = await loadAgent(
+      {
+        req: mockReq,
+        agent_id: agentId,
+        endpoint: 'openai',
+        model_parameters: { model: 'gpt-4' } as unknown as AgentModelParameters,
+      },
+      deps,
+    );
+
+    expect(result?.instructions).toBe('Stored author instructions.');
+    expect(result?.additional_instructions).toBe(
+      'Case context: the user is working inside case "73181283".',
+    );
+  });
+
+  test('should leave additional_instructions unchanged when the request carries no instructions', async () => {
+    const userId = new mongoose.Types.ObjectId();
+    const agentId = `agent_${uuidv4()}`;
+
+    await createAgent({
+      id: agentId,
+      name: 'Case Agent',
+      provider: 'openai',
+      model: 'gpt-4',
+      author: userId,
+    });
+
+    const mockReq = { user: { id: userId.toString() }, body: { instructions: '   ' } };
+
+    const result = await loadAgent(
+      {
+        req: mockReq,
+        agent_id: agentId,
+        endpoint: 'openai',
+        model_parameters: { model: 'gpt-4' } as unknown as AgentModelParameters,
+      },
+      deps,
+    );
+
+    expect(result?.additional_instructions).toBeUndefined();
+  });
+
   test('should apply runtime tool overrides to a saved agent without mutating persisted config', async () => {
     const userId = new mongoose.Types.ObjectId();
     const agentId = `agent_${uuidv4()}`;

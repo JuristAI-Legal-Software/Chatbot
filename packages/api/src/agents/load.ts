@@ -32,6 +32,7 @@ export interface LoadAgentParams {
     config?: AppConfig;
     body?: {
       promptPrefix?: string;
+      instructions?: string;
       ephemeralAgent?: TEphemeralAgent;
     };
   };
@@ -191,6 +192,21 @@ export async function loadAgent(
     if (runtimeAgent.artifacts) {
       agent.artifacts = runtimeAgent.artifacts;
     }
+  }
+
+  /**
+   * Per-run context from trusted API callers (e.g. the Django proxy sends case/tool
+   * context as `instructions`). Persistent-agent runs otherwise discard request-level
+   * instructions entirely, so case-scoped tools never learn the active caseId.
+   * Appended to `additional_instructions`, the same dynamic system tail used for
+   * memory/RAG context; the agent author's stored `instructions` stay untouched.
+   */
+  const requestInstructions =
+    typeof req.body?.instructions === 'string' ? req.body.instructions.trim() : '';
+  if (requestInstructions) {
+    agent.additional_instructions = [agent.additional_instructions, requestInstructions]
+      .filter(Boolean)
+      .join('\n\n');
   }
 
   // Set version count from versions array length
