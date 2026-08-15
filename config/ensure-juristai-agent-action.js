@@ -10,6 +10,11 @@ const {
 require('module-alias')({ base: path.resolve(__dirname, '..', 'api') });
 const connect = require('./connect');
 
+// `~/models` supplies database methods, but the standalone config process does
+// not run the server bootstrap that registers mongoose models. Register them
+// explicitly so this script works both in CI and when invoked inside the ECS
+// task image. Without this, createMethods() reaches an undefined Agent model.
+require('~/db/models');
 const db = require('~/models');
 const {
   domainParser,
