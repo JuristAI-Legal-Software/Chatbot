@@ -258,12 +258,15 @@ async function processRequiredActions(client, requiredActions) {
   const promises = [];
 
   let actionSetsData = null;
-  let isActionTool = false;
   const ActionToolMap = {};
   const ActionBuildersMap = {};
 
   for (let i = 0; i < requiredActions.length; i++) {
     const currentAction = requiredActions[i];
+    // Keep this classification local to the current tool call. A shared
+    // mutable flag can relabel an earlier built-in tool when a later action
+    // tool finishes loading before its output is streamed.
+    let isActionTool = false;
     if (currentAction.tool === ImageVisionTool.function.name) {
       promises.push(processVisionRequest(client, currentAction));
       continue;

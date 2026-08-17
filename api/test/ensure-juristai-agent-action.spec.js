@@ -52,7 +52,12 @@ describe('ensure-juristai-agent-action (infra-as-code guard)', () => {
   });
 
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    // Keep a missing/unclean Mongo binary from consuming the master-suite
+    // budget without producing a Jest result. The test remains backed by a
+    // real in-memory Mongo when startup succeeds.
+    mongoServer = await MongoMemoryServer.create({
+      instance: { launchTimeout: 30000 },
+    });
     await mongoose.connect(mongoServer.getUri());
     Agent = mongoose.models.Agent || mongoose.model('Agent', agentSchema);
     Action = mongoose.models.Action || mongoose.model('Action', actionSchema);

@@ -17,12 +17,54 @@ jest.mock('~/server/services/Config', () => ({
   getCachedTools: (...args) => mockGetCachedTools(...args),
 }));
 
+// ToolService imports the complete LibreChat agent/provider graph. This suite
+// exercises capability gating and tool loading with mocked collaborators; do
+// not make collection boot unrelated model, database, or provider startup.
+jest.mock('@librechat/data-schemas', () => ({
+  logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+}));
+jest.mock('@librechat/agents/langchain/tools', () => ({
+  tool: jest.fn((fn) => fn),
+  DynamicStructuredTool: class DynamicStructuredTool {},
+}));
+jest.mock('@librechat/agents', () => ({
+  sleep: jest.fn(),
+  StepTypes: {},
+  GraphEvents: {},
+  Constants: {
+    TOOL_SEARCH: 'tool_search',
+    BASH_PROGRAMMATIC_TOOL_CALLING: 'run_tools_with_bash',
+    PROGRAMMATIC_TOOL_CALLING: 'run_tools_with_code',
+    BASH_TOOL: 'bash_tool',
+    SKILL_TOOL: 'skill_tool',
+    READ_FILE: 'read_file',
+  },
+  createToolSearch: jest.fn(() => ({ name: 'tool_search' })),
+  createBashExecutionTool: jest.fn(() => ({ name: 'bash_tool' })),
+  createBashProgrammaticToolCallingTool: jest.fn(() => ({})),
+}));
+
 const mockLoadToolDefinitions = jest.fn();
 const mockGetUserMCPAuthMap = jest.fn();
 jest.mock('@librechat/api', () => ({
-  ...jest.requireActual('@librechat/api'),
   loadToolDefinitions: (...args) => mockLoadToolDefinitions(...args),
   getUserMCPAuthMap: (...args) => mockGetUserMCPAuthMap(...args),
+  sendEvent: jest.fn(),
+  getToolkitKey: jest.fn(),
+  GenerationJobManager: jest.fn(),
+  buildToolClassification: jest.fn(async ({ loadedTools = [] }) => ({
+    toolRegistry: new Map(loadedTools.map((tool) => [tool.name, tool])),
+    toolDefinitions: [],
+    additionalTools: [],
+    hasDeferredTools: false,
+  })),
+  isActionDomainAllowed: jest.fn(() => true),
+  buildWebSearchContext: jest.fn(),
+  buildImageToolContext: jest.fn(),
+  buildOAuthToolCallName: jest.fn(),
+  getMissingCustomUserVars: jest.fn(() => []),
+  buildWebSearchDynamicContext: jest.fn(),
+  getCodeApiAuthHeaders: jest.fn(),
 }));
 
 const mockLoadToolsUtil = jest.fn();
@@ -909,6 +951,65 @@ describe('ToolService - Action Capability Gating', () => {
       // Each call must carry a distinct builder — guards against the bug
       // where the surviving action's builders got routed to every tool.
       expect(builderPaths[0]).not.toBe(builderPaths[1]);
+    });
+
+    it('keeps built-in tool output metadata separate from action tool metadata', async () => {
+      const builtInCall = jest.fn().mockResolvedValue('{"value":2}');
+      mockLoadToolsUtil.mockResolvedValue({
+        loadedTools: [{ name: 'calculator', _call: builtInCall }],
+        toolContextMap: {},
+      });
+      mockLoadActionSets.mockResolvedValue([actionA]);
+
+      const client = {
+        req: {
+          user: { id: 'user_123' },
+          body: {
+            assistant_id: 'assistant_metadata',
+            model: 'gpt-4o-mini',
+            endpoint: 'openAI',
+          },
+          config: {},
+        },
+        res: {},
+        apiKey: 'sk-test',
+        mappedOrder: new Map(),
+        seenToolCalls: new Map(),
+        addContentData: jest.fn(),
+      };
+
+      await processRequiredActions(client, [
+        {
+          tool: 'calculator',
+          toolInput: { input: '1+1' },
+          toolCallId: 'call_builtin',
+          thread_id: 'thread_1',
+          run_id: 'run_1',
+        },
+        {
+          tool: toolNameA,
+          toolInput: {},
+          toolCallId: 'call_action',
+          thread_id: 'thread_1',
+          run_id: 'run_1',
+        },
+      ]);
+
+      const toolCalls = client.addContentData.mock.calls
+        .map(([payload]) => Object.values(payload).find((value) => value?.function?.name))
+        .filter(Boolean);
+      expect(toolCalls).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            function: expect.objectContaining({ name: 'calculator' }),
+            action: false,
+          }),
+          expect.objectContaining({
+            function: expect.objectContaining({ name: toolNameA }),
+            action: true,
+          }),
+        ]),
+      );
     });
 
     it('loadAgentTools resolves legacy-format tool names via the legacy encoding branch', async () => {
