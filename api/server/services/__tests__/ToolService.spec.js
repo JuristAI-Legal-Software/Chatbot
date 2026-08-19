@@ -129,6 +129,8 @@ const {
   loadToolsForExecution,
   processRequiredActions,
   resolveAgentCapabilities,
+  resolveJuristAIExecutionPolicy,
+  filterJuristAIActionTools,
 } = require('../ToolService');
 
 function createMockReq(capabilities) {
@@ -537,6 +539,35 @@ describe('ToolService - Action Capability Gating', () => {
       });
 
       expect(mockLoadActionSets).toHaveBeenCalledWith({ agent_id: 'agent_123' });
+    });
+
+    it('filters action tools against the server-injected JuristAI capability resolution', () => {
+      const req = createMockReq([AgentCapabilities.actions]);
+      req.body = {
+        juristaiToolContext: {
+          runtime: {
+            runId: 'run-1',
+            channel: 'email',
+            resolvedCapabilities: ['get_case_status'],
+          },
+        },
+      };
+      const allowedTool = `get_case_status${actionDelimiter}api_example_com`;
+      const deniedTool = `delete_case${actionDelimiter}api_example_com`;
+
+      expect(resolveJuristAIExecutionPolicy(req).operationIds).toEqual(new Set(['get_case_status']));
+      expect(filterJuristAIActionTools(req, [allowedTool, deniedTool])).toEqual([allowedTool]);
+    });
+
+    it('does not change direct LibreChat action loading without a JuristAI runtime envelope', () => {
+      const req = createMockReq([AgentCapabilities.actions]);
+      expect(filterJuristAIActionTools(req, [actionToolName])).toEqual([actionToolName]);
+    });
+
+    it('denies all action tools when a JuristAI runtime resolves no capabilities', () => {
+      const req = createMockReq([AgentCapabilities.actions]);
+      req.body = { juristaiToolContext: { runtime: { runId: 'run-empty' } } };
+      expect(filterJuristAIActionTools(req, [actionToolName])).toEqual([]);
     });
 
     it('should resolve actionsEnabled from capabilities when not explicitly provided', async () => {
@@ -951,6 +982,43 @@ describe('ToolService - Action Capability Gating', () => {
       // Each call must carry a distinct builder — guards against the bug
       // where the surviving action's builders got routed to every tool.
       expect(builderPaths[0]).not.toBe(builderPaths[1]);
+    });
+
+    it('returns a structured capability denial for a required action outside the runtime policy', async () => {
+      const client = {
+        req: {
+          user: { id: 'user_123' },
+          body: {
+            assistant_id: 'assistant_denied',
+            model: 'gpt-4o-mini',
+            endpoint: 'openAI',
+            juristaiToolContext: { runtime: { runId: 'run-denied', resolvedCapabilities: [] } },
+          },
+          config: {},
+        },
+        res: {},
+        apiKey: 'sk-test',
+        mappedOrder: new Map(),
+        seenToolCalls: new Map(),
+        addContentData: jest.fn(),
+      };
+
+      const result = await processRequiredActions(client, [
+        {
+          tool: toolNameA,
+          toolInput: {},
+          toolCallId: 'call_denied',
+          thread_id: 'thread_1',
+          run_id: 'run-denied',
+        },
+      ]);
+
+      expect(JSON.parse(result.tool_outputs[0].output)).toEqual({
+        type: 'CAPABILITY_DENIED',
+        message: 'This operation is not available for the current JuristAI run.',
+        operationId: 'echoMessage',
+      });
+      expect(mockLoadActionSets).not.toHaveBeenCalled();
     });
 
     it('keeps built-in tool output metadata separate from action tool metadata', async () => {

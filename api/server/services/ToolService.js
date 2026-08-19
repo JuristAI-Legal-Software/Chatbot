@@ -170,6 +170,68 @@ async function resolveAgentCapabilities(req, appConfig, agentId) {
 }
 
 /**
+ * Returns the server-injected JuristAI execution policy, when this request
+ * came through the JuristAI runtime envelope. Direct LibreChat requests do
+ * not carry this block and retain the existing agent capability behavior.
+ */
+function resolveJuristAIExecutionPolicy(req) {
+  const context = req?.body?.juristaiToolContext;
+  const runtime = context?.runtime;
+  if (!runtime || typeof runtime !== 'object') {
+    return null;
+  }
+
+  const operationIds = new Set();
+  for (const value of runtime.resolvedCapabilities ?? []) {
+    if (typeof value === 'string' && value.trim()) {
+      operationIds.add(value.trim());
+    }
+  }
+  for (const tool of context.availableTools ?? []) {
+    for (const value of tool?.operationIds ?? []) {
+      if (typeof value === 'string' && value.trim()) {
+        operationIds.add(value.trim());
+      }
+    }
+  }
+
+  return {
+    runId: typeof runtime.runId === 'string' ? runtime.runId : null,
+    channel: typeof runtime.channel === 'string' ? runtime.channel : null,
+    operationIds,
+  };
+}
+
+function juristAIOperationId(toolName) {
+  if (typeof toolName !== 'string') {
+    return '';
+  }
+  const delimiterIndex = toolName.lastIndexOf(actionDelimiter);
+  return delimiterIndex === -1 ? toolName : toolName.slice(0, delimiterIndex);
+}
+
+function filterJuristAIActionTools(req, actionToolNames) {
+  const policy = resolveJuristAIExecutionPolicy(req);
+  if (!policy) {
+    return actionToolNames;
+  }
+
+  const allowed = [];
+  for (const toolName of actionToolNames) {
+    const operationId = juristAIOperationId(toolName);
+    if (policy.operationIds.has(operationId) || policy.operationIds.has(toolName)) {
+      allowed.push(toolName);
+      continue;
+    }
+    logger.warn(
+      `[JuristAI runtime] denied action tool ${toolName} for run ${policy.runId || 'unknown'} ` +
+        `on channel ${policy.channel || 'unknown'}: operation is not in resolved capabilities`,
+    );
+  }
+  return allowed;
+}
+
+/**
  * Processes the required actions by calling the appropriate tools and returning the outputs.
  * @param {OpenAIClient} client - OpenAI or StreamRunManager Client.
  * @param {RequiredAction} requiredActions - The current required action.
@@ -266,9 +328,22 @@ async function processRequiredActions(client, requiredActions) {
     // Keep this classification local to the current tool call. A shared
     // mutable flag can relabel an earlier built-in tool when a later action
     // tool finishes loading before its output is streamed.
-    let isActionTool = false;
+    let actionToolLoaded = false;
     if (currentAction.tool === ImageVisionTool.function.name) {
       promises.push(processVisionRequest(client, currentAction));
+      continue;
+    }
+    if (isActionTool(currentAction.tool) && filterJuristAIActionTools(client.req, [currentAction.tool]).length === 0) {
+      promises.push(
+        Promise.resolve({
+          tool_call_id: currentAction.toolCallId,
+          output: JSON.stringify({
+            type: 'CAPABILITY_DENIED',
+            message: 'This operation is not available for the current JuristAI run.',
+            operationId: juristAIOperationId(currentAction.tool),
+          }),
+        }),
+      );
       continue;
     }
     let tool = ToolMap[currentAction.tool] ?? ActionToolMap[currentAction.tool];
@@ -286,7 +361,7 @@ async function processRequiredActions(client, requiredActions) {
         id: currentAction.toolCallId,
         type: 'function',
         progress: 1,
-        action: isActionTool,
+          action: actionToolLoaded,
       };
 
       const toolCallIndex = client.mappedOrder.get(toolCall.id);
@@ -452,7 +527,7 @@ async function processRequiredActions(client, requiredActions) {
         );
         throw new Error(`{"type":"${ErrorTypes.INVALID_ACTION}"}`);
       }
-      isActionTool = !!tool;
+      actionToolLoaded = !!tool;
       ActionToolMap[currentAction.tool] = tool;
     }
 
@@ -1434,11 +1509,13 @@ async function loadToolsForExecution({
     ? [...new Set([...requestedNonSpecialToolNames, ...ptcOrchestratedToolNames])]
     : requestedNonSpecialToolNames;
 
-  const actionToolNames = [];
+  let actionToolNames = [];
   const regularToolNames = [];
   for (const name of allToolNamesToLoad) {
     (isActionTool(name) ? actionToolNames : regularToolNames).push(name);
   }
+
+  actionToolNames = filterJuristAIActionTools(req, actionToolNames);
 
   if (regularToolNames.length > 0) {
     const includesWebSearch = regularToolNames.includes(Tools.web_search);
@@ -1648,6 +1725,8 @@ module.exports = {
   loadToolsForExecution,
   processRequiredActions,
   resolveAgentCapabilities,
+  resolveJuristAIExecutionPolicy,
+  filterJuristAIActionTools,
   extractRequestCaseId,
   buildActionInjectParams,
 };
