@@ -2,6 +2,18 @@
  * https://create-react-app.dev/docs/running-tests/#initializing-test-environment
  */
 
+// React Router uses the Web Encoding API during module initialization. Node
+// exposes the compatible implementation from `node:util`, but JSDOM does not
+// install it on the global object for this Jest environment.
+import { TextDecoder, TextEncoder } from 'node:util';
+
+if (!globalThis.TextEncoder) {
+  Object.defineProperty(globalThis, 'TextEncoder', { configurable: true, value: TextEncoder });
+}
+if (!globalThis.TextDecoder) {
+  Object.defineProperty(globalThis, 'TextDecoder', { configurable: true, value: TextDecoder });
+}
+
 // react-testing-library renders your components to document.body,
 // this adds jest-dom's custom assertions
 // https://github.com/testing-library/jest-dom#table-of-contents

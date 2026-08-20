@@ -76,11 +76,35 @@ RUN \
     done
 
 # npm can omit esbuild's platform package when the lockfile was generated on a
-# different OS. Install the binary required by this Alpine/x64 image explicitly
+# different OS. Fetch the binary required by this Alpine/x64 image explicitly
 # before Vite loads its config.
-RUN ESBUILD_VERSION="$(node -p "require('./node_modules/esbuild/package.json').version")" && \
-    npm install --no-save --package-lock=false --legacy-peer-deps --ignore-scripts --no-audit \
-    "@esbuild/linux-x64@${ESBUILD_VERSION}"
+#
+# `npm pack` instead of `npm install`: installing into /app re-resolves the
+# whole dependency tree, and with --package-lock=false that resolution ignores
+# package-lock.json and picks the newest match for every semver range. A single
+# range resolving to a version whose tarball the registry CDN is not yet serving
+# fails the layer for a package that has nothing to do with esbuild. `npm pack`
+# fetches one tarball and touches no other dependency.
+RUN set -eu ; \
+    ESBUILD_VERSION="$(node -p "require('./node_modules/esbuild/package.json').version")" ; \
+    if [ -x "node_modules/@esbuild/linux-x64/bin/esbuild" ]; then \
+        echo "@esbuild/linux-x64@${ESBUILD_VERSION} already installed" ; \
+    else \
+        mkdir -p /tmp/esbuild-pkg node_modules/@esbuild/linux-x64 ; \
+        attempt=1 ; \
+        until npm pack "@esbuild/linux-x64@${ESBUILD_VERSION}" --pack-destination /tmp/esbuild-pkg ; do \
+            status=$? ; \
+            if [ "$attempt" -ge "$NPM_CI_ATTEMPTS" ]; then \
+                exit "$status" ; \
+            fi ; \
+            echo "npm pack @esbuild/linux-x64@${ESBUILD_VERSION} failed with exit code $status; retrying attempt $((attempt + 1))/$NPM_CI_ATTEMPTS" ; \
+            attempt=$((attempt + 1)) ; \
+            sleep 10 ; \
+        done ; \
+        tar -xzf /tmp/esbuild-pkg/esbuild-linux-x64-*.tgz -C node_modules/@esbuild/linux-x64 --strip-components=1 ; \
+        rm -rf /tmp/esbuild-pkg ; \
+    fi ; \
+    test -x node_modules/@esbuild/linux-x64/bin/esbuild
 
 COPY --chown=node:node . .
 
