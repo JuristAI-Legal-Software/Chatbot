@@ -67,6 +67,19 @@ describe('chatMintedJwtStrategy', () => {
     expect(result.user.id).toBe('abc123');
   });
 
+  test('provisions a user from the standard JWT sub claim minted by ActionService', async () => {
+    mockGetUserById.mockResolvedValue(null);
+    mockCreateUser.mockResolvedValue({ _id: 'abc123', email: 'lawyer@example.com' });
+
+    const result = await verify({ sub: 'abc123', email: 'lawyer@example.com' });
+
+    expect(mockGetUserById).toHaveBeenCalledWith(
+      'abc123',
+      '-password -__v -totpSecret -backupCodes',
+    );
+    expect(result.user.id).toBe('abc123');
+  });
+
   // The brand-new signup is exactly the case where chat_proxy's UserTable GSI
   // lookup can still miss, so the token arrives with no email and the raw
   // Cognito sub as username. LibreChat's user schema requires an email matching

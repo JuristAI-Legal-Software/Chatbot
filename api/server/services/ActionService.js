@@ -260,16 +260,13 @@ async function createActionTool({
       const metadata = action.metadata;
       const executor = requestBuilder.createExecutor();
       // Fill server-derived parameters (e.g. the active case id from the
-      // case-scoped thread) only when the model omitted them, so case-scoped
-      // tools no longer depend on the model knowing/guessing the caseId.
+      // case-scoped thread) authoritatively. Model-supplied values must not be
+      // able to redirect a case-scoped action to another matter.
       let effectiveInput = toolInput;
       if (injectParams && toolInput && typeof toolInput === 'object' && !Array.isArray(toolInput)) {
         effectiveInput = { ...toolInput };
         for (const [key, value] of Object.entries(injectParams)) {
-          const current = effectiveInput[key];
-          if (current === undefined || current === null || current === '') {
-            effectiveInput[key] = value;
-          }
+          effectiveInput[key] = value;
         }
       }
       const preparedExecutor = executor.setParams(effectiveInput ?? {});
@@ -460,8 +457,9 @@ async function createActionTool({
           };
         } else if (!mintedToken) {
           logger.warn(
-            `[Actions] Chat-minted auth unavailable for domain ${action.metadata.domain} (missing secret or user email); executing unauthenticated`,
+            `[Actions] Chat-minted auth unavailable for domain ${action.metadata.domain} (missing secret or user email); refusing unauthenticated execution`,
           );
+          throw new Error('Chat authentication unavailable');
         }
       }
 

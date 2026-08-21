@@ -55,9 +55,7 @@ const makeRequestBuilder = () => {
     async setAuth() {
       return this;
     },
-    async execute() {
-      return { data: { ok: true } };
-    },
+    execute: jest.fn(async () => ({ data: { ok: true } })),
   };
   const requestBuilder = {
     createExecutor: () => executor,
@@ -181,7 +179,7 @@ describe('chat-minted action auth', () => {
       expect(executor.authHeaders.Authorization).toBeUndefined();
     });
 
-    it('executes unauthenticated when no user is available', async () => {
+    it('fails closed when no user is available for a JuristAI action', async () => {
       const { requestBuilder, executor } = makeRequestBuilder();
       const tool = await createActionTool({
         userId: chatUser.id,
@@ -192,7 +190,8 @@ describe('chat-minted action auth', () => {
       const result = await tool._call({});
 
       expect(executor.authHeaders.Authorization).toBeUndefined();
-      expect(result).toBe(JSON.stringify({ ok: true }));
+      expect(executor.execute).not.toHaveBeenCalled();
+      expect(result).toBe('error:Chat authentication unavailable');
     });
   });
 });

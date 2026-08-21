@@ -71,7 +71,7 @@ describe('createActionTool caseId injection', () => {
     expect(state.capturedParams).toEqual({ caseId: 'case-123' });
   });
 
-  it('does not override a caseId the model already supplied', async () => {
+  it('overrides a model-supplied caseId to preserve the active case scope', async () => {
     const { requestBuilder, state } = makeRequestBuilder();
     const tool = await createActionTool({
       userId: 'u1',
@@ -82,7 +82,7 @@ describe('createActionTool caseId injection', () => {
 
     await tool._call({ caseId: 'model-supplied' });
 
-    expect(state.capturedParams).toEqual({ caseId: 'model-supplied' });
+    expect(state.capturedParams).toEqual({ caseId: 'case-123' });
   });
 
   it('fills caseId when the model supplied an empty string', async () => {

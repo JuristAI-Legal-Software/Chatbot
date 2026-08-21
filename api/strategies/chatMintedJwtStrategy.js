@@ -51,7 +51,11 @@ const chatMintedJwtLogin = () =>
     },
     async (payload, done) => {
       try {
-        const id = String(payload?.id ?? '').trim();
+        // ActionService mints the stable user identifier as the standard JWT
+        // `sub` claim. Keep accepting the legacy `id` claim for tokens issued
+        // by older Chatbot callers while ensuring current action tokens can
+        // provision and authenticate the intended user.
+        const id = String(payload?.sub ?? payload?.id ?? '').trim();
         if (!id) {
           return done(null, false, { message: 'Invalid JuristAI chat token' });
         }

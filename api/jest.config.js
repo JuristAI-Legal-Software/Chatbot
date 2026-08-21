@@ -1,3 +1,9 @@
+const path = require('path');
+
+const babelPresetEnv = require.resolve('@babel/preset-env', {
+  paths: [path.resolve(__dirname, '..')],
+});
+
 const esModules = [
   'openid-client',
   'oauth4webapi',
@@ -26,7 +32,7 @@ module.exports = {
     '\\.[jt]sx?$': [
       'babel-jest',
       {
-        presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+        presets: [[babelPresetEnv, { targets: { node: 'current' } }]],
       },
     ],
   },
