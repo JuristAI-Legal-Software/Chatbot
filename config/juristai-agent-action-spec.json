@@ -5203,6 +5203,109 @@
         },
         "x-llm-callable": true
       }
+    },
+    "/api/core/scheduling/bookings/agent": {
+      "post": {
+        "operationId": "create-agent-scheduling-booking",
+        "summary": "Book a meeting at a time the host names.",
+        "description": "Creates a booking and sends its calendar invitation for a specific time the authenticated host asked for. Does NOT require an event type or a prior slot reservation, which is what makes it the correct tool for a direct instruction such as 'book 30 minutes with X tomorrow at 2pm'. Use create-scheduling-booking only when the invitee already made a reservation; calling that one for a named time fails because the event type is not recognized. Report the returned inviteDeliveryStatus honestly and do not claim the invitation was sent while it is still pending. Sending an ICS invitation is not the same as writing an event to the host's calendar: when the connected provider is read-only, say that the invitation was sent and do not claim the meeting appears on the host calendar.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "appId": {
+                    "type": "string",
+                    "description": "Product app id from the user context."
+                  },
+                  "caseId": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "attendee": {
+                    "type": "object",
+                    "description": "The person being invited.",
+                    "properties": {
+                      "email": {
+                        "type": "string",
+                        "format": "email"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "email"
+                    ]
+                  },
+                  "guests": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "email"
+                    },
+                    "description": "Additional invitees when the user names more than one person."
+                  },
+                  "startAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "ISO 8601 with offset."
+                  },
+                  "endAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "durationMinutes": {
+                    "type": "integer",
+                    "default": 30
+                  },
+                  "timeZone": {
+                    "type": "string",
+                    "description": "IANA zone, e.g. America/New_York."
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "appId",
+                  "attendee",
+                  "startAt",
+                  "timeZone"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Booking created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "inviteDeliveryStatus": {
+                      "type": "string",
+                      "description": "Whether the ICS invitation was delivered (for example, sent or pending)."
+                    },
+                    "calendarPlacement": {
+                      "type": "string",
+                      "enum": ["invitation_only"],
+                      "description": "The current booking workflow sends an ICS invitation and does not write an event to the host provider calendar. When this is invitation_only, report invitation delivery without claiming a calendar event was created."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

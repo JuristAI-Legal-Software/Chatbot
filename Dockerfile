@@ -141,7 +141,7 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
     fast-uri@3.1.5 \
     ip-address@10.3.1 \
     pdfjs-dist@6.2.108 \
-    sharp@0.35.0 \
+    sharp@0.35.3 \
     && rm -rf /app/node_modules/gaxios/node_modules/uuid \
     && mkdir -p /app/node_modules/gaxios/node_modules \
     && cp -a /app/node_modules/uuid /app/node_modules/gaxios/node_modules/uuid \
