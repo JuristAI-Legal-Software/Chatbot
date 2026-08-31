@@ -1617,7 +1617,12 @@ class SecretGateMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+@mcp.tool(description="Determine the current procedural posture for a case.")
+async def get_procedural_posture(ctx: Context, case_id: str, app_id: str | None = None) -> dict:
+    """Compatibility alias for callers using the legacy tool name."""
+    return await procedural_posture(ctx, case_id, app_id)
 app = mcp.streamable_http_app()
 
 if MCP_SERVER_SECRET:
     app.add_middleware(SecretGateMiddleware)
+
