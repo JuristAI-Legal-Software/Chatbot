@@ -349,12 +349,15 @@ async def search_documents(
     case_id: str,
     query: str,
     top_k: int | None = None,
+    app_id: str | None = None,
 ) -> dict:
     payload: dict[str, object] = {
         "caseId": case_id,
         "docketId": case_id,
         "query": query,
     }
+    if app_id is not None:
+        payload["appId"] = app_id
     if top_k is not None:
         payload["top_k"] = top_k
     return await _post(ctx, "/api/rag-query-proxy/", payload)
@@ -389,12 +392,15 @@ async def search_documents_for_excerpts(
     case_id: str,
     query: str,
     top_k: int | None = None,
+    app_id: str | None = None,
 ) -> dict:
     payload: dict[str, object] = {
         "caseId": case_id,
         "docketId": case_id,
         "query": query,
     }
+    if app_id is not None:
+        payload["appId"] = app_id
     if top_k is not None:
         payload["top_k"] = top_k
     return await _post(ctx, "/api/rag-query-proxy/", payload)
@@ -948,12 +954,15 @@ async def rag_search(
     case_id: str,
     query: str,
     top_k: int | None = None,
+    app_id: str | None = None,
 ) -> dict:
     payload: dict[str, object] = {
         "caseId": case_id,
         "docketId": case_id,
         "query": query,
     }
+    if app_id is not None:
+        payload["appId"] = app_id
     if top_k is not None:
         payload["top_k"] = top_k
     return await _post(ctx, "/api/rag-query-proxy/", payload)
@@ -1079,13 +1088,54 @@ async def send_engagement_letter_for_signature(  # noqa: PLR0913 - MCP tool sche
 
 
 @mcp.tool(description="Generate a document summary asynchronously.")
-async def summarize_document(ctx: Context, document_url: str, case_id: str | None = None) -> dict:
-    return await _post(ctx, "/api/summarize-document/", {"documentUrl": document_url, "caseId": case_id})
+async def summarize_document(
+    ctx: Context,
+    document_url: str | None = None,
+    case_id: str | None = None,
+    app_id: str | None = None,
+    docket_entry_id: str | None = None,
+    file_id: str | None = None,
+    file_key: str | None = None,
+) -> dict:
+    payload: dict[str, object] = {"caseId": case_id, "appId": app_id}
+    if docket_entry_id is not None:
+        payload["docketEntryId"] = docket_entry_id
+    elif file_id is not None:
+        payload["fileId"] = file_id
+    elif file_key is not None:
+        payload["fileKey"] = file_key
+    elif document_url is not None:
+        payload["fileKey"] = document_url
+    return await _post(
+        ctx,
+        "/api/summarize-document/",
+        payload,
+    )
 
 
 @mcp.tool(description="Critique a document for accuracy, quality, and legal soundness.")
-async def doc_critique(ctx: Context, document_url: str, case_id: str | None = None) -> dict:
-    return await _post(ctx, "/api/doc-critique/", {"documentUrl": document_url, "caseId": case_id})
+async def doc_critique(
+    ctx: Context,
+    document_url: str | None = None,
+    case_id: str | None = None,
+    app_id: str | None = None,
+    s3_links: list[str] | None = None,
+    inline_text: str | None = None,
+    document_name: str | None = None,
+) -> dict:
+    payload: dict[str, object] = {"caseId": case_id, "appId": app_id}
+    links = s3_links or ([document_url] if document_url else None)
+    if links:
+        payload["s3_links"] = links
+    if inline_text is not None:
+        payload["inline_text"] = inline_text
+    if document_name is not None:
+        payload["documentName"] = document_name
+    return await _post(
+        ctx,
+        "/api/doc-critique/",
+        payload,
+    )
 
 
 @mcp.tool(description="Generate a lawsuit recommendation based on case details.")

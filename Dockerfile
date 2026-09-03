@@ -7,7 +7,7 @@ RUN set -eux; \
     for i in 1 2 3 4 5; do \
         apk update \
         && apk upgrade --no-cache \
-        && apk add --no-cache nodejs npm python3 py3-pip uv jemalloc \
+        && apk add --no-cache nodejs npm python3 py3-pip uv jemalloc 'expat>=2.8.4-r0' \
         && break; \
         echo "apk install failed; retrying $i/5"; \
         rm -rf /var/cache/apk/* /tmp/*; \
