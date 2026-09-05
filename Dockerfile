@@ -138,7 +138,7 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
     file-type@21.3.2 \
     js-yaml@4.3.1 \
     brace-expansion@5.0.9 \
-    fast-uri@3.1.5 \
+    fast-uri@3.1.6 \
     ip-address@10.3.1 \
     pdfjs-dist@6.2.108 \
     sharp@0.35.3 \
