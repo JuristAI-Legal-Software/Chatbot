@@ -1,3 +1,5 @@
+import { maxWorkers } from '../../config/jest.workers.cjs';
+
 const esModules = [
   'uuid',
   '@mistralai[\\\\/]mistralai',

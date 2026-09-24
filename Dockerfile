@@ -129,15 +129,15 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
     uuid@13.0.1 \
     form-data@4.0.6 \
     protobufjs@8.6.6 \
-    nodemailer@9.1.1 \
+    nodemailer@10.0.1 \
     dompurify@3.4.13 \
     postcss@8.5.26 \
     svgo@2.8.4 \
     @opentelemetry/propagator-jaeger@2.9.0 \
     @hono/node-server@2.0.11 \
     body-parser@2.3.0 \
-    axios@1.19.0 \
-    @opentelemetry/core@2.8.0 \
+    axios@1.20.0 \
+    @opentelemetry/core@2.9.0 \
     file-type@21.3.2 \
     js-yaml@4.3.2 \
     brace-expansion@5.0.9 \
