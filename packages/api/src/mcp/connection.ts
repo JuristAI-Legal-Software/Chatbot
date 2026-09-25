@@ -1,7 +1,11 @@
 import { isIP } from 'node:net';
 import { EventEmitter } from 'events';
 import { logger } from '@librechat/data-schemas';
-import { fetch as undiciFetch, Agent, ProxyAgent, Headers as UndiciHeaders } from 'undici';
+import { fetch as undiciFetch, Agent, ProxyAgent } from 'undici';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { WebSocketClientTransport } from '@modelcontextprotocol/sdk/client/websocket.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
   StdioClientTransport,
   getDefaultEnvironment,
@@ -1596,8 +1600,11 @@ export class MCPConnection extends EventEmitter {
                   this.allowedAddresses,
                 );
                 /** Merge headers: SSE defaults < init headers < user headers (user wins) */
-                const fetchHeaders = new UndiciHeaders(
-                  Object.assign({}, SSE_REQUEST_HEADERS, resolvedInit?.headers, headers),
+                const fetchHeaders = Object.assign(
+                  {},
+                  SSE_REQUEST_HEADERS,
+                  resolvedInit?.headers,
+                  headers,
                 );
                 const liveHeaders = this.directBearerRecoveryEnabled
                   ? this.getRequestHeaders()

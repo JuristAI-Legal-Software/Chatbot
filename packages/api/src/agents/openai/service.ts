@@ -20,7 +20,15 @@ import type { LocatorTraversalReporter } from '../../protection/diagnostics';
  * ```
  */
 import { nanoid } from 'nanoid';
-import { AgentCapabilities } from 'librechat-data-provider';
+import { logger } from '@librechat/data-schemas';
+import { AgentCapabilities, EModelEndpoint } from 'librechat-data-provider';
+import type {
+  FiltersConfig,
+  MessageFilterConfig,
+  MessageFilterPiiConfig,
+  StatefulCodeEnvironment,
+  TAgentsEndpoint,
+} from 'librechat-data-provider';
 import { applyResponseAppPrompt } from '../appPrompt';
 import { resolveResponseAppInstructions } from '../generatedResponsePrompts';
 import type { Response as ServerResponse, Request } from 'express';
@@ -663,7 +671,11 @@ export async function createAgentChatCompletion(
     appInstructions = await resolveResponseAppInstructions(appId);
   } catch (error) {
     logger.error('[OpenAIChatCompletion] Failed to load mapped app prompt from S3', error);
-    sendErrorResponse(res, 503, 'The selected app prompt is temporarily unavailable. Please retry.');
+    sendErrorResponse(
+      res,
+      503,
+      'The selected app prompt is temporarily unavailable. Please retry.',
+    );
     return;
   }
   const runtimeAgent = applyResponseAppPrompt(agent, appInstructions, requestInstructions);

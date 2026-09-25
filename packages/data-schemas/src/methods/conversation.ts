@@ -1,11 +1,30 @@
 import { Buffer } from 'node:buffer';
 import { RetentionMode } from 'librechat-data-provider';
-import { createTempChatExpirationDate } from '~/utils/tempChatRetention';
-import { buildRetentionVisibilityFilter, createFallbackRetentionDate } from '~/utils/retention';
-import { tenantSafeBulkWrite } from '~/utils/tenantBulkWrite';
-import { isValidConversationId } from '~/utils/conversationId';
-import logger from '~/config/winston';
-import type { AppConfig, IConversation } from '~/types';
+import type {
+  AnyBulkWriteOperation,
+  DeleteResult,
+  FilterQuery,
+  Model,
+  SortOrder,
+  Types,
+} from 'mongoose';
+import type { SearchParams } from 'meilisearch';
+import type {
+  IAgentEventActorCheckpoint,
+  IAgentEventActorReconciliation,
+  IAgentEventActorSnapshot,
+  IAgentEventActorState,
+  IAgentEventActorSuspensionEvidence,
+  IAgentEventBindingRecord,
+  IAgentTriggerDeliveryDocument,
+  AppConfig,
+  IChatProjectDocument,
+  IActiveSubagentThreadLease,
+  IConversation,
+  ISharedLink,
+  ISubagentThreadReservation,
+} from '~/types';
+import type { SchemaWithMeiliMethods } from '~/models/plugins/mongoMeili';
 import type { MessageMethods } from './message';
 import {
   MAX_AGENT_EVENT_ACTOR_DISCOVERED_TOOLS,
@@ -26,6 +45,7 @@ import {
 import { createChatExpirationDate, createTempChatExpirationDate } from '~/utils/tempChatRetention';
 import { isAgentFadingTier, isAgentFadingTierEntries } from '~/utils/fading';
 import { isCompactionSemanticIndexProjection } from '~/types/compaction';
+import { isValidConversationId } from '~/utils/conversationId';
 import { tenantSafeBulkWrite } from '~/utils/tenantBulkWrite';
 import { isValidObjectIdString } from '~/utils/objectId';
 import { decrementTagCounts } from './conversationTag';
@@ -2181,8 +2201,62 @@ export function createConversationMethods(
         return null;
       }
 
-      const messages = await getMessages({ conversationId, user: userId }, '_id');
-      const update: Record<string, unknown> = { ...convo, messages, user: userId };
+      const appendMessageIds = metadata?.appendMessageIds;
+      const update: Record<string, unknown> = { ...convo, user: userId };
+      delete update.isTemporary;
+      delete update.expiredAt;
+      delete update.initial_agent_id;
+      /** Ordinary saves may seed a decision, but only an explicit move may replace it. */
+      const decisionOnInsert = {
+        ...(convo.codeEnvironmentMode != null && {
+          codeEnvironmentMode: convo.codeEnvironmentMode,
+        }),
+        ...(convo.codeWorkspaces != null && { codeWorkspaces: convo.codeWorkspaces }),
+      };
+      delete update.codeEnvironmentMode;
+      delete update.codeWorkspaces;
+      stripActorCheckpointFields(update);
+      if (appendMessageIds == null) {
+        update.messages = await getMessages({ conversationId, user: userId }, '_id');
+      } else {
+        delete update.messages;
+      }
+      const unsetFields: Record<string, number> = { ...(metadata?.unsetFields ?? {}) };
+      delete unsetFields.initial_agent_id;
+      delete unsetFields.codeEnvironmentMode;
+      delete unsetFields.codeWorkspaces;
+      stripActorCheckpointFields(unsetFields);
+
+      if (Object.prototype.hasOwnProperty.call(update, 'chatProjectId') && update.chatProjectId) {
+        const chatProjectId = typeof update.chatProjectId === 'string' ? update.chatProjectId : '';
+        let isValidChatProject = isValidObjectIdString(chatProjectId);
+
+        if (isValidChatProject) {
+          const ChatProject = mongoose.models.ChatProject as Model<IChatProjectDocument>;
+          const project = await ChatProject.exists({
+            _id: new mongoose.Types.ObjectId(chatProjectId),
+            user: userId,
+          });
+          isValidChatProject = project != null;
+        }
+
+        if (!isValidChatProject) {
+          delete update.chatProjectId;
+          unsetFields.chatProjectId = 1;
+        }
+      }
+
+      const mayChangeProjectMembership =
+        Object.prototype.hasOwnProperty.call(update, 'chatProjectId') ||
+        Object.prototype.hasOwnProperty.call(unsetFields, 'chatProjectId');
+      let previousChatProjectId: string | null = null;
+      if (mayChangeProjectMembership) {
+        const existing = await Conversation.findOne(
+          { conversationId, user: userId },
+          'chatProjectId',
+        ).lean<{ chatProjectId?: string | null } | null>();
+        previousChatProjectId = existing?.chatProjectId ?? null;
+      }
 
       if (newConversationId) {
         update.conversationId = newConversationId;

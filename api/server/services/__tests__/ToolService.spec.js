@@ -119,24 +119,35 @@ jest.mock('@librechat/agents', () => ({
 const mockLoadToolDefinitions = jest.fn();
 const mockGetUserMCPAuthMap = jest.fn();
 jest.mock('@librechat/api', () => ({
+  ...jest.requireActual('@librechat/api'),
+  AGENT_EXPECTED_MCP_TOOLS_UNAVAILABLE: 'AGENT_EXPECTED_MCP_TOOLS_UNAVAILABLE',
+  isFatalAgentInitializationError: (error, { signal } = {}) =>
+    (signal?.aborted === true && (error === signal.reason || error?.name === 'AbortError')) ||
+    ['AGENT_EXPECTED_MCP_TOOLS_UNAVAILABLE', 'resource_recovery_required'].includes(error?.code),
+  selectMCPUpstreamTokenProvider: ({
+    upstreamTokenProvider,
+    upstreamTokenProviderResolver,
+    createSessionProvider,
+  }) =>
+    upstreamTokenProviderResolver
+      ? upstreamTokenProvider
+      : (upstreamTokenProvider ?? createSessionProvider()),
   loadToolDefinitions: (...args) => mockLoadToolDefinitions(...args),
   getUserMCPAuthMap: (...args) => mockGetUserMCPAuthMap(...args),
-  sendEvent: jest.fn(),
-  getToolkitKey: jest.fn(),
-  GenerationJobManager: jest.fn(),
-  buildToolClassification: jest.fn(async ({ loadedTools = [] }) => ({
-    toolRegistry: new Map(loadedTools.map((tool) => [tool.name, tool])),
-    toolDefinitions: [],
-    additionalTools: [],
-    hasDeferredTools: false,
-  })),
-  isActionDomainAllowed: jest.fn(() => true),
-  buildWebSearchContext: jest.fn(),
-  buildImageToolContext: jest.fn(),
-  buildOAuthToolCallName: jest.fn(),
-  getMissingCustomUserVars: jest.fn(() => []),
-  buildWebSearchDynamicContext: jest.fn(),
-  getCodeApiAuthHeaders: jest.fn(),
+  createAuthIdentityContext: ({ user, tenantId }) => ({
+    appUserId: user?._id?.toString?.() ?? user?.id,
+    openidSubject: user?.openidId,
+    tenantId: tenantId ?? user?.tenantId,
+    openidIssuer: user?.openidIssuer,
+  }),
+  sendEvent: (...args) => mockSendEvent(...args),
+  GenerationJobManager: {
+    emitChunk: (...args) => mockEmitChunk(...args),
+  },
+  resolveCodeExecutionContext: (...args) => mockResolveCodeExecutionContext(...args),
+  resolveCodeExecutionWorkspaceContext: (...args) =>
+    mockResolveCodeExecutionWorkspaceContext(...args),
+  createAttachedWorkspaceBashTool: (...args) => mockCreateAttachedWorkspaceBashTool(...args),
 }));
 
 const mockLoadToolsUtil = jest.fn();
@@ -3498,7 +3509,9 @@ describe('ToolService - Action Capability Gating', () => {
       const allowedTool = `get_case_status${actionDelimiter}api_example_com`;
       const deniedTool = `delete_case${actionDelimiter}api_example_com`;
 
-      expect(resolveJuristAIExecutionPolicy(req).operationIds).toEqual(new Set(['get_case_status']));
+      expect(resolveJuristAIExecutionPolicy(req).operationIds).toEqual(
+        new Set(['get_case_status']),
+      );
       expect(filterJuristAIActionTools(req, [allowedTool, deniedTool])).toEqual([allowedTool]);
     });
 

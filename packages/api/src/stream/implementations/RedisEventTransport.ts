@@ -225,10 +225,26 @@ const CAPTURE_SUBSCRIPTION_FRONTIER_LUA =
 
 /** Max messages to buffer before force-flushing (prevents memory issues) */
 const MAX_BUFFER_SIZE = 100;
-/** Retry budget for transient Redis SUBSCRIBE failures */
-const SUBSCRIBE_RETRY_ATTEMPTS = 3;
-/** Small backoff between subscribe retries */
-const SUBSCRIBE_RETRY_DELAY_MS = 50;
+/** Rolling-upgrade recovery window after a legacy job hash expires without an epoch marker. */
+const GENERATION_EPOCH_GRACE_TTL_SECONDS = 300;
+/** Durable owner proof outlives receipt retries and process-local subscriptions. */
+const ABORT_ACK_TTL_SECONDS = 86400;
+const PROVIDER_DRAIN_TTL_SECONDS = 86400;
+const SUBSCRIPTION_ATTACHMENT_TIMEOUT_MS = 3_000;
+
+interface SubscriptionFrontierWaiter {
+  streamId: string;
+  resolve: () => void;
+  reject: (error: Error) => void;
+  timeout: ReturnType<typeof setTimeout>;
+}
+
+interface ChannelSubscriptionState {
+  ready: Promise<void>;
+  phase: 'pending' | 'active';
+  /** A timed-out predecessor became active while this replacement was pending. */
+  fallbackActive: boolean;
+}
 
 /**
  * Subscriber state for a stream
@@ -751,33 +767,6 @@ export class RedisEventTransport implements IEventTransport {
     }
   }
 
-  private async subscribeWithRetry(channel: string): Promise<void> {
-    let lastError: unknown;
-
-    for (let attempt = 1; attempt <= SUBSCRIBE_RETRY_ATTEMPTS; attempt++) {
-      try {
-        await this.subscriber.subscribe(channel);
-        logger.debug(`[RedisEventTransport] Subscription active for channel ${channel}`);
-        return;
-      } catch (err) {
-        lastError = err;
-
-        if (attempt === SUBSCRIBE_RETRY_ATTEMPTS) {
-          break;
-        }
-
-        logger.warn(
-          `[RedisEventTransport] Subscribe attempt ${attempt} failed for ${channel}; retrying`,
-          err,
-        );
-        await new Promise((resolve) => setTimeout(resolve, SUBSCRIBE_RETRY_DELAY_MS * attempt));
-      }
-    }
-
-    logger.error(`[RedisEventTransport] Failed to subscribe to ${channel}:`, lastError);
-    throw lastError;
-  }
-
   /**
    * Advance subscriber reorder buffer to the authoritative Redis sequence counter
    * (cross-replica safe).
@@ -1257,15 +1246,26 @@ export class RedisEventTransport implements IEventTransport {
     streamState.count++;
     streamState.handlers.set(subscriberId, handlers);
 
-    let readyPromise = this.channelSubscriptions.get(channel);
-
-    if (!readyPromise) {
-      readyPromise = this.subscribeWithRetry(channel).catch((err) => {
-        this.channelSubscriptions.delete(channel);
-        throw err;
-      });
-      this.channelSubscriptions.set(channel, readyPromise);
-    }
+    /** A fresh activity attachment has no replay log. SUBSCRIBE first, then atomically
+     * capture the sequence and publish a marker. Observing that marker proves every
+     * receivable pre-frontier frame is already buffered locally. */
+    const captureSequenceFrontier =
+      options?.captureSequenceFrontier === true && streamState.reorderBuffer.deliveryDeferred;
+    const channelReady = this.ensureChannelSubscription(streamId);
+    const attachmentFrontier = captureSequenceFrontier
+      ? channelReady
+          .then(() => {
+            if (this.streams.get(streamId) !== streamState || streamState.count === 0) return;
+            return this.captureSubscriptionFrontier(streamId);
+          })
+          .catch((error) => {
+            /** The initiating route may leave while another local viewer remains.
+             * A failed fence must not strand that survivor behind shared deferral. */
+            this.releaseDeferredDelivery(streamId, streamState);
+            throw error;
+          })
+      : undefined;
+    const readyPromise = attachmentFrontier?.then(() => undefined) ?? channelReady;
 
     return {
       ready: readyPromise,
@@ -1307,23 +1307,7 @@ export class RedisEventTransport implements IEventTransport {
            * keeping a detached subscriber's pending gaps or frontier here can
            * only delay the next attachment before that authoritative sync.
            */
-          this.resetReorderBuffer(streamId);
-
-          if (state.abortCallbacks.length === 0) {
-            this.subscriber.unsubscribe(channel).catch((err) => {
-              logger.error(`[RedisEventTransport] Failed to unsubscribe from ${channel}:`, err);
-            });
-            this.channelSubscriptions.delete(channel);
-          }
-
-          // Call all-subscribers-left callbacks
-          for (const callback of state.allSubscribersLeftCallbacks) {
-            try {
-              callback();
-            } catch (err) {
-              logger.error(`[RedisEventTransport] Error in allSubscribersLeft callback:`, err);
-            }
-          }
+          this.detachStreamSubscribers(streamId, streamState);
           /**
            *  Preserve stream state (callbacks, abort handlers) for reconnection.
            *  Previously this deleted the entire state, which lost the
@@ -1672,7 +1656,46 @@ export class RedisEventTransport implements IEventTransport {
    * @param streamId - The stream identifier
    * @param callback - Called when abort signal is received
    */
-  onAbort(streamId: string, callback: () => void): Promise<void> | void {
+  async onAbort(
+    streamId: string,
+    callback: (generationId?: number) => void | boolean,
+  ): Promise<() => void> {
+    const state = this.getOrCreateStreamState(streamId);
+
+    const registration = { callback };
+    state.abortCallbacks.add(registration);
+
+    try {
+      await this.ensureChannelSubscription(streamId);
+    } catch (error) {
+      state.abortCallbacks.delete(registration);
+      this.unsubscribeUnusedChannel(streamId, state);
+      throw error;
+    }
+
+    return () => {
+      if (this.streams.get(streamId) !== state || !state.abortCallbacks.delete(registration)) {
+        return;
+      }
+      this.unsubscribeUnusedChannel(streamId, state);
+    };
+  }
+
+  /**
+   * Publish a preempt arm/clear to all replicas. Unlike abort this does NOT
+   * stop the run — the generating replica seals its current model stream at
+   * the next provider-safe boundary. Same channel and subscription as every
+   * other stream event; fenced by `msg.createdAt` on the receiving side.
+   */
+  /**
+   * Resolves to the number of replicas that received the message, so an ARM
+   * can be acknowledged only once it actually reached someone. Unlike abort
+   * (fire-and-forget, because a failed abort is retried by the user hitting
+   * stop again) an unheard arm is invisible: the route would answer
+   * `preempt: true` for a seal that never happens. Rejects on publish
+   * failure; callers decide what to do.
+   */
+  async emitPreempt(streamId: string, msg: PreemptMessage): Promise<number> {
     const channel = CHANNELS.events(streamId);
     const message: PubSubMessage = {
       type: EventTypes.PREEMPT,
@@ -1703,18 +1726,12 @@ export class RedisEventTransport implements IEventTransport {
       throw error;
     }
 
-    state.abortCallbacks.push(callback);
-
-    if (!this.channelSubscriptions.has(channel)) {
-      const ready = this.subscribeWithRetry(channel).catch((err) => {
-        this.channelSubscriptions.delete(channel);
-        throw err;
-      });
-      this.channelSubscriptions.set(channel, ready);
-      return ready;
-    }
-
-    return this.channelSubscriptions.get(channel);
+    return () => {
+      if (this.streams.get(streamId) !== state || !state.preemptCallbacks.delete(registration)) {
+        return;
+      }
+      this.unsubscribeUnusedChannel(streamId, state);
+    };
   }
 
   /**

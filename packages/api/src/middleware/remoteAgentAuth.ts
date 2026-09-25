@@ -65,86 +65,8 @@ function hasRequiredScopes(requiredScope: string | undefined, payload: JwtPayloa
 function verifyRemoteOidcAccessToken(
   token: string,
   oidcConfig: EnabledOidcConfig,
-  cacheOptions: JwksCacheOptions,
-): Promise<string> {
-  if (oidcConfig.jwksUri) return ensureRemoteOidcUrlAllowed(oidcConfig.jwksUri, 'OIDC JWKS URI');
-  if (process.env.OPENID_JWKS_URL) {
-    return ensureRemoteOidcUrlAllowed(process.env.OPENID_JWKS_URL, 'OIDC JWKS URI');
-  }
-
-  if (!cacheOptions.enabled) return discoverJwksUri(oidcConfig.issuer);
-
-  const cacheKey = oidcConfig.issuer;
-  const cached = jwksUriCache.get(cacheKey);
-  if (cached != null && cached.expiresAt > Date.now()) return cached.promise;
-  if (cached != null) jwksUriCache.delete(cacheKey);
-
-  const promise = discoverJwksUri(oidcConfig.issuer).catch((err) => {
-    jwksUriCache.delete(cacheKey);
-    throw err;
-  });
-
-  setCacheEntry(jwksUriCache, cacheKey, {
-    promise,
-    expiresAt: Date.now() + cacheOptions.maxAge,
-  });
-  return promise;
-}
-
-function buildJwksClient(uri: string, cacheOptions: JwksCacheOptions): jwksRsa.JwksClient {
-  const options: jwksRsa.Options = {
-    cache: cacheOptions.enabled,
-    cacheMaxAge: cacheOptions.maxAge,
-    jwksUri: uri,
-  };
-
-  if (process.env.PROXY) {
-    options.requestAgent = new HttpsProxyAgent(process.env.PROXY);
-  }
-
-  return jwksRsa(options);
-}
-
-async function getJwksClient(oidcConfig: EnabledOidcConfig): Promise<jwksRsa.JwksClient> {
-  const cacheOptions = getJwksCacheOptions();
-  const uri = await resolveJwksUri(oidcConfig, cacheOptions);
-
-  if (!cacheOptions.enabled) return buildJwksClient(uri, cacheOptions);
-
-  const cacheKey = uri;
-  const cached = jwksClientCache.get(cacheKey);
-  if (cached != null && cached.expiresAt > Date.now()) return cached.promise;
-  if (cached != null) jwksClientCache.delete(cacheKey);
-
-  let client: jwksRsa.JwksClient;
-  try {
-    client = buildJwksClient(uri, cacheOptions);
-  } catch (err) {
-    jwksClientCache.delete(cacheKey);
-    throw err;
-  }
-
-  const promise = Promise.resolve(client);
-
-  setCacheEntry(jwksClientCache, cacheKey, {
-    promise,
-    expiresAt: Date.now() + cacheOptions.maxAge,
-  });
-  return promise;
-}
-
-function getVerifyOptions(oidcConfig: EnabledOidcConfig): VerifyOptions {
-  const normalizedIssuer = normalizeOpenIdIssuer(oidcConfig.issuer);
-  const issuer: string | [string, ...string[]] =
-    normalizedIssuer && normalizedIssuer !== oidcConfig.issuer
-      ? [oidcConfig.issuer, normalizedIssuer]
-      : oidcConfig.issuer;
-
-  return {
-    algorithms: JWT_ALGORITHMS,
-    audience: oidcConfig.audience,
-    issuer,
-  };
+): Promise<JwtPayload> {
+  return verifyOidcAccessToken(token, oidcConfig, { useOpenIdJwksEnv: true });
 }
 
 function getConfigOptions(req: Request): GetAppConfigOptions {

@@ -1,9 +1,15 @@
 import path from 'path';
 import JSZip from 'jszip';
-import { ResourceType, AccessRoleIds, PrincipalType } from 'librechat-data-provider';
-import { logger, stripYamlTrailingComment } from '@librechat/data-schemas';
-import type { Response } from 'express';
-import type { Types } from 'mongoose';
+import crypto from 'crypto';
+import { logger, validateRelativePath } from '@librechat/data-schemas';
+import {
+  ResourceType,
+  DEFAULT_SKILL_IMPORT_CLEANUP_CONCURRENCY,
+  AccessRoleIds,
+  PrincipalType,
+  hasActivePiiFields,
+  hasActivePiiPatterns,
+} from 'librechat-data-provider';
 import type {
   AppConfig,
   ISkill,
@@ -14,13 +20,14 @@ import type {
   UpsertSkillFileInput,
 } from '@librechat/data-schemas';
 import type { SkillImportFailureReason, TSkillImportFailedResponse } from 'librechat-data-provider';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import type { Types } from 'mongoose';
 import type {
   ContentTraversalLimitError,
   TextContentFragment,
   SkillContentInput,
 } from '~/protection';
+import type { ServerRequest as BaseServerRequest } from '~/types/http';
 import type { ImportLimits } from './limits';
 import {
   inspectContent,
@@ -37,7 +44,10 @@ import {
 import { deleteSkillWithRetry, mergeDeleteSkillResults } from './cleanup';
 import { contentFilterBlockResponse } from '~/middleware/contentFilter';
 import { resolveRequestTenantId } from '~/middleware/tenant';
-import type { ServerRequest as BaseServerRequest } from '~/types/http';
+import { createConcurrencyLimiter } from '~/utils/promise';
+import { DEFAULT_SKILL_IMPORT_LIMITS } from './limits';
+import { parseSkillMarkdown } from './parse';
+import { isBinaryBuffer } from './binary';
 
 const SKILL_MD = 'SKILL.md';
 
@@ -154,6 +164,7 @@ export interface ImportSkillDeps {
 
 type ServerRequest = BaseServerRequest & {
   tenantId?: string;
+  config?: AppConfig;
   user: NonNullable<BaseServerRequest['user']> & {
     _id: Types.ObjectId;
     name?: string;

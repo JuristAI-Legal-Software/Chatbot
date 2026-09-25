@@ -59,7 +59,7 @@ function createApp(
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    req.user = { id: 'user-1', tenantId: 'tenant-1' };
+    req.user = { id: 'user-1', tenantId: 'tenant-1' } as typeof req.user;
     (req as typeof req & { _isAgentTrigger?: boolean })._isAgentTrigger =
       req.get('x-test-trigger') === '1';
     if (preResolved) {

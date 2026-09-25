@@ -1420,14 +1420,9 @@ describe('RedisEventTransport Integration Tests', () => {
       // shared by every replica and by later generations that reuse this stream ID.
       transport.cleanup(streamId);
 
-      // Poll for the fire-and-forget DEL to complete (robust under CI load)
-      const start = Date.now();
-      let valAfter: string | null = 'pending';
-      while (valAfter !== null && Date.now() - start < 5000) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        valAfter = await ioredisClient.get(key);
-      }
-      expect(valAfter).toBeNull();
+      const valAfter = await ioredisClient.get(key);
+      expect(valAfter).toBe('5');
+      expect(await ioredisClient.ttl(key)).toBeGreaterThan(0);
 
       transport.destroy();
       subscriber.disconnect();

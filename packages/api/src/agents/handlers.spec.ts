@@ -60,7 +60,47 @@ function createHandler(
 function invokeHandler(
   handler: ReturnType<typeof createToolExecuteHandler>,
   toolCalls: ToolCallRequest[],
+  callerCapabilityProjection?: {
+    version: 1;
+    directToolNames: string[];
+    codeExecutionToolNames: string[];
+    directOnlyToolNames: string[];
+    codeExecutionOnlyToolNames: string[];
+  },
+  agentId?: string,
+): Promise<ToolExecuteResult[]> {
+  return new Promise((resolve, reject) => {
+    const request = {
+      toolCalls,
+      agentId,
+      callerCapabilityProjection,
+      resolve,
+      reject,
+    } as ToolExecuteBatchRequest & { callerCapabilityProjection?: unknown };
+    handler.handle('on_tool_execute', request);
+  });
+}
+
+function invokeHandlerWithRequest(
+  handler: ReturnType<typeof createToolExecuteHandler>,
+  toolCalls: ToolCallRequest[],
   requestOverrides: Partial<ToolExecuteBatchRequest> = {},
+): Promise<ToolExecuteResult[]> {
+  return new Promise((resolve, reject) => {
+    const request: ToolExecuteBatchRequest = {
+      toolCalls,
+      resolve,
+      reject,
+      ...requestOverrides,
+    };
+    handler.handle('on_tool_execute', request);
+  });
+}
+
+function invokeHandlerWithConfig(
+  handler: ReturnType<typeof createToolExecuteHandler>,
+  toolCalls: ToolCallRequest[],
+  configurable: Record<string, unknown>,
 ): Promise<ToolExecuteResult[]> {
   return new Promise((resolve, reject) => {
     const request: ToolExecuteBatchRequest = {
@@ -68,7 +108,6 @@ function invokeHandler(
       configurable,
       resolve,
       reject,
-      ...requestOverrides,
     };
     handler.handle('on_tool_execute', request);
   });
@@ -170,7 +209,7 @@ describe('createToolExecuteHandler', () => {
       }));
       const handler = createToolExecuteHandler({ loadTools, persistToolCall });
 
-      await invokeHandler(
+      await invokeHandlerWithRequest(
         handler,
         [
           {
@@ -216,7 +255,7 @@ describe('createToolExecuteHandler', () => {
       }));
       const handler = createToolExecuteHandler({ loadTools, persistToolCall });
 
-      const [result] = await invokeHandler(
+      const [result] = await invokeHandlerWithRequest(
         handler,
         [
           {

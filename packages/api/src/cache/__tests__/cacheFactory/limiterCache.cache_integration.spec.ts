@@ -61,8 +61,8 @@ describe('limiterCache', () => {
 
     const testKey = 'user:123';
 
-    // SET operation — rate-limit-redis v4 sendCommand uses SendCommandClusterDetails
-    await testStore!.sendCommand({ command: ['SET', testKey, '1', 'EX', '60'], isReadOnly: false });
+    // SET operation uses the raw command argument form expected by rate-limit-redis.
+    await testStore!.sendCommand('SET', testKey, '1', 'EX', '60');
 
     // Verify the key was created WITHOUT prefix using ioredis
     // Note: Using call method since get method seems to have issues in test environment
@@ -75,14 +75,11 @@ describe('limiterCache', () => {
     expect(directValue).toBe('1');
 
     // GET operation
-    const value = await testStore!.sendCommand({ command: ['GET', testKey], isReadOnly: true });
+    const value = await testStore!.sendCommand('GET', testKey);
     expect(value).toBe('1');
 
     // INCR operation
-    const incremented = await testStore!.sendCommand({
-      command: ['INCR', testKey],
-      isReadOnly: false,
-    });
+    const incremented = await testStore!.sendCommand('INCR', testKey);
     expect(incremented).toBe(2);
 
     // Verify increment worked with ioredis
@@ -90,29 +87,21 @@ describe('limiterCache', () => {
     expect(incrementedValue).toBe('2');
 
     // TTL operation
-    const ttl = (await testStore!.sendCommand({
-      command: ['TTL', testKey],
-      isReadOnly: true,
-    })) as number;
+    const ttl = (await testStore!.sendCommand('TTL', testKey)) as number;
     expect(ttl).toBeGreaterThan(0);
     expect(ttl).toBeLessThanOrEqual(60);
 
     // DEL operation
-    const deleted = await testStore!.sendCommand({ command: ['DEL', testKey], isReadOnly: false });
+    const deleted = await testStore!.sendCommand('DEL', testKey);
     expect(deleted).toBe(1);
 
     // Verify deletion
-    const afterDelete = await testStore!.sendCommand({
-      command: ['GET', testKey],
-      isReadOnly: true,
-    });
+    const afterDelete = await testStore!.sendCommand('GET', testKey);
     expect(afterDelete).toBeNull();
     const directAfterDelete = await ioredisClient!.get(testKey);
     expect(directAfterDelete).toBeNull();
 
     // Test error handling
-    await expect(
-      testStore!.sendCommand({ command: ['INVALID_COMMAND'], isReadOnly: false }),
-    ).rejects.toThrow();
+    await expect(testStore!.sendCommand('INVALID_COMMAND')).rejects.toThrow();
   });
 });

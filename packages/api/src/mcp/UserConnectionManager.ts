@@ -886,6 +886,9 @@ export abstract class UserConnectionManager {
           customUserVars,
           requestBody,
           requestHeaders,
+          graphTokenResolver,
+          upstreamTokenProvider,
+          upstreamTokenProviderResolver,
           connectionTimeout,
           signal,
         };

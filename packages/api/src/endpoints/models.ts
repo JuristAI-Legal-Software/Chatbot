@@ -24,6 +24,8 @@ import { getModelCacheTokenConfigKey, isScopedTokenConfigKey } from '~/endpoints
 import { createSSRFSafeAgents, validateEndpointURL } from '~/auth';
 import { standardCache, tokenConfigCache } from '~/cache';
 
+type SSRFSafeAgents = ReturnType<typeof createSSRFSafeAgents>;
+
 /**
  * Linear-time trailing-slash stripper.
  * Avoids the ReDoS surface of `.replace(/\/+$/, '')` when fed untrusted input.
@@ -35,7 +37,6 @@ function stripTrailingSlashes(value: string): string {
   }
   return end === value.length ? value : value.slice(0, end);
 }
-
 export interface FetchModelsParams {
   /** User ID for API requests */
   user?: string;

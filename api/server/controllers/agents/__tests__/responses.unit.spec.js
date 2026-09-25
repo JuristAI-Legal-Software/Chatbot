@@ -483,7 +483,7 @@ jest.mock('~/server/controllers/agents/callbacks', () => {
     createToolEndCallback: jest.fn().mockReturnValue(jest.fn()),
     createResponsesToolEndCallback: jest.fn().mockReturnValue(jest.fn()),
     createPersistAgentToolCall: jest.fn().mockReturnValue(jest.fn()),
-    markSummarizationUsage: jest.fn().mockImplementation((usage) => usage),
+    contextualizeModelUsage: jest.fn().mockImplementation((usage) => usage),
     agentLogHandlerObj: noop,
     buildSummarizationHandlers: jest.fn().mockReturnValue({
       on_summarize_start: noop,

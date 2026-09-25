@@ -112,18 +112,21 @@ export function resolveModelHeaders({
   tenantId,
   body,
   customUserVars,
+  requestHeaders,
 }: {
   headers: Record<string, string> | undefined;
   user?: Partial<IUser> | { id: string };
   tenantId?: string;
   body?: RequestBody;
   customUserVars?: Record<string, string>;
+  requestHeaders?: Record<string, string | string[] | undefined>;
 }): Record<string, string> {
   const resolved = resolveHeaders({
     headers,
     user,
     body,
     customUserVars,
+    requestHeaders,
     stripUnresolved: true,
   });
 
@@ -166,6 +169,7 @@ export function resolveConfigHeaders({
   tenantId,
   body,
   customUserVars,
+  requestHeaders,
 }: {
   /** Partial: this only reads the three provider header carriers, so
    *  callers with a bare ClientOptions (e.g. auxiliary generations like
@@ -177,6 +181,8 @@ export function resolveConfigHeaders({
   tenantId?: string;
   body?: RequestBody;
   customUserVars?: Record<string, string>;
+  /** Allowlisted inbound request headers for `{{LIBRECHAT_REQUEST_*}}` placeholders. */
+  requestHeaders?: Record<string, string | string[] | undefined>;
 }): void {
   if (llmConfig == null) {
     return;
@@ -186,7 +192,14 @@ export function resolveConfigHeaders({
     if (resolvedHeaderMaps.has(headers)) {
       return headers;
     }
-    const resolved = resolveModelHeaders({ headers, user, tenantId, body, customUserVars });
+    const resolved = resolveModelHeaders({
+      headers,
+      user,
+      tenantId,
+      body,
+      customUserVars,
+      requestHeaders,
+    });
     resolvedHeaderMaps.add(resolved);
     return resolved;
   };

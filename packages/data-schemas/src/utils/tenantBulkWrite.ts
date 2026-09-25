@@ -1,14 +1,16 @@
 import type { AnyBulkWriteOperation, Model, MongooseBulkWriteOptions } from 'mongoose';
-import { getTenantId, SYSTEM_TENANT_ID } from '~/config/tenantContext';
+import type { BulkWriteResult } from 'mongodb';
+import type { TenantScope, TenantUpdate } from '~/tenant/policy';
+import {
+  resolveTenantScope,
+  resetTenantStrictCache,
+  sanitizeTenantMutation,
+  isTenantIsolationStrict,
+} from '~/tenant/policy';
 import logger from '~/config/winston';
 
-let _strictMode: boolean | undefined;
-
-export type TenantBulkWriteResult = Awaited<ReturnType<Model<unknown>['bulkWrite']>>;
-
-function isStrict(): boolean {
-  return (_strictMode ??= process.env.TENANT_ISOLATION_STRICT === 'true');
-}
+/** Alias kept for JuristAI callers (e.g. agentCategory) that import the result type from here. */
+export type TenantBulkWriteResult = BulkWriteResult;
 
 /** Resets the cached strict-mode flag. Exposed for test teardown only. */
 export function _resetBulkWriteStrictCache(): void {
@@ -41,8 +43,8 @@ export async function tenantSafeBulkWrite<T>(
   model: Model<T>,
   ops: AnyBulkWriteOperation[],
   options?: MongooseBulkWriteOptions,
-): Promise<TenantBulkWriteResult> {
-  const tenantId = getTenantId();
+): Promise<BulkWriteResult> {
+  const scope = resolveTenantScope(`bulkWrite on ${model.modelName}`);
 
   // Strip tenantId from update documents unconditionally — application code
   // must never control tenantId via update payloads regardless of context.
@@ -65,7 +67,7 @@ const EMPTY_BULK_RESULT = Object.freeze({
   upsertedCount: 0,
   upsertedIds: {},
   insertedIds: {},
-}) as TenantBulkWriteResult;
+}) as unknown as BulkWriteResult;
 
 /** Strips tenantId from update documents. Returns null if the op becomes empty. */
 function sanitizeBulkOp(

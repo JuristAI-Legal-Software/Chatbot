@@ -13,7 +13,6 @@ export default function VectorStoreListItem({
   vectorStore,
   deleteVectorStore,
 }: VectorStoreListItemProps) {
-  const localize = useLocalize();
   const navigate = useNavigate();
   const localize = useLocalize();
   return (
@@ -29,9 +28,9 @@ export default function VectorStoreListItem({
       </div>
       <div className="w-2/6 text-text-tertiary">
         <p>
-          {localize('com_files_vector_store_file_count_and_size', {
-            count: vectorStore.file_counts.total,
-            size: vectorStore.bytes / 1000,
+          {localize('com_ui_files_count_size', {
+            0: vectorStore.file_counts?.total ?? 0,
+            1: (vectorStore.bytes ?? 0) / 1000,
           })}
         </p>
         <p className="text-sm">{vectorStore.created_at.toString()}</p>

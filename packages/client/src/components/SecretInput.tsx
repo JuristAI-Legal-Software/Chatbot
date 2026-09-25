@@ -4,11 +4,9 @@ import { Eye, EyeOff, Copy, Check } from 'lucide';
 import { MorphIcon } from './MorphIcon';
 import { cn } from '~/utils';
 
-export interface SecretInputProps extends Omit<
-  React.InputHTMLAttributes<HTMLInputElement>,
-  'type'
-> {
-  /** Show copy button */
+export interface SecretInputProps
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> {
+  /** Show the built-in copy button */
   showCopy?: boolean;
   /** Custom copy control rendered inside the input, in place of the built-in one */
   copyButton?: React.ReactNode;

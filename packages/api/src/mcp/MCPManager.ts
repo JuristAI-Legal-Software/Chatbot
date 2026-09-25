@@ -511,6 +511,9 @@ export class MCPManager extends UserConnectionManager {
         customUserVars: args.customUserVars,
         requestBody: args.requestBody,
         requestHeaders: args.requestHeaders,
+        graphTokenResolver: args.graphTokenResolver,
+        upstreamTokenProvider: args.upstreamTokenProvider,
+        upstreamTokenProviderResolver: args.upstreamTokenProviderResolver,
         connectionTimeout: args.connectionTimeout,
         deadlineMs: args.deadlineMs,
         signal: args.signal,
@@ -538,6 +541,7 @@ export class MCPManager extends UserConnectionManager {
       customUserVars: args.customUserVars,
       requestBody: args.requestBody,
       requestHeaders: args.requestHeaders,
+      graphTokenResolver: args.graphTokenResolver,
       connectionTimeout: args.connectionTimeout,
       deadlineMs: args.deadlineMs,
       onOAuthCredentialsChanged: args.onOAuthCredentialsChanged,
@@ -1105,6 +1109,7 @@ Please follow these instructions when using tools from the respective MCP server
     tokenMethods,
     requestBody,
     requestHeaders,
+    requestScopedConnections,
     flowManager,
     oauthStart,
     oauthEnd,
@@ -1128,6 +1133,7 @@ Please follow these instructions when using tools from the respective MCP server
     options?: RequestOptions;
     requestBody?: RequestBody;
     requestHeaders?: Record<string, string | string[] | undefined>;
+    requestScopedConnections?: t.RequestScopedMCPConnectionStore;
     tokenMethods?: TokenMethods;
     customUserVars?: Record<string, string>;
     flowManager: FlowStateManager<MCPOAuthTokens | null>;
@@ -1214,17 +1220,45 @@ Please follow these instructions when using tools from the respective MCP server
             serverConfig: providedConfig,
             directBearerRecoveryState,
           });
-      const currentOptions = processMCPEnv({
-        user,
-        body: requestBody,
-        requestHeaders,
-        dbSourced: isDbSourced,
-        options: graphProcessedConfig,
-        customUserVars,
-      });
-      if ('headers' in currentOptions) {
-        connection.setRequestHeaders(currentOptions.headers || {});
-      }
+          retainConnectionLease();
+          const checkoutRecovery = this.oauthRecoveries.get(connection);
+          if (!checkoutRecovery || checkoutRecovery.promise === awaitedCheckoutRecovery) {
+            break;
+          }
+          if (checkoutRecovery.directBearerRecoveryConsumed) {
+            directBearerRecoveryState.attempted = true;
+          }
+          if (checkoutRecovery.callbacks) {
+            await checkoutRecovery.callbacks.add({
+              oauthStart,
+              oauthEnd,
+              flowManager,
+              userId: userId!,
+              serverName,
+            });
+          }
+          awaitedCheckoutRecovery = checkoutRecovery.promise;
+          await releaseConnectionLease();
+          try {
+            await this.waitForConnectionRecovery(checkoutRecovery.promise, options?.signal);
+            if (checkoutRecovery.directBearerRecoveryState) {
+              Object.assign(directBearerRecoveryState, checkoutRecovery.directBearerRecoveryState);
+            }
+          } catch (recoveryError) {
+            if (
+              options?.signal?.aborted ||
+              recoveryTakeoverConsumed ||
+              !this.claimRecoveryTakeover(checkoutRecovery)
+            ) {
+              throw recoveryError;
+            }
+            recoveryTakeoverConsumed = true;
+            if (this.oauthRecoveries.get(connection) === checkoutRecovery) {
+              this.oauthRecoveries.delete(connection);
+            }
+            continue;
+          }
+        }
 
         const registry = MCPServersRegistry.getInstance();
         const declaredConfig =
@@ -1262,6 +1296,7 @@ Please follow these instructions when using tools from the respective MCP server
         const currentOptions = processMCPEnv({
           user,
           body: requestBody,
+          requestHeaders,
           dbSourced: isDbSourced,
           options: bearerConfig,
           customUserVars,

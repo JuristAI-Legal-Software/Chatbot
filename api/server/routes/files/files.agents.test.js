@@ -427,7 +427,7 @@ describe('File Routes - Agent Files Endpoint', () => {
       testApp.use((req, res, next) => {
         req.user = { id: userId.toString(), role: userRole };
         req.app = { locals: {} };
-        req.config = { fileStrategy: 'local', paths: { uploads: '/tmp/uploads' } };
+        req.config = { fileStrategy: 'local', paths: { uploads: '/tmp/uploads' }, ...config };
         next();
       });
 
@@ -458,7 +458,11 @@ describe('File Routes - Agent Files Endpoint', () => {
         expect(response.status).toBe(415);
         expect(response.body.message).toBe('com_error_files_provider_audio_format');
         expect(processAgentFileUpload).not.toHaveBeenCalled();
-        expect(fs.unlink).toHaveBeenCalledWith('/tmp/test.txt');
+        /* JuristAI: temp cleanup resolves the upload path from the trusted uploads
+         * root instead of trusting `req.file.path`. */
+        expect(fs.unlink).toHaveBeenCalledWith(
+          require('path').resolve('/tmp/uploads', 'temp', otherUserId.toString(), 'test.txt'),
+        );
       },
     );
 

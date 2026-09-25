@@ -1744,7 +1744,32 @@ export interface IEventTransport {
    * generation to release its channel without affecting a same-stream replacement.
    * Optional - only implemented in Redis transport.
    */
-  onAbort?(streamId: string, callback: () => void): void | Promise<void>;
+  onAbort?(
+    streamId: string,
+    /** Return true only when this replica owns and stopped the tagged generation. */
+    callback: (generationId?: number) => void | boolean,
+  ): void | (() => void) | Promise<void | (() => void)>;
+
+  /**
+   * Publish a preempt arm/clear to all replicas (Redis mode). Unlike abort
+   * this does NOT stop the run — it asks the generating replica to seal its
+   * current model stream at the next provider-safe boundary. Fenced by
+   * {@link PreemptMessage.createdAt} against replacement jobs.
+   * Optional - only implemented in Redis transport.
+   */
+  emitPreempt?(streamId: string, msg: PreemptMessage): void | Promise<number>;
+
+  /**
+   * Register callback for preempt signals from any replica (Redis mode).
+   * An async implementation resolves only after it can receive messages.
+   * The returned function removes only this registration, allowing a terminal
+   * generation to release its channel without affecting a same-stream replacement.
+   * Optional - only implemented in Redis transport.
+   */
+  onPreempt?(
+    streamId: string,
+    callback: (msg: PreemptMessage) => void,
+  ): void | (() => void) | Promise<void | (() => void)>;
 
   /** Get subscriber count for a stream */
   getSubscriberCount(streamId: string): number;

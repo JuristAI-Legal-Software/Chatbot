@@ -91,7 +91,11 @@ describe('createSetBalanceConfig', () => {
       });
       const res = createMockResponse();
 
-      await middleware(createMockRequest(userId) as ServerRequest, res as ServerResponse, mockNext);
+      await middleware(
+        createMockRequest(userId) as ExpressRequest,
+        res as ServerResponse,
+        mockNext,
+      );
 
       expect((await Balance.findOne({ user: userId }).lean())?.tokenCredits).toBe(50);
       expect((res.locals as { balanceData?: IBalance }).balanceData?.tokenCredits).toBe(50);

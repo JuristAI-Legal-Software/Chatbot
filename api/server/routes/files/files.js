@@ -83,6 +83,17 @@ function resolveTempUploadPath({ req, appConfig, safeUserDir }) {
   );
 }
 
+const AGENT_TOOL_RESOURCE_KEYS = new Set([
+  EToolResources.execute_code,
+  EToolResources.file_search,
+  EToolResources.image_edit,
+  EToolResources.context,
+  EToolResources.ocr,
+]);
+
+const isAgentToolResourceKey = (toolResource) =>
+  typeof toolResource === 'string' && AGENT_TOOL_RESOURCE_KEYS.has(toolResource);
+
 router.get('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
   try {
     const appConfig = req.config;
@@ -171,6 +182,30 @@ router.get('/config', fileUploadIpLimiter, fileUploadUserLimiter, async (req, re
   } catch (error) {
     logger.error('[/files] Error getting fileConfig', error);
     res.status(400).json({ message: 'Error in request', error: error.message });
+  }
+});
+
+/**
+ * POST /files/usage
+ *
+ * Owner-scoped TTL hold for uploads sitting in a client-side queue (mid-run
+ * queued messages), so the upload-window TTL cannot reap them before drain.
+ * Extends the deadline rather than clearing it; the real release happens at
+ * send. The approval window is passed through so a queue waiting on a paused
+ * run outlives that pause. Thin wrapper: validation, cap, hold window, and
+ * best-effort semantics live in `@librechat/api` (`handleFilesUsageRequest`).
+ */
+router.post('/usage', async (req, res) => {
+  try {
+    const checkpointerCfg = req.config?.endpoints?.[EModelEndpoint.agents]?.checkpointer;
+    const { status, body } = await handleFilesUsageRequest(req.user ?? {}, req.body ?? {}, {
+      extendFilesTTL: db.extendFilesTTL,
+      approvalTtlMs: getApprovalTtlMs(checkpointerCfg),
+    });
+    return res.status(status).json(body);
+  } catch (error) {
+    logger.error('[/files/usage] Failed to mark files used', error);
+    return res.status(500).json({ code: 'FILES_USAGE_FAILED' });
   }
 });
 
@@ -359,6 +394,40 @@ router.get(
         return res.status(400).send('Bad request');
       }
 
+      const requestedProfile = req.query.execution_profile;
+      if (
+        requestedProfile != null &&
+        requestedProfile !== 'default' &&
+        requestedProfile !== 'stateful'
+      ) {
+        logger.debug(`${logPrefix} invalid execution_profile`);
+        return res.status(400).send('Bad request');
+      }
+      const executionProfile = requestedProfile ?? 'default';
+      const requestedRouteKey = req.query.execution_route_key;
+      if (
+        requestedRouteKey != null &&
+        (typeof requestedRouteKey !== 'string' ||
+          executionProfile !== 'stateful' ||
+          !/^stateful:[a-f0-9]{32}$/.test(requestedRouteKey))
+      ) {
+        logger.debug(`${logPrefix} invalid execution_route_key`);
+        return res.status(400).send('Bad request');
+      }
+      const environments =
+        req.config?.endpoints?.[EModelEndpoint.agents]?.statefulCodeSessions?.environments;
+      const configuredEnvironment = requestedRouteKey
+        ? environments?.find(
+            (environment) =>
+              createCodeExecutionRouteKey('stateful', environment) === requestedRouteKey,
+          )
+        : undefined;
+      if (requestedRouteKey && !configuredEnvironment) {
+        logger.debug(`${logPrefix} unknown execution_route_key`);
+        return res.status(404).send('Not found');
+      }
+      const baseUrl = getCodeExecutionBaseUrl(executionProfile, configuredEnvironment);
+
       const { getDownloadStream } = getStrategyFunctions(FileSources.execute_code);
       if (!getDownloadStream) {
         logger.warn(
@@ -382,8 +451,21 @@ router.get(
           id: req.user.id,
         },
         req,
+        {
+          baseUrl,
+          executionProfile,
+          ...((configuredEnvironment?.workerId ?? configuredEnvironment?.pairing?.workerId) != null
+            ? {
+                bridgeWorkerId:
+                  configuredEnvironment?.workerId ?? configuredEnvironment?.pairing?.workerId,
+              }
+            : {}),
+        },
       );
-      res.set(response.headers);
+      res.setHeader('Content-Disposition', 'attachment');
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Cache-Control', 'private, no-store');
       response.data.pipe(res);
     } catch (error) {
       /* `logAxiosError` redacts buffer/stream response bodies — without
@@ -604,6 +686,26 @@ router.get(
       // Access already validated by fileAccess middleware
       const file = req.fileAccess.file;
 
+      // Text-source files store extracted content in the DB; there is no backing file to stream
+      if (file.source === FileSources.text) {
+        /** `getFiles` excludes `text` by default, so the authorized record is re-fetched by `_id` */
+        const [textFile] = (await db.getFiles({ _id: file._id }, null, { text: 1 })) ?? [];
+        if (textFile?.text == null) {
+          logger.warn(`File download requested by user ${userId} has no stored text: ${file_id}`);
+          return res.status(404).send('No file content found');
+        }
+        const textFilename = file.filename?.toLowerCase().endsWith('.txt')
+          ? file.filename
+          : `${file.filename || file_id}.txt`;
+        res.setHeader('Content-Disposition', getContentDisposition(textFilename));
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader(
+          'X-File-Metadata',
+          encodeURIComponent(JSON.stringify(getDownloadFileMetadata(file))),
+        );
+        return res.send(textFile.text);
+      }
+
       if (checkOpenAIStorage(file.source) && !file.model) {
         logger.warn(
           `File download requested by user ${userId} has no associated model: ${file_id}`,
@@ -674,10 +776,20 @@ router.get(
           return res.status(501).send('Not Implemented');
         }
 
-        const fileStream = await getDownloadStream(req, file.storageKey || file.filepath);
+        const fileStream = await getDownloadStream(req, resolveDownloadPath(file));
 
         fileStream.on('error', (streamError) => {
           logger.error('[DOWNLOAD ROUTE] Stream error:', streamError);
+          if (res.headersSent) {
+            if (!res.writableEnded) {
+              res.destroy();
+            }
+            return;
+          }
+          res.removeHeader('Content-Disposition');
+          res.removeHeader('Content-Type');
+          res.removeHeader('X-File-Metadata');
+          res.status(500).send('Error downloading file');
         });
 
         setHeaders();
@@ -690,7 +802,44 @@ router.get(
   },
 );
 
-router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) => {
+/**
+ * A v1 Knowledge upload posts `assistant_id` with no `tool_resource`, so the
+ * resource map has nothing to authorize against. What the file will feed is the
+ * assistant's own native tools, so read those and require their grants.
+ *
+ * Runs here rather than at attach time so a denied role never gets its bytes
+ * into provider storage — an authorization failure after the remote upload
+ * leaves an untracked file behind and reports 500 for what is a 403.
+ *
+ * @returns {Promise<{ ok: boolean, openai?: OpenAI }>} `ok: false` once a
+ * response has been sent. The client it had to build is returned so processing
+ * reuses it rather than re-reading the user's key.
+ */
+const assertLegacyAssistantUploadAllowed = async (req, res, metadata) => {
+  const isLegacyAssistantAttach =
+    isAssistantsEndpoint(metadata.endpoint) &&
+    metadata.assistant_id != null &&
+    !metadata.message_file &&
+    !metadata.tool_resource;
+  if (!isLegacyAssistantAttach) {
+    return { ok: true };
+  }
+
+  const { openai } = await getOpenAIClient({ req });
+  const assistant = await openai.beta.assistants.retrieve(metadata.assistant_id);
+  const isNativeToolPermitted = await resolveAssistantToolPermissions({
+    req,
+    tools: assistant?.tools,
+    getRoleByName,
+  });
+  if ((assistant?.tools ?? []).some((tool) => !isNativeToolPermitted(tool))) {
+    res.status(403).json({ message: 'Forbidden: Insufficient permissions' });
+    return { ok: false };
+  }
+  return { ok: true, openai };
+};
+
+const handleFileUpload = async (req, res) => {
   const metadata = req.body ?? {};
   let cleanup = true;
   const appConfig = req.config;
@@ -863,7 +1012,7 @@ router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) =>
   }
 };
 
-router.post('/', handleFileUpload);
+router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, handleFileUpload);
 
 module.exports = router;
 module.exports.handleFileUpload = handleFileUpload;

@@ -74,7 +74,7 @@ export const fileTableColumns: ColumnDef<TFileWithVectors>[] = [
     },
     cell: ({ row }) => {
       const localize = useLocalize();
-      const { vectorsAttached: attachedVectorStores } = row.original;
+      const { vectorsAttached: attachedVectorStores = [] } = row.original;
       return (
         <>
           {attachedVectorStores.map((vectorStore, index) => {
@@ -86,9 +86,7 @@ export const fileTableColumns: ColumnDef<TFileWithVectors>[] = [
                 >
                   <PlusIcon className="h-3 w-3" />
                   &nbsp;
-                  {localize('com_files_more_count', {
-                    count: attachedVectorStores.length - index,
-                  })}
+                  {localize('com_ui_more_count', { 0: attachedVectorStores.length - index })}
                 </span>
               );
             }

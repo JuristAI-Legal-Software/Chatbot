@@ -235,21 +235,26 @@ function retrievePkceChallenge(provider) {
  * OpenID Admin Routes
  * ────────────────────────────────────────────── */
 
-router.get('/oauth/openid', middleware.loginLimiter, async (req, res, next) => {
-  const state = generateState();
-  const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
-  const stored = await storeAndStripChallenge(cache, req, state, 'openid');
-  if (!stored) {
-    return res.redirect(
-      `${getAdminPanelUrl()}/auth/openid/callback?error=pkce_store_failed&error_description=Failed+to+store+PKCE+challenge`,
-    );
-  }
+router.get(
+  '/oauth/openid',
+  middleware.loginLimiter,
+  requireOpenIdConfig,
+  async (req, res, next) => {
+    const state = generateState();
+    const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
+    const stored = await storeAndStripChallenge(cache, req, state, 'openid');
+    if (!stored) {
+      return res.redirect(
+        `${getAdminPanelUrl()}/auth/openid/callback?error=pkce_store_failed&error_description=Failed+to+store+PKCE+challenge`,
+      );
+    }
 
-  return passport.authenticate('openidAdmin', {
-    session: false,
-    state,
-  })(req, res, next);
-});
+    return passport.authenticate('openidAdmin', {
+      session: false,
+      state,
+    })(req, res, next);
+  },
+);
 
 router.get(
   '/oauth/openid/callback',
@@ -281,21 +286,27 @@ const adminOAuthLimiter = rateLimit({
   max: 100,
 });
 
-router.get('/oauth/saml', middleware.loginLimiter, adminOAuthLimiter, async (req, res, next) => {
-  const state = generateState();
-  const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
-  const stored = await storeAndStripChallenge(cache, req, state, 'saml');
-  if (!stored) {
-    return res.redirect(
-      `${getAdminPanelUrl()}/auth/saml/callback?error=pkce_store_failed&error_description=Failed+to+store+PKCE+challenge`,
-    );
-  }
+router.get(
+  '/oauth/saml',
+  middleware.loginLimiter,
+  adminOAuthLimiter,
+  requireAdminStrategy('samlAdmin', 'SAML'),
+  async (req, res, next) => {
+    const state = generateState();
+    const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
+    const stored = await storeAndStripChallenge(cache, req, state, 'saml');
+    if (!stored) {
+      return res.redirect(
+        `${getAdminPanelUrl()}/auth/saml/callback?error=pkce_store_failed&error_description=Failed+to+store+PKCE+challenge`,
+      );
+    }
 
-  return passport.authenticate('samlAdmin', {
-    session: false,
-    additionalParams: { RelayState: state },
-  })(req, res, next);
-});
+    return passport.authenticate('samlAdmin', {
+      session: false,
+      additionalParams: { RelayState: state },
+    })(req, res, next);
+  },
+);
 
 router.post(
   '/oauth/saml/callback',
@@ -322,15 +333,19 @@ router.post(
  * Google Admin Routes
  * ────────────────────────────────────────────── */
 
-router.get('/oauth/google', middleware.loginLimiter, async (req, res, next) => {
-  const state = generateState();
-  const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
-  const stored = await storeAndStripChallenge(cache, req, state, 'google');
-  if (!stored) {
-    return res.redirect(
-      `${getAdminPanelUrl()}/auth/google/callback?error=pkce_store_failed&error_description=Failed+to+store+PKCE+challenge`,
-    );
-  }
+router.get(
+  '/oauth/google',
+  middleware.loginLimiter,
+  requireAdminStrategy('googleAdmin', 'Google'),
+  async (req, res, next) => {
+    const state = generateState();
+    const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
+    const stored = await storeAndStripChallenge(cache, req, state, 'google');
+    if (!stored) {
+      return res.redirect(
+        `${getAdminPanelUrl()}/auth/google/callback?error=pkce_store_failed&error_description=Failed+to+store+PKCE+challenge`,
+      );
+    }
 
     return passport.authenticate('googleAdmin', {
       scope: ['openid', 'profile', 'email'],
@@ -367,15 +382,19 @@ router.get(
  * GitHub Admin Routes
  * ────────────────────────────────────────────── */
 
-router.get('/oauth/github', middleware.loginLimiter, async (req, res, next) => {
-  const state = generateState();
-  const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
-  const stored = await storeAndStripChallenge(cache, req, state, 'github');
-  if (!stored) {
-    return res.redirect(
-      `${getAdminPanelUrl()}/auth/github/callback?error=pkce_store_failed&error_description=Failed+to+store+PKCE+challenge`,
-    );
-  }
+router.get(
+  '/oauth/github',
+  middleware.loginLimiter,
+  requireAdminStrategy('githubAdmin', 'GitHub'),
+  async (req, res, next) => {
+    const state = generateState();
+    const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
+    const stored = await storeAndStripChallenge(cache, req, state, 'github');
+    if (!stored) {
+      return res.redirect(
+        `${getAdminPanelUrl()}/auth/github/callback?error=pkce_store_failed&error_description=Failed+to+store+PKCE+challenge`,
+      );
+    }
 
     return passport.authenticate('githubAdmin', {
       scope: ['user:email', 'read:user'],
@@ -410,15 +429,19 @@ router.get(
  * Discord Admin Routes
  * ────────────────────────────────────────────── */
 
-router.get('/oauth/discord', middleware.loginLimiter, async (req, res, next) => {
-  const state = generateState();
-  const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
-  const stored = await storeAndStripChallenge(cache, req, state, 'discord');
-  if (!stored) {
-    return res.redirect(
-      `${getAdminPanelUrl()}/auth/discord/callback?error=pkce_store_failed&error_description=Failed+to+store+PKCE+challenge`,
-    );
-  }
+router.get(
+  '/oauth/discord',
+  middleware.loginLimiter,
+  requireAdminStrategy('discordAdmin', 'Discord'),
+  async (req, res, next) => {
+    const state = generateState();
+    const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
+    const stored = await storeAndStripChallenge(cache, req, state, 'discord');
+    if (!stored) {
+      return res.redirect(
+        `${getAdminPanelUrl()}/auth/discord/callback?error=pkce_store_failed&error_description=Failed+to+store+PKCE+challenge`,
+      );
+    }
 
     return passport.authenticate('discordAdmin', {
       scope: ['identify', 'email'],
@@ -453,15 +476,19 @@ router.get(
  * Facebook Admin Routes
  * ────────────────────────────────────────────── */
 
-router.get('/oauth/facebook', middleware.loginLimiter, async (req, res, next) => {
-  const state = generateState();
-  const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
-  const stored = await storeAndStripChallenge(cache, req, state, 'facebook');
-  if (!stored) {
-    return res.redirect(
-      `${getAdminPanelUrl()}/auth/facebook/callback?error=pkce_store_failed&error_description=Failed+to+store+PKCE+challenge`,
-    );
-  }
+router.get(
+  '/oauth/facebook',
+  middleware.loginLimiter,
+  requireAdminStrategy('facebookAdmin', 'Facebook'),
+  async (req, res, next) => {
+    const state = generateState();
+    const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
+    const stored = await storeAndStripChallenge(cache, req, state, 'facebook');
+    if (!stored) {
+      return res.redirect(
+        `${getAdminPanelUrl()}/auth/facebook/callback?error=pkce_store_failed&error_description=Failed+to+store+PKCE+challenge`,
+      );
+    }
 
     return passport.authenticate('facebookAdmin', {
       scope: ['public_profile'],
@@ -496,21 +523,26 @@ router.get(
  * Apple Admin Routes (POST callback)
  * ────────────────────────────────────────────── */
 
-router.get('/oauth/apple', middleware.loginLimiter, async (req, res, next) => {
-  const state = generateState();
-  const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
-  const stored = await storeAndStripChallenge(cache, req, state, 'apple');
-  if (!stored) {
-    return res.redirect(
-      `${getAdminPanelUrl()}/auth/apple/callback?error=pkce_store_failed&error_description=Failed+to+store+PKCE+challenge`,
-    );
-  }
+router.get(
+  '/oauth/apple',
+  middleware.loginLimiter,
+  requireAdminStrategy('appleAdmin', 'Apple'),
+  async (req, res, next) => {
+    const state = generateState();
+    const cache = getLogStores(CacheKeys.ADMIN_OAUTH_EXCHANGE);
+    const stored = await storeAndStripChallenge(cache, req, state, 'apple');
+    if (!stored) {
+      return res.redirect(
+        `${getAdminPanelUrl()}/auth/apple/callback?error=pkce_store_failed&error_description=Failed+to+store+PKCE+challenge`,
+      );
+    }
 
-  return passport.authenticate('appleAdmin', {
-    session: false,
-    state,
-  })(req, res, next);
-});
+    return passport.authenticate('appleAdmin', {
+      session: false,
+      state,
+    })(req, res, next);
+  },
+);
 
 router.post(
   '/oauth/apple/callback',

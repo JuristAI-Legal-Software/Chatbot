@@ -608,14 +608,17 @@ export class MCPConnectionFactory {
     basic: t.BasicConnectionOptions,
     options?: t.OAuthConnectionOptions | t.UserConnectionContext,
   ) {
-    this.serverConfig = processMCPEnv({
-      user: options?.user,
-      body: options?.requestBody,
-      requestHeaders: options?.requestHeaders,
-      dbSourced: basic.dbSourced,
-      options: basic.serverConfig,
-      customUserVars: options?.customUserVars,
-    });
+    this.serverDefinition = basic.serverDefinition ?? basic.serverConfig;
+    this.serverConfig = basic.skipEnvProcessing
+      ? basic.serverConfig
+      : processMCPEnv({
+          user: options?.user,
+          body: options?.requestBody,
+          requestHeaders: options?.requestHeaders,
+          dbSourced: basic.dbSourced,
+          options: basic.serverConfig,
+          customUserVars: options?.customUserVars,
+        });
     this.serverName = basic.serverName;
     this.useSSRFProtection = basic.useSSRFProtection === true;
     this.allowedDomains = basic.allowedDomains;

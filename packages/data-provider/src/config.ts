@@ -3249,10 +3249,6 @@ const sharedOpenAIModels = [
   'gpt-5.5-pro',
   'chat-latest',
   'gpt-5.4',
-  'gpt-5.4-mini',
-  'gpt-5.4-nano',
-  // TODO: gpt-5.4-thinking may have separate reasoning token pricing — verify before release
-  'gpt-5.4-thinking',
   'gpt-5.4-pro',
   'gpt-5.4-mini',
   'gpt-5.4-nano',

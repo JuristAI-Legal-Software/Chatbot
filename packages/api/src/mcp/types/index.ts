@@ -255,6 +255,12 @@ export interface UserConnectionContext {
   customUserVars?: Record<string, string>;
   requestBody?: RequestBody;
   requestHeaders?: Record<string, string | string[] | undefined>;
+  requestScopedConnections?: RequestScopedMCPConnectionStore;
+  graphTokenResolver?: GraphTokenResolver;
+  /** Live OpenID session credential source for trusted direct bearer and OBO configurations. */
+  upstreamTokenProvider?: UpstreamTokenProvider;
+  /** Deferred credential source used only after a server is confirmed to require OBO. */
+  upstreamTokenProviderResolver?: UpstreamTokenProviderResolver;
   connectionTimeout?: number;
   /** Cancels the connection's SDK requests when the caller itself is cancelled; previously only
    *  OAuth connections could carry a signal, leaving non-OAuth discovery uncancellable. */
@@ -353,6 +359,7 @@ export interface ToolDiscoveryOptions {
   customUserVars?: Record<string, string>;
   requestBody?: RequestBody;
   requestHeaders?: Record<string, string | string[] | undefined>;
+  graphTokenResolver?: GraphTokenResolver;
   connectionTimeout?: number;
   /** Absolute epoch-ms bound on the whole discovery operation; see `UserConnectionContext`. */
   deadlineMs?: number;

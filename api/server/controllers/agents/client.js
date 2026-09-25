@@ -11,6 +11,7 @@ const {
   payloadParser,
   createSafeUser,
   initializeAgent,
+  resolveConfigHeaders,
   resolveRequestTenantId,
   countTokens,
   getBalanceConfig,
@@ -35,6 +36,7 @@ const {
   createSubagentUsageSink,
   anyAgentReplaysReasoningContent,
   GenerationJobManager,
+  PENDING_ACTION_EXPIRED_CODE,
   getTransactionsConfig,
   resolveRecursionLimit,
   buildPendingAction,
@@ -4613,11 +4615,19 @@ class AgentClient extends BaseClient {
           last_agent_index: this.agentConfigs?.size ?? 0,
           user_id: this.user ?? this.options.req.user?.id,
           hide_sequential_outputs: this.options.agent.hide_sequential_outputs,
-          requestBody: {
-            messageId: this.responseMessageId,
-            conversationId: this.conversationId,
-            parentMessageId: this.parentMessageId,
-          },
+          requestBody:
+            this.options.mcpRequestBody ??
+            createMCPRuntimeRequestBody({
+              messageId: this.responseMessageId,
+              conversationId: this.conversationId,
+              parentMessageId: this.parentMessageId,
+              codeEnvironmentMode:
+                this.options.req.body.codeEnvironmentMode ??
+                this.options.req.resolvedConversation?.codeEnvironmentMode,
+              codeWorkspaces:
+                this.options.req.body.codeWorkspaces ??
+                this.options.req.resolvedConversation?.codeWorkspaces,
+            }),
           requestHeaders: {
             authorization: this.options.req?.headers?.authorization,
           },
@@ -5169,16 +5179,37 @@ class AgentClient extends BaseClient {
       this.applyHideSequentialOutputsFilter();
       this.rebaseActivityPhaseBounds(contentBeforeReshape);
     } catch (err) {
-      const errorContext = this.buildErrorLogContext(err, abortController);
-      logger.error({
-        message: '[api/server/controllers/agents/client.js #sendCompletion] Operation aborted',
-        ...errorContext,
-      });
-      if (!abortController.signal.aborted) {
-        logger.error({
-          message: '[api/server/controllers/agents/client.js #sendCompletion] Unhandled error type',
-          ...errorContext,
-        });
+      if (
+        err?.code === 'SCHEDULED_HITL_REQUIRES_SHARED_STORE' ||
+        err?.code === 'SCHEDULED_HITL_REQUIRES_DURABLE_CHECKPOINT' ||
+        err?.code === 'HITL_CHECKPOINT_UNAVAILABLE' ||
+        err?.code === PENDING_ACTION_EXPIRED_CODE
+      ) {
+        logger.warn(`[api/server/controllers/agents/client.js #sendCompletion] ${err.message}`);
+        throw err;
+      }
+      if (isContentFilterError(err)) {
+        logger.warn(
+          '[api/server/controllers/agents/client.js #sendCompletion] Blocked by content policy',
+          {
+            source: err?.body?.source,
+            field: err?.body?.field,
+            code: err?.code,
+          },
+        );
+        throw err;
+      }
+      if (isAgentAttachmentLimitError(err) || isAttachmentObjectNotFoundError(err)) {
+        logger.warn(
+          '[api/server/controllers/agents/client.js #sendCompletion] Attachment rejected',
+          {
+            conversationId: this.conversationId,
+            ...getSafeErrorMetadata(err),
+          },
+        );
+        BaseClient.prototype.getModelBoundUserMessagePersistence.call(this)?.cancel();
+        this.options.attachments = [];
+        this.modelBoundCurrentFiles = [];
         this.contentParts.push({
           type: ContentTypes.ERROR,
           [ContentTypes.ERROR]: err.message,
@@ -6139,20 +6170,19 @@ class AgentClient extends BaseClient {
      *  entry — `disposeClient` nulls `this.options.req` and can race this async
      *  title flow, which would blank the user context mid-generation.
      */
-    if (clientOptions?.configuration?.defaultHeaders != null) {
-      clientOptions.configuration.defaultHeaders = resolveHeaders({
-        headers: clientOptions.configuration.defaultHeaders,
-        user: createSafeUser(this.options.req?.user),
-        body: {
-          messageId: this.responseMessageId,
-          conversationId: this.conversationId,
-          parentMessageId: this.parentMessageId,
-        },
-        requestHeaders: {
-          authorization: this.options.req?.headers?.authorization,
-        },
-      });
-    }
+    resolveConfigHeaders({
+      llmConfig: clientOptions,
+      user: createSafeUser(req?.user),
+      tenantId: resolveRequestTenantId(req ?? {}),
+      body: {
+        messageId: this.responseMessageId,
+        conversationId: this.conversationId,
+        parentMessageId: this.parentMessageId,
+      },
+      requestHeaders: {
+        authorization: req?.headers?.authorization,
+      },
+    });
 
     try {
       const titleResult = await this.run.generateTitle({

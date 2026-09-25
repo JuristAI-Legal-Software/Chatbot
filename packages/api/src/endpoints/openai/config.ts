@@ -277,16 +277,11 @@ export function getOpenAIConfig(
         return;
       }
 
-      const deploymentsIdx = configOptions.baseURL?.indexOf('/deployments');
-      const updatedUrl =
-        deploymentsIdx !== undefined && deploymentsIdx >= 0
-          ? `${configOptions.baseURL!.slice(0, deploymentsIdx)}/v1`
-          : configOptions.baseURL;
-
-      configOptions.baseURL = constructAzureURL({
-        baseURL: updatedUrl || 'https://${INSTANCE_NAME}.openai.azure.com/openai/v1',
-        azureOptions: azure,
-      });
+      const responsesURL = constructAzureResponsesURL(configOptions.baseURL, azure);
+      const urlQuery = Object.fromEntries(responsesURL.searchParams);
+      responsesURL.search = '';
+      responsesURL.hash = '';
+      configOptions.baseURL = responsesURL.toString();
 
       configOptions.defaultHeaders = {
         ...configOptions.defaultHeaders,

@@ -432,11 +432,7 @@ async function reinitMCPServer({
     }
     const result = {
       availableTools,
-      success: Boolean(
-        (connection && !oauthRequired) ||
-        (oauthRequired && oauthUrl) ||
-        (tools && tools.length > 0),
-      ),
+      success,
       message: getResponseMessage(),
       failureReason,
       oauthRequired,

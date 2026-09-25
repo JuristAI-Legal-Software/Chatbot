@@ -954,6 +954,86 @@ describe('initializeAgent — custom provider token lookup', () => {
     // assertion above catches the actual provider-resolution regression.
     expect(result.maxContextTokens).toBe(Math.round((65536 - 4096) * 0.95));
   });
+
+  it('adds a live-data tool policy when external tools are available', async () => {
+    const { agent, req, res, loadTools, db } = createMocks({
+      loadedToolDefinitions: [
+        {
+          name: 'list_cases_mcp_graphql',
+          description: 'List the user cases from GraphQL',
+          parameters: { type: 'object', properties: {} },
+        },
+      ],
+    });
+    agent.tools = ['list_cases_mcp_graphql'];
+
+    const result = await initializeAgent(
+      {
+        req,
+        res,
+        agent,
+        loadTools,
+        endpointOption: { endpoint: EModelEndpoint.agents },
+        allowedProviders: new Set([Providers.OPENAI]),
+        isInitialAgent: true,
+      },
+      db,
+    );
+
+    expect(Object.values(result.toolContextMap)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('do not answer from memory or prior chat context alone'),
+      ]),
+    );
+    expect(Object.values(result.toolContextMap)).toEqual(
+      expect.arrayContaining([expect.stringContaining('authoritative source')]),
+    );
+  });
+
+  it('mentions tool_search in the live-data policy when tools are deferred', async () => {
+    const { agent, req, res, loadTools, db } = createMocks({
+      loadedToolDefinitions: [
+        {
+          name: 'list_cases_mcp_graphql',
+          description: 'List the user cases from GraphQL',
+          parameters: { type: 'object', properties: {} },
+        },
+      ],
+    });
+    agent.tools = ['list_cases_mcp_graphql'];
+    loadTools.mockResolvedValueOnce({
+      tools: [],
+      toolContextMap: {},
+      dynamicToolContextMap: {},
+      userMCPAuthMap: undefined,
+      toolRegistry: undefined,
+      toolDefinitions: [
+        {
+          name: 'list_cases_mcp_graphql',
+          description: 'List the user cases from GraphQL',
+          parameters: { type: 'object', properties: {} },
+        },
+      ],
+      hasDeferredTools: true,
+    });
+
+    const result = await initializeAgent(
+      {
+        req,
+        res,
+        agent,
+        loadTools,
+        endpointOption: { endpoint: EModelEndpoint.agents },
+        allowedProviders: new Set([Providers.OPENAI]),
+        isInitialAgent: true,
+      },
+      db,
+    );
+
+    expect(Object.values(result.toolContextMap)).toEqual(
+      expect.arrayContaining([expect.stringContaining('call `tool_search` first')]),
+    );
+  });
 });
 
 describe('initializeAgent — provider web_search precedence', () => {
@@ -1434,86 +1514,6 @@ describe('initializeAgent — stable and dynamic instruction fields', () => {
     );
 
     expect(result.additional_instructions).toBe('Existing dynamic\n\nArtifact guidance');
-  });
-
-  it('adds a live-data tool policy when external tools are available', async () => {
-    const { agent, req, res, loadTools, db } = createMocks({
-      loadedToolDefinitions: [
-        {
-          name: 'list_cases_mcp_graphql',
-          description: 'List the user cases from GraphQL',
-          parameters: { type: 'object', properties: {} },
-        },
-      ],
-    });
-    agent.tools = ['list_cases_mcp_graphql'];
-
-    const result = await initializeAgent(
-      {
-        req,
-        res,
-        agent,
-        loadTools,
-        endpointOption: { endpoint: EModelEndpoint.agents },
-        allowedProviders: new Set([Providers.OPENAI]),
-        isInitialAgent: true,
-      },
-      db,
-    );
-
-    expect(Object.values(result.toolContextMap)).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('do not answer from memory or prior chat context alone'),
-      ]),
-    );
-    expect(Object.values(result.toolContextMap)).toEqual(
-      expect.arrayContaining([expect.stringContaining('authoritative source')]),
-    );
-  });
-
-  it('mentions tool_search in the live-data policy when tools are deferred', async () => {
-    const { agent, req, res, loadTools, db } = createMocks({
-      loadedToolDefinitions: [
-        {
-          name: 'list_cases_mcp_graphql',
-          description: 'List the user cases from GraphQL',
-          parameters: { type: 'object', properties: {} },
-        },
-      ],
-    });
-    agent.tools = ['list_cases_mcp_graphql'];
-    loadTools.mockResolvedValueOnce({
-      tools: [],
-      toolContextMap: {},
-      dynamicToolContextMap: {},
-      userMCPAuthMap: undefined,
-      toolRegistry: undefined,
-      toolDefinitions: [
-        {
-          name: 'list_cases_mcp_graphql',
-          description: 'List the user cases from GraphQL',
-          parameters: { type: 'object', properties: {} },
-        },
-      ],
-      hasDeferredTools: true,
-    });
-
-    const result = await initializeAgent(
-      {
-        req,
-        res,
-        agent,
-        loadTools,
-        endpointOption: { endpoint: EModelEndpoint.agents },
-        allowedProviders: new Set([Providers.OPENAI]),
-        isInitialAgent: true,
-      },
-      db,
-    );
-
-    expect(Object.values(result.toolContextMap)).toEqual(
-      expect.arrayContaining([expect.stringContaining('call `tool_search` first')]),
-    );
   });
 });
 

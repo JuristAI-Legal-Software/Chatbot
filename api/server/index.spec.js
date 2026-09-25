@@ -329,13 +329,10 @@ describe('Server Configuration', () => {
   });
 
   afterAll(async () => {
-    if (app?.server) {
-      await new Promise((resolve) => app.server.close(resolve));
-    }
+    await promisify(server.close).call(server);
+    await mongoServer.stop();
     await mongoose.disconnect();
-    if (mongoServer) {
-      await mongoServer.stop();
-    }
+    delete process.env.CUSTOM_FOOTER;
   });
 
   it('should return OK for /health', async () => {

@@ -3,9 +3,10 @@ import { Button } from '@librechat/client';
 import { Maximize2, X } from 'lucide-react';
 import { FileSources } from 'librechat-data-provider';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
+import { cn, isSafeImageSrc, toRenderableImageUrl } from '~/utils';
 import ProgressCircle from './ProgressCircle';
 import SourceIcon from './SourceIcon';
-import { cn, isSafeImageSrc, toRenderableImageUrl } from '~/utils';
+import { useLocalize } from '~/hooks';
 
 const ImagePreview = ({
   imageBase64,

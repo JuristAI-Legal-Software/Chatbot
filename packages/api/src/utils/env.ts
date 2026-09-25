@@ -145,8 +145,61 @@ export function createSafeUser(
  * List of allowed request body fields that can be used in header placeholders.
  * These are common fields from the request body that are safe to expose in headers.
  */
-const ALLOWED_BODY_FIELDS = ['conversationId', 'parentMessageId', 'messageId'] as const;
+export const ALLOWED_BODY_FIELDS = ['conversationId', 'parentMessageId', 'messageId'] as const;
 const ALLOWED_REQUEST_HEADER_FIELDS = ['authorization'] as const;
+
+const OPENID_PLACEHOLDER_NAMES = `LIBRECHAT_OPENID_(?:${OPENID_TOKEN_FIELDS.join('|')}|TOKEN)`;
+
+/**
+ * Matches every placeholder this module knows how to resolve: the enumerated
+ * `{{LIBRECHAT_USER_*}}`, `{{LIBRECHAT_BODY_*}}`, `{{LIBRECHAT_REQUEST_*}}`, and `{{LIBRECHAT_OPENID_*}}`
+ * names. Deliberately excludes unknown names (a typo'd placeholder staying
+ * literal is diagnosable) and `{{LIBRECHAT_GRAPH_ACCESS_TOKEN}}`, which is
+ * resolved asynchronously via the OBO flow outside this pipeline.
+ */
+const RESOLVABLE_PLACEHOLDER_PATTERN = new RegExp(
+  [
+    `LIBRECHAT_USER_(?:${ALLOWED_USER_FIELDS.map((field) => field.toUpperCase()).join('|')})`,
+    `LIBRECHAT_BODY_(?:${ALLOWED_BODY_FIELDS.map((field) => field.toUpperCase()).join('|')})`,
+    `LIBRECHAT_REQUEST_(?:${ALLOWED_REQUEST_HEADER_FIELDS.map((field) => field.toUpperCase()).join('|')})`,
+    OPENID_PLACEHOLDER_NAMES,
+  ]
+    .map((names) => `\\{\\{(?:${names})\\}\\}`)
+    .join('|'),
+  'g',
+);
+
+/**
+ * The subset of OpenID placeholders that cannot resolve without a usable token
+ * set. Identity metadata (`USER_ID`, `USER_EMAIL`, `USER_NAME`) comes from the
+ * user document and `EXPIRES_AT` is only ever a hint, so those must keep their
+ * pre-existing literal-then-strip behaviour when the token set is invalid
+ * rather than raising re-auth. Non-global so `exec` stays stateless, and
+ * unknown names are excluded so a typo stays literal and diagnosable.
+ */
+const OPENID_CREDENTIAL_PLACEHOLDER_PATTERN =
+  /\{\{LIBRECHAT_OPENID_(?:ACCESS_TOKEN|ID_TOKEN|TOKEN)\}\}/;
+
+/**
+ * The credential placeholders that specifically need a usable *access* token, which is all
+ * `isOpenIDTokenValid` reports on. `ID_TOKEN` is absent because `processOpenIDPlaceholders`
+ * validates the ID token's own expiry, so an ID-token header still resolves while no access
+ * token is stored. Non-global so `exec` stays stateless.
+ */
+const OPENID_ACCESS_CREDENTIAL_PLACEHOLDER_PATTERN =
+  /\{\{LIBRECHAT_OPENID_(?:ACCESS_TOKEN|TOKEN)\}\}/;
+
+/**
+ * Replaces resolvable-but-unresolved placeholders with an empty string so
+ * LibreChat's internal template syntax is never sent upstream as if it were
+ * real user data (e.g. a gateway trusting a literal
+ * `{{LIBRECHAT_USER_OPENIDID}}` as an account identity would pool unrelated
+ * users under that one string). Only for final resolution passes — staged
+ * flows that resolve again later with more context must not strip.
+ */
+export function stripUnresolvedPlaceholders(value: string): string {
+  return value.replace(RESOLVABLE_PLACEHOLDER_PATTERN, '');
+}
 
 /**
  * Processes a string value to replace user field placeholders.
@@ -608,8 +661,16 @@ export function resolveHeaders(options?: {
   body?: RequestBody;
   requestHeaders?: Record<string, string | string[] | undefined>;
   customUserVars?: Record<string, string>;
-}) {
-  const { headers, user, body, requestHeaders, customUserVars } = options ?? {};
+  stripUnresolved?: boolean;
+}): Record<string, string> {
+  const {
+    headers,
+    user,
+    body,
+    requestHeaders,
+    customUserVars,
+    stripUnresolved = false,
+  } = options ?? {};
   const inputHeaders = headers ?? {};
 
   const resolvedHeaders: Record<string, string> = { ...inputHeaders };

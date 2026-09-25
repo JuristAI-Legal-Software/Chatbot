@@ -112,6 +112,7 @@ import { stripIntentFromToolRegistry, stripIntentFromToolDefinitions } from '~/a
 import { resolveConfigHeaders, resolveModelHeaders, mergeHeaders } from '~/utils/headers';
 import { extractDefaultParams, resolveReasoningParams } from '~/endpoints/openai/llm';
 import { getLLMConfig as getAnthropicLLMConfig } from '~/endpoints/anthropic/llm';
+import { buildSeriesAIContextInstructions } from '~/tools/registry/definitions';
 import { CREATE_FILE_TOOL_NAME, EDIT_FILE_TOOL_NAME } from '~/agents/tools';
 import { buildAgentInitialToolSessions } from '~/agents/codeFilesSession';
 import { getDirectDispatcher, getProxyDispatcher } from '~/utils/proxy';
@@ -127,7 +128,7 @@ import { buildHITLRunWiring } from '~/agents/hitl/runtime';
 import { buildLangfuseConfig } from '~/langfuse/config';
 import { applyTestRunHook } from '~/agents/testHook';
 import { isUserProvided } from '~/utils/common';
-import { buildSeriesAIContextInstructions } from '~/tools/registry/definitions';
+import { createSafeUser } from '~/utils/env';
 
 /** Expected shape of JSON tool search results */
 interface ToolSearchJsonResult {
@@ -2434,7 +2435,10 @@ export async function createRun({
       lifecycleStage: requestContext.lifecycleStage as string | undefined,
     });
 
-    const systemContent = [toolInstructions, seriesAIContextInstructions, agent.instructions ?? ''].filter(Boolean).join('\n').trim();
+    const systemContent = [toolInstructions, seriesAIContextInstructions, agent.instructions ?? '']
+      .filter(Boolean)
+      .join('\n')
+      .trim();
 
     const additionalInstructions = [dynamicToolInstructions, agent.additional_instructions ?? '']
       .join('\n')

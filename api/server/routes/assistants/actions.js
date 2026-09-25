@@ -212,7 +212,7 @@ router.delete(
       const { openai } = await getOpenAIClient({ req, res });
 
       const initialPromises = [];
-      initialPromises.push(db.getAssistant({ assistant_id }));
+      initialPromises.push(db.getAssistant({ assistantId: assistant_id }));
       initialPromises.push(openai.beta.assistants.retrieve(assistant_id));
 
       /** @type {[AssistantDocument, Assistant]} */
@@ -250,8 +250,8 @@ router.delete(
       if (!assistant_data) {
         assistantUpdateData.user = req.user.id;
       }
-      promises.push(db.updateAssistantDoc({ assistant_id }, assistantUpdateData));
-      promises.push(db.deleteAction({ action_id, assistant_id }));
+      promises.push(db.updateAssistantDoc({ assistantId: assistant_id }, assistantUpdateData));
+      promises.push(db.deleteAction({ actionId: action_id, assistantId: assistant_id }));
 
       const [, deletedAction] = await Promise.all(promises);
       if (!deletedAction) {

@@ -10,6 +10,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const passport = require('passport');
 const compression = require('compression');
+const cookieParser = require('cookie-parser');
 const mongoSanitize = require('express-mongo-sanitize');
 const { logger, runAsSystem } = require('@librechat/data-schemas');
 const {
@@ -60,7 +61,6 @@ const {
   warnOnUnreachableDeliveryPaths,
   createCodeApiUploadRegistry,
 } = require('@librechat/api');
-const { startExpiredFileSweep } = require('./services/Files/process');
 const { connectDb, indexSync } = require('~/db');
 const {
   updateAccessPermissions,
@@ -71,7 +71,6 @@ const {
 const initializeOAuthReconnectManager = require('./services/initializeOAuthReconnectManager');
 const { capabilityContextMiddleware } = require('./middleware/roles/capabilities');
 const { createAccessLimiters, createFileLimiters, createShareLimiters } = require('./middleware');
-const { configureSubagentTaskRouting } = require('./services/Endpoints/agents/subagentThreadStore');
 const createValidateImageRequest = require('./middleware/validateImageRequest');
 const { initializeGitHubSkillSync } = require('./services/Skills/sync');
 const { initializeAgentTriggerService } = require('./services/Agents/triggers');
@@ -79,10 +78,13 @@ const { resumeAgentEventDetachedAction } = require('./services/Agents/detachedAc
 const { initializeScheduleEngine, recordExpiredScheduleApproval } = require('./services/Schedules');
 const { jwtLogin, ldapLogin, passportLogin } = require('~/strategies');
 const chatMintedJwtLogin = require('~/strategies/chatMintedJwtStrategy');
+const { startExpiredFileSweep } = require('./services/Files/process');
 const { checkMigrations } = require('./services/start/migration');
 const optionalJwtAuth = require('./middleware/optionalJwtAuth');
 const initializeMCPs = require('./services/initializeMCPs');
+const { configureSubagentTaskRouting } = require('./services/Endpoints/agents/subagentThreadStore');
 const configureSocialLogins = require('./socialLogins');
+const createSpaFallback = require('./utils/fallback');
 const { getAppConfig } = require('./services/Config');
 const staticCache = require('./utils/staticCache');
 const noIndex = require('./middleware/noIndex');
@@ -94,20 +96,6 @@ configureFileConfigRegexEngine();
 
 /** Reject messageFilter PII patterns the RE2 runtime engine cannot compile, at config load. */
 configureMessageFilterRegexValidator();
-
-const getCookieValueFromHeader = (cookieHeader, cookieName) => {
-  if (!cookieHeader) {
-    return undefined;
-  }
-  const prefix = `${cookieName}=`;
-  for (const cookie of cookieHeader.split(';')) {
-    const trimmed = cookie.trim();
-    if (trimmed.startsWith(prefix)) {
-      return decodeURIComponent(trimmed.slice(prefix.length));
-    }
-  }
-  return undefined;
-};
 
 const { PORT, HOST, ALLOW_SOCIAL_LOGIN, DISABLE_COMPRESSION, TRUST_PROXY } = process.env ?? {};
 
@@ -381,6 +369,8 @@ const startServer = async () => {
 
   app.use(mongoSanitize());
   app.use(cors());
+  app.use(cookieParser());
+
   if (!isEnabled(DISABLE_COMPRESSION)) {
     app.use(compression());
   } else {
@@ -442,6 +432,7 @@ const startServer = async () => {
   app.use('/api/admin/users', routes.adminUsers);
   /* CodeQL note: `/api/actions` manages OAuth browser binding inside the
    * action routes themselves, including CSRF cookie validation before token exchange. */
+  app.use('/api/admin/audit-log', routes.adminAuditLog);
   app.use('/api/actions', routes.actions);
   app.use('/api/keys', routes.keys);
   app.use('/api/api-keys', routes.apiKeys);
@@ -473,7 +464,13 @@ const startServer = async () => {
     fileUploadUserLimiter,
     await routes.files.initialize(),
   );
-  app.use('/images/', createValidateImageRequest(appConfig.secureImageLinks), routes.staticRoute);
+  app.use(
+    '/images/',
+    createValidateImageRequest({
+      secureImageLinks: appConfig.secureImageLinks,
+    }),
+    routes.staticRoute,
+  );
   app.use('/api/share', preAuthTenantMiddleware, shareIpLimiter, routes.share);
   app.use('/api/roles', routes.roles);
   app.use('/api/agents/chat', rejectChatStartsUntilReady);
@@ -497,23 +494,7 @@ const startServer = async () => {
   app.use('/api', apiNotFound);
 
   /** SPA fallback - serve index.html for all unmatched routes */
-  app.use((req, res) => {
-    res.set({
-      'Cache-Control': process.env.INDEX_CACHE_CONTROL || 'no-cache, no-store, must-revalidate',
-      Pragma: process.env.INDEX_PRAGMA || 'no-cache',
-      Expires: process.env.INDEX_EXPIRES || '0',
-    });
-
-    const lang =
-      getCookieValueFromHeader(req.headers.cookie, 'lang') ||
-      req.headers['accept-language']?.split(',')[0] ||
-      'en-US';
-    const saneLang = lang.replace(/"/g, '&quot;');
-    let updatedIndexHtml = indexHTML.replace(/lang="en-US"/g, `lang="${saneLang}"`);
-
-    res.type('html');
-    res.send(updatedIndexHtml);
-  });
+  app.use(createSpaFallback(sendIndexHtml));
 
   /** Record trace errors before the final error controller. */
   if (telemetry.enabled) {

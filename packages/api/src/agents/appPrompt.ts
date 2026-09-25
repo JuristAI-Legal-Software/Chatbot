@@ -8,8 +8,8 @@ export function applyResponseAppPrompt<T extends AgentPromptTarget>(
   agent: T,
   appInstructions: string,
   requestInstructions?: string,
-): T {
-  const result = { ...agent };
+): T & AgentPromptTarget {
+  const result: T & AgentPromptTarget = { ...agent };
   const requestText = requestInstructions?.trim() ?? '';
   const taskInstructions =
     appInstructions &&

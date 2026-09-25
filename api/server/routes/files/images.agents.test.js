@@ -29,6 +29,18 @@ jest.mock('~/server/middleware/limiters/uploadLimiters', () => ({
   })),
 }));
 
+jest.mock('~/server/services/Files/routing', () => {
+  const actual = jest.requireActual('~/server/services/Files/routing');
+  return {
+    ...actual,
+    /* Real by default so the dispatch is exercised end to end; individual tests override
+     * it for a single call to stand in for a routing configuration. */
+    resolveEffectiveToolResource: jest.fn((...args) =>
+      actual.resolveEffectiveToolResource(...args),
+    ),
+  };
+});
+
 jest.mock('fs', () => {
   const actualFs = jest.requireActual('fs');
   return {
@@ -138,6 +150,7 @@ describe('POST /images - Agent Upload Permission Check (Integration)', () => {
       req.config = {
         fileStrategy: 'local',
         paths: { imageOutput: '/tmp/images', uploads: '/tmp/uploads' },
+        ...config,
       };
       next();
     });

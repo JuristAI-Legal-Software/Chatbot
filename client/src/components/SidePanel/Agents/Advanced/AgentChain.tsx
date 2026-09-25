@@ -29,8 +29,6 @@ const Connector = () => (
 const AgentChain: React.FC<AgentChainProps> = ({ field, currentAgentId }) => {
   const localize = useLocalize();
   const [newAgentId, setNewAgentId] = useState('');
-  const contextAgentsMap = useAgentsMapContext();
-  const agentsMap = useMemo(() => contextAgentsMap ?? {}, [contextAgentsMap]);
   const agentIds = useMemo(() => field.value ?? [], [field.value]);
 
   const { options, getAgent } = useSelectableAgents({ currentAgentId });

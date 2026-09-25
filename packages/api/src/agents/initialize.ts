@@ -182,6 +182,80 @@ function sumUniqueBytes(files: Array<{ file_id?: string; bytes?: number }>): num
 
 const temporalSpecialVarRegex = /{{\s*(current_date|current_datetime|iso_datetime)\s*}}/i;
 const LIVE_TOOL_DATA_POLICY_KEY = '__live_tool_data_policy';
+const geminiModelVersionRegex = /^gemini-(\d+)(?:\.(\d+))?(?:-|$)/;
+const googleToolCombinationTextModels = [
+  'gemini-3-flash-preview',
+  'gemini-3-pro-preview',
+  'gemini-3.1-flash-lite',
+  'gemini-3.1-pro-preview',
+];
+const googleToolCombinationExcludedModalityRegex =
+  /(?:^|-)image(?:-|$)|(?:^|-)live(?:-|$)|(?:^|-)tts(?:-|$)/;
+
+function assertResolvedSkillContentAllowed(
+  skills: readonly SkillContentInput[],
+  filters: NonNullable<ServerRequest['config']>['filters'] | undefined,
+): void {
+  const pii = filters?.skills?.pii;
+  if (!hasActivePiiPatterns(pii) || skills.length === 0) {
+    return;
+  }
+
+  const inspectionSession = createConfiguredContentInspector({ filters })?.createSession();
+  if (inspectionSession == null) {
+    return;
+  }
+  const selectedFields = pii?.fields == null ? null : new Set<string>(pii.fields);
+  const selected = (field: string): boolean => selectedFields == null || selectedFields.has(field);
+  const traversalErrors: ContentTraversalLimitError[] = [];
+  let firstFinding: ReturnType<typeof inspectionSession.inspect> = null;
+  for (const skill of skills) {
+    const projected: SkillContentInput = {
+      ...(selected('name') && { name: skill.name }),
+      ...(selected('display_title') && { displayTitle: skill.displayTitle }),
+      ...(selected('description') && { description: skill.description }),
+      ...(selected('category') && { category: skill.category }),
+      ...(selected('instructions') && {
+        body: skill.body,
+        instructions: skill.instructions,
+      }),
+      ...(selected('imported_text') && { importedText: skill.importedText }),
+      ...(selected('frontmatter') && { frontmatter: skill.frontmatter }),
+      ...((selected('file_name') || selected('file_text')) && {
+        files: skill.files?.map((file) => ({
+          ...(selected('file_name') && { name: file?.name, filename: file?.filename }),
+          ...(selected('file_text') && { text: file?.text, content: file?.content }),
+        })),
+      }),
+    };
+    let fragments: readonly TextContentFragment[];
+    try {
+      fragments = extractSkillContent(projected);
+    } catch (error) {
+      if (!isContentTraversalLimitError(error)) {
+        throw error;
+      }
+      fragments = getContentTraversalFragments(error);
+      traversalErrors.push(error);
+    }
+    const finding = inspectionSession.inspect(fragments);
+    if (finding != null) {
+      firstFinding ??= finding;
+      if (!inspectionSession.hasAuditRules) {
+        throw new ContentFilterError(finding);
+      }
+    }
+  }
+  if (firstFinding != null) {
+    throw new ContentFilterError(firstFinding);
+  }
+  const protectedTraversal = traversalErrors.find((error) =>
+    isContentTraversalProtected({ error, filters }),
+  );
+  if (protectedTraversal != null) {
+    throw protectedTraversal;
+  }
+}
 
 function hasTemporalSpecialVars(text: string): boolean {
   return temporalSpecialVarRegex.test(text);
@@ -2474,6 +2548,7 @@ export async function initializeAgent(
     requestAttachments,
     currentRequestAttachments,
     agentContextAttachments,
+    fileConsumers,
     toolContextMap: effectiveToolContextMap,
     dynamicToolContextMap: dynamicToolContextMap ?? {},
     useLegacyContent: !!options.useLegacyContent,

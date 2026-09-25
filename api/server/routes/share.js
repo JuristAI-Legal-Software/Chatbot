@@ -47,13 +47,67 @@ const {
   getMessages,
   getRoleByName,
 } = require('~/models');
-const { createShareLimiters } = require('~/server/middleware');
+const { getStrategyFunctions } = require('~/server/services/Files/strategies');
+const { cleanFileName, getContentDisposition } = require('~/server/utils/files');
+const canAccessSharedLink = require('~/server/middleware/canAccessSharedLink');
+const { forkSharedConversation } = require('~/server/utils/import/fork');
+const { createForkLimiters, createShareLimiters } = require('~/server/middleware/limiters');
+const optionalShareFileAuth = require('~/server/middleware/optionalShareFileAuth');
+const optionalJwtAuth = require('~/server/middleware/optionalJwtAuth');
 const requireJwtAuth = require('~/server/middleware/requireJwtAuth');
 const { getHeldCapabilities } = require('~/server/middleware/roles/capabilities');
 const configMiddleware = require('~/server/middleware/config/app');
 const { getAppConfig } = require('~/server/services/Config/app');
 const router = express.Router();
 const { shareIpLimiter, shareUserLimiter } = createShareLimiters();
+const sharedLinkConfigMiddleware = createSharedLinkConfigMiddleware({ getAppConfig });
+
+const getSharedLangfuseSessionUrl = createSharedLangfuseSessionResolver({
+  getHeldCapabilities,
+  getMessages,
+});
+
+const SHARE_SERVICE_ERROR_STATUS = {
+  INVALID_PARAMS: 400,
+  TARGET_MESSAGE_NOT_FOUND: 400,
+  NO_MESSAGES: 400,
+  CONVERSATION_NOT_FOUND: 404,
+  SHARE_NOT_FOUND: 404,
+  SHARE_EXISTS: 409,
+  SHARE_REVISION_MISMATCH: 409,
+};
+
+const OBSERVABLE_SHARE_REJECTIONS = new Set(['TARGET_MESSAGE_NOT_FOUND', 'NO_MESSAGES']);
+
+const sendShareServiceError = (req, res, error, fallbackMessage, operation) => {
+  const status = SHARE_SERVICE_ERROR_STATUS[error?.code] ?? 500;
+  const message = status === 500 ? fallbackMessage : error.message;
+  const code = status === 500 ? undefined : error.code;
+
+  if (OBSERVABLE_SHARE_REJECTIONS.has(code)) {
+    const targetMessageId = req.body?.targetMessageId;
+    const requestId = tenantStorage.getStore()?.requestId ?? req.requestId;
+    const traceId =
+      typeof targetMessageId === 'string' ? traceIdForMessage(targetMessageId) : undefined;
+
+    recordShareLinkRejection(operation, code);
+    logger.warn('[share] Shared link publication rejected', {
+      event: 'share_link_rejected',
+      operation,
+      code,
+      ...(requestId && { request_id: requestId }),
+      ...(traceId && { trace_id: traceId }),
+    });
+  }
+
+  return res.status(status).json({ message, ...(code && { code }) });
+};
+
+const checkSharedLinksAccess = generateCheckAccess({
+  permissionType: PermissionTypes.SHARED_LINKS,
+  permissions: [Permissions.CREATE],
+  getRoleByName,
+});
 
 const resolveSharedLinkExpiration = (req, conversationId) =>
   getSharedLinkExpiration(
@@ -287,7 +341,6 @@ const streamSharedFile = async (req, res, file, requestedDisposition) => {
 
 if (allowSharedLinks) {
   const { forkIpLimiter, forkUserLimiter } = createForkLimiters();
-  const { shareIpLimiter, shareUserLimiter } = createShareLimiters();
 
   router.get(
     '/:shareId/config',
@@ -308,9 +361,11 @@ if (allowSharedLinks) {
 
   router.get(
     '/:shareId',
+    optionalJwtAuth,
     shareIpLimiter,
-    allowSharedLinksPublic ? (req, res, next) => next() : requireJwtAuth,
-    allowSharedLinksPublic ? (req, res, next) => next() : shareUserLimiter,
+    shareUserLimiter,
+    canAccessSharedLink,
+    sharedLinkConfigMiddleware,
     async (req, res) => {
       try {
         const contentPreflight = createShareContentPreflight(req.config?.filters, {
@@ -559,10 +614,16 @@ router.get(
     try {
       const share = await getSharedLink(req.user.id, req.params.conversationId);
 
+      if (share._id && share.success) {
+        await ensureLinkPermissions(share._id, req.user.id);
+      }
+
       return res.status(200).json({
+        _id: share._id,
         success: share.success,
         shareId: share.shareId,
         targetMessageId: share.targetMessageId,
+        snapshotFiles: share.snapshotFiles,
         conversationId: req.params.conversationId,
       });
     } catch (error) {
@@ -577,38 +638,41 @@ router.post(
   shareIpLimiter,
   requireJwtAuth,
   shareUserLimiter,
+  configMiddleware,
+  checkSharedLinksAccess,
   async (req, res) => {
     try {
-      const { targetMessageId } = req.body;
+      const { targetMessageId, snapshotFiles: requestedSnapshotFiles } = req.body ?? {};
+      if (
+        targetMessageId !== undefined &&
+        (typeof targetMessageId !== 'string' || targetMessageId.trim().length === 0)
+      ) {
+        return res.status(400).json({ message: 'targetMessageId must be a non-empty string' });
+      }
+      if (requestedSnapshotFiles !== undefined && typeof requestedSnapshotFiles !== 'boolean') {
+        return res.status(400).json({ message: 'snapshotFiles must be a boolean' });
+      }
+
       const expiredAt = await resolveSharedLinkExpiration(req, req.params.conversationId);
       if (expiredAt != null && !isActiveExpirationDate(expiredAt)) {
         return res.status(404).end();
       }
 
-      const created = await createSharedLink(
-        req.user.id,
-        req.params.conversationId,
-        targetMessageId,
-        expiredAt,
-      );
-      if (created) {
-        res.status(200).json(created);
-      } else {
-        res.status(404).end();
-      }
-    } catch (error) {
-      logger.error('Error creating shared link:', error);
-      res.status(500).json({ message: 'Error creating shared link' });
-    }
-  },
-);
-
-router.patch('/:shareId', shareIpLimiter, requireJwtAuth, shareUserLimiter, async (req, res) => {
-  try {
-    const { targetMessageId } = req.body ?? {};
-    if (targetMessageId !== undefined && typeof targetMessageId !== 'string') {
-      return res.status(400).json({ message: 'targetMessageId must be a string' });
-    }
+      const role = await getRoleByName(req.user.role);
+      const sharedLinksPerms = role?.permissions?.[PermissionTypes.SHARED_LINKS] || {};
+      const grantPublic = sharedLinksPerms[Permissions.SHARE_PUBLIC] === true;
+      // Per-link opt-out: snapshot only when the feature is enabled AND the user
+      // did not uncheck "share files" (body flag absent defaults to enabled).
+      const snapshotFiles = isFileSnapshotEnabled(req.config) && requestedSnapshotFiles !== false;
+      const contentPreflight = createShareContentPreflight(req.config?.filters, {
+        onTraversalFailure: reportLocatorTraversalFailure,
+        snapshotFiles,
+        user: req.user,
+        getFiles,
+        sharedFileMetadata: true,
+        sharedFileMetadataFiles: false,
+        legacyPii: req.config?.messageFilter?.pii,
+      });
 
       const created = await createSharedLink(
         req.user.id,
@@ -641,7 +705,9 @@ router.patch('/:shareId', shareIpLimiter, requireJwtAuth, shareUserLimiter, asyn
  * DELETE stays ungated so an owner can always retract a link they no longer may create. */
 router.patch(
   '/:shareId',
+  shareIpLimiter,
   requireJwtAuth,
+  shareUserLimiter,
   configMiddleware,
   checkSharedLinksAccess,
   async (req, res) => {

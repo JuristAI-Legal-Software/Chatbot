@@ -92,7 +92,7 @@ describe('generation retry admission', () => {
     const app = express();
     app.use(express.json());
     app.use((req, _res, next) => {
-      req.user = { id: 'bounded-probe-user' };
+      req.user = { id: 'bounded-probe-user' } as Request['user'];
       next();
     });
     app.use(generationRetryProbeLimiter);
@@ -122,7 +122,7 @@ describe('generation retry admission', () => {
     const app = express();
     app.use(express.json());
     app.use((req, _res, next) => {
-      req.user = { id: 'bounded-retry-user' };
+      req.user = { id: 'bounded-retry-user' } as Request['user'];
       next();
     });
     app.use(detectGenerationRetry);

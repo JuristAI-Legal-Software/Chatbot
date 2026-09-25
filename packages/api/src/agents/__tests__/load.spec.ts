@@ -497,7 +497,7 @@ describe('loadAgent', () => {
       ]),
     );
 
-    const persisted = await getAgent({ id: agentId });
+    const persisted = await getAgentWithVersionCount({ id: agentId });
     expect(persisted?.tools).toEqual(['calculator']);
   });
 

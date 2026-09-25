@@ -591,16 +591,63 @@ describe('Multer Configuration', () => {
       }).not.toThrow();
     });
 
-    it('should handle file system errors when directory creation fails', () => {
-      const mkdirSyncSpy = jest.spyOn(fs, 'mkdirSync').mockImplementation(() => {
-        throw new Error('mkdir failed');
+    it('should report file system errors through the storage callback', (done) => {
+      const loggerError = jest.spyOn(logger, 'error').mockImplementation();
+      const filesystemError = new Error('permission denied');
+      const mkdir = jest.spyOn(fs, 'mkdirSync').mockImplementationOnce(() => {
+        throw filesystemError;
       });
 
-      expect(() => {
-        storage.getDestination(mockReq, mockFile, jest.fn());
-      }).toThrow('mkdir failed');
+      storage.getDestination(mockReq, mockFile, (err, destination) => {
+        expect(err).toMatchObject({
+          statusCode: 500,
+          body: { message: 'Failed to prepare upload directory' },
+          cause: filesystemError,
+        });
+        expect(destination).toBeUndefined();
+        expect(loggerError).toHaveBeenCalledWith(
+          'Failed to prepare upload directory: permission denied',
+        );
+        mkdir.mockRestore();
+        loggerError.mockRestore();
+        done();
+      });
+    });
 
-      mkdirSyncSpy.mockRestore();
+    it('keeps the upload server alive after rejecting a malformed filename', async () => {
+      const app = express();
+      const upload = multer({ storage });
+      app.use((req, res, next) => {
+        req.user = mockReq.user;
+        req.config = mockReq.config;
+        next();
+      });
+      app.post('/upload', upload.single('file'), (req, res) => {
+        res.status(201).json({
+          originalname: req.file.originalname,
+          filename: req.file.filename,
+        });
+      });
+      app.use(ErrorController);
+
+      const malformed = await request(app).post('/upload').attach('file', Buffer.from('{}'), {
+        filename: '%.json',
+        contentType: 'application/json',
+      });
+
+      expect(malformed.status).toBe(400);
+      expect(malformed.body).toEqual({ message: 'Invalid filename encoding' });
+      const outputPath = path.join(tempDir, 'temp', 'test-user-123');
+      expect(fs.readdirSync(outputPath)).toEqual([]);
+
+      const healthy = await request(app).post('/upload').attach('file', Buffer.from('{}'), {
+        filename: 'healthy%20upload.json',
+        contentType: 'application/json',
+      });
+
+      expect(healthy.status).toBe(201);
+      expect(healthy.body.originalname).toBe('healthy upload.json');
+      expect(fs.existsSync(path.join(outputPath, healthy.body.filename))).toBe(true);
     });
 
     it('should handle malformed filenames with real sanitization', (done) => {

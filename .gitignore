@@ -199,3 +199,9 @@ CLAUDE.md
 /api/qa-temp-chat-token3
 /api/qa-temp-juristai3
 /api/qa-temp-juristai4
+codedb.snapshot
+scripts/activity-labels/results/
+
+!e2e/lighthouse/librechat.yaml
+/.lighthouse/
+/e2e/lighthouse/.test-results/

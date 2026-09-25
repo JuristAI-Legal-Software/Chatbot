@@ -10,9 +10,639 @@ import type { SchemaWithMeiliMethods } from '~/models/plugins/mongoMeili';
 import type { AppConfig, IConversation, IMessage } from '~/types';
 import { createChatExpirationDate, createTempChatExpirationDate } from '~/utils/tempChatRetention';
 import { activeExpirationFilter, createFallbackRetentionDate } from '~/utils/retention';
-import { tenantSafeBulkWrite } from '~/utils/tenantBulkWrite';
 import { isValidConversationId } from '~/utils/conversationId';
-import type { AppConfig, IMessage } from '~/types';
+import { tenantSafeBulkWrite } from '~/utils/tenantBulkWrite';
+import logger from '~/config/winston';
+
+const MAX_STORED_USER_SUBMITTED_PATHS = 256;
+const MAX_NORMALIZED_USER_SUBMITTED_PATHS = MAX_STORED_USER_SUBMITTED_PATHS + 1;
+const MAX_STORED_USER_SUBMITTED_FIELD_PATHS = MAX_NORMALIZED_USER_SUBMITTED_PATHS;
+const MAX_USER_SUBMITTED_PATH_LENGTH = 2048;
+const MAX_PROVENANCE_CAS_ATTEMPTS = 8;
+const MAX_SUBAGENT_CONTROL_RECEIPTS = 64;
+const MAX_SUBAGENT_CONTROL_MESSAGE_LENGTH = 4 * 1024;
+/** One owner admits at most 64 terminal control invocations. The optimistic
+ * writer therefore has enough rounds for every admitted receipt to converge. */
+const MAX_SUBAGENT_CONTROL_RECEIPT_CAS_ATTEMPTS = 64;
+const HITL_MESSAGE_FILTER_FIELD_SET = new Set<string>(HITL_MESSAGE_FILTER_FIELDS);
+
+function normalizeUserSubmittedPaths(paths: unknown): string[] {
+  if (!Array.isArray(paths)) {
+    return [];
+  }
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const path of paths) {
+    if (
+      typeof path !== 'string' ||
+      !path.startsWith('/') ||
+      path.length > MAX_USER_SUBMITTED_PATH_LENGTH ||
+      seen.has(path)
+    ) {
+      continue;
+    }
+    seen.add(path);
+    normalized.push(path);
+    if (normalized.length >= MAX_NORMALIZED_USER_SUBMITTED_PATHS) {
+      break;
+    }
+  }
+  return normalized;
+}
+
+function normalizeUserSubmittedMessageFieldPaths(values: unknown): UserSubmittedMessageFieldPath[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+  const normalized: UserSubmittedMessageFieldPath[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (value == null || typeof value !== 'object') {
+      continue;
+    }
+    const { path, field } = value as { path?: unknown; field?: unknown };
+    if (
+      typeof path !== 'string' ||
+      !path.startsWith('/') ||
+      path.length > MAX_USER_SUBMITTED_PATH_LENGTH ||
+      typeof field !== 'string' ||
+      !HITL_MESSAGE_FILTER_FIELD_SET.has(field)
+    ) {
+      continue;
+    }
+    const key = `${field}:${path}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    normalized.push({ path, field: field as UserSubmittedMessageFieldPath['field'] });
+    if (normalized.length >= MAX_NORMALIZED_USER_SUBMITTED_PATHS) {
+      break;
+    }
+  }
+  return normalized;
+}
+
+function capNormalizedProvenance(
+  userSubmittedPaths: readonly string[],
+  userSubmittedMessageFieldPaths: readonly UserSubmittedMessageFieldPath[],
+): {
+  userSubmittedPaths: string[];
+  userSubmittedMessageFieldPaths: UserSubmittedMessageFieldPath[];
+  promoteWholeMessage: boolean;
+} {
+  return {
+    userSubmittedPaths: userSubmittedPaths.slice(0, MAX_STORED_USER_SUBMITTED_PATHS),
+    userSubmittedMessageFieldPaths: userSubmittedMessageFieldPaths.slice(
+      0,
+      MAX_STORED_USER_SUBMITTED_FIELD_PATHS,
+    ),
+    promoteWholeMessage: userSubmittedPaths.length > MAX_STORED_USER_SUBMITTED_PATHS,
+  };
+}
+
+type StoredSubagentControlReceipt = NonNullable<
+  NonNullable<IMessage['subagentTask']>['controlReceipts']
+>[number];
+
+const terminalControlReceipt = (receipt: StoredSubagentControlReceipt): boolean =>
+  receipt.status === 'applied' || receipt.status === 'rejected' || receipt.status === 'failed';
+
+function retainSubagentControlReceipts(
+  current: StoredSubagentControlReceipt[],
+  receipt: StoredSubagentControlReceipt,
+): {
+  status: 'updated' | 'unchanged' | 'conflict' | 'capacity';
+  receipts: StoredSubagentControlReceipt[];
+} {
+  const existingIndex = current.findIndex(
+    (candidate) => candidate.invocationId === receipt.invocationId,
+  );
+  let merged: StoredSubagentControlReceipt[];
+  if (existingIndex < 0) {
+    merged = [...current, receipt];
+  } else {
+    const existing = current[existingIndex];
+    if (existing.fingerprint !== receipt.fingerprint) {
+      return { status: 'conflict', receipts: current };
+    }
+    if (
+      terminalControlReceipt(existing) ||
+      existing.status === receipt.status ||
+      (existing.status === 'accepted' && receipt.status === 'reserved')
+    ) {
+      return { status: 'unchanged', receipts: current };
+    }
+    merged = current.map((candidate, index) => (index === existingIndex ? receipt : candidate));
+  }
+  const accepted = merged.filter(
+    (candidate) => candidate.status === 'reserved' || candidate.status === 'accepted',
+  );
+  /** Reserved and accepted receipts are idempotency fences for commands that can
+   * still take effect. Never evict one to admit another receipt: report capacity
+   * so the caller refuses the command before mutating the live task. */
+  if (accepted.length > MAX_SUBAGENT_CONTROL_RECEIPTS) {
+    return { status: 'capacity', receipts: current };
+  }
+  const terminalAllowance = Math.max(0, MAX_SUBAGENT_CONTROL_RECEIPTS - accepted.length);
+  let terminal =
+    terminalAllowance === 0
+      ? []
+      : merged
+          .filter((candidate) => candidate.status !== 'reserved' && candidate.status !== 'accepted')
+          .sort(
+            (left, right) =>
+              left.createdAt.getTime() - right.createdAt.getTime() ||
+              left.invocationId.localeCompare(right.invocationId),
+          )
+          .slice(-terminalAllowance);
+  const advancesActiveFence =
+    existingIndex >= 0 &&
+    !terminalControlReceipt(current[existingIndex]) &&
+    terminalControlReceipt(receipt);
+  if (
+    advancesActiveFence &&
+    !terminal.some((candidate) => candidate.invocationId === receipt.invocationId)
+  ) {
+    /** A terminal transition for an active fence must outrank unrelated terminal
+     * history even though it retains the command's older occurrence timestamp. */
+    const otherAllowance = Math.max(0, terminalAllowance - 1);
+    terminal = [
+      ...(otherAllowance === 0
+        ? []
+        : terminal
+            .filter((candidate) => candidate.invocationId !== receipt.invocationId)
+            .slice(-otherAllowance)),
+      receipt,
+    ].sort(
+      (left, right) =>
+        left.createdAt.getTime() - right.createdAt.getTime() ||
+        left.invocationId.localeCompare(right.invocationId),
+    );
+  }
+  const receipts = [...accepted, ...terminal];
+  if (!receipts.some((candidate) => candidate.invocationId === receipt.invocationId)) {
+    return { status: 'capacity', receipts: current };
+  }
+  return { status: 'updated', receipts };
+}
+
+type MessageProvenance = Pick<
+  IMessage,
+  'isUserSubmitted' | 'userSubmittedPaths' | 'userSubmittedMessageFieldPaths'
+>;
+
+function mergeMessageProvenance(
+  current: MessageProvenance | null,
+  userSubmittedPaths: readonly string[],
+  userSubmittedMessageFieldPaths: readonly UserSubmittedMessageFieldPath[],
+  stampModelOutputOnInsert = false,
+  explicitIsUserSubmitted?: boolean,
+  preserveStoredIsUserSubmitted = true,
+): MessageProvenance {
+  const provenance = capNormalizedProvenance(
+    normalizeUserSubmittedPaths([...(current?.userSubmittedPaths ?? []), ...userSubmittedPaths]),
+    normalizeUserSubmittedMessageFieldPaths([
+      ...(current?.userSubmittedMessageFieldPaths ?? []),
+      ...userSubmittedMessageFieldPaths,
+    ]),
+  );
+
+  let isUserSubmitted = preserveStoredIsUserSubmitted ? current?.isUserSubmitted : undefined;
+  if (typeof explicitIsUserSubmitted === 'boolean') {
+    isUserSubmitted = explicitIsUserSubmitted;
+  } else if (stampModelOutputOnInsert && isUserSubmitted == null) {
+    isUserSubmitted = false;
+  }
+  if (provenance.promoteWholeMessage) {
+    isUserSubmitted = true;
+  }
+
+  return {
+    userSubmittedPaths: provenance.userSubmittedPaths,
+    userSubmittedMessageFieldPaths: provenance.userSubmittedMessageFieldPaths,
+    ...(typeof isUserSubmitted === 'boolean' && { isUserSubmitted }),
+  };
+}
+
+function getProvenanceSnapshotFilter(current: MessageProvenance): Record<string, unknown> {
+  return {
+    userSubmittedPaths: !Object.prototype.hasOwnProperty.call(current, 'userSubmittedPaths')
+      ? { $exists: false }
+      : current.userSubmittedPaths,
+    userSubmittedMessageFieldPaths: !Object.prototype.hasOwnProperty.call(
+      current,
+      'userSubmittedMessageFieldPaths',
+    )
+      ? { $exists: false }
+      : current.userSubmittedMessageFieldPaths,
+    isUserSubmitted: !Object.prototype.hasOwnProperty.call(current, 'isUserSubmitted')
+      ? { $exists: false }
+      : current.isUserSubmitted,
+  };
+}
+
+function getMissingProvenanceFilter(): Record<string, unknown> {
+  return {
+    userSubmittedPaths: { $exists: false },
+    userSubmittedMessageFieldPaths: { $exists: false },
+    isUserSubmitted: { $exists: false },
+  };
+}
+
+function isDuplicateKeyError(err: unknown): boolean {
+  return (err as { code?: number }).code === 11000;
+}
+
+function getSteerUserSubmittedPaths(content: unknown): string[] {
+  if (!Array.isArray(content)) {
+    return [];
+  }
+  const paths: string[] = [];
+  for (let index = 0; index < content.length; index++) {
+    const part = content[index] as { type?: unknown } | null | undefined;
+    if (part?.type === 'steer') {
+      paths.push(`/content/${index}`);
+    }
+  }
+  return paths;
+}
+
+/**
+ * A terminal save that must drop a stored `contextMeta` unsets it in the same
+ * update that persists the response, so no failure between two writes can
+ * leave a completed row carrying a disconnect snapshot's state.
+ */
+function buildMessageSaveUpdate(
+  update: Record<string, unknown>,
+  options: {
+    stampModelOutputOnInsert: boolean;
+    unsetContextMeta: boolean;
+    retentionOnInsert?: { expiredAt: Date; isTemporary: false };
+  },
+): UpdateQuery<IMessage> {
+  if (
+    !options.stampModelOutputOnInsert &&
+    !options.unsetContextMeta &&
+    options.retentionOnInsert == null
+  ) {
+    return update;
+  }
+  return {
+    $set: update,
+    ...((options.stampModelOutputOnInsert || options.retentionOnInsert != null) && {
+      $setOnInsert: {
+        ...(options.stampModelOutputOnInsert && { isUserSubmitted: false }),
+        ...options.retentionOnInsert,
+      },
+    }),
+    ...(options.unsetContextMeta && { $unset: { contextMeta: 1 } }),
+  };
+}
+
+async function findOneAndMergeMessageProvenance(
+  Message: Model<IMessage>,
+  identity: FilterQuery<IMessage>,
+  update: Record<string, unknown>,
+  userSubmittedPaths: readonly string[],
+  userSubmittedMessageFieldPaths: readonly UserSubmittedMessageFieldPath[],
+  options: {
+    upsert: boolean;
+    stampModelOutputOnInsert?: boolean;
+    unsetContextMeta?: boolean;
+    retentionOnInsert?: { expiredAt: Date; isTemporary: false };
+  },
+) {
+  const safeUpdate = { ...update };
+  delete safeUpdate._id;
+  delete safeUpdate.tenantId;
+  const preservesStoredIsUserSubmitted = !Object.prototype.hasOwnProperty.call(
+    safeUpdate,
+    'isUserSubmitted',
+  );
+
+  /** A small optimistic loop keeps the merge atomic while using only classic update operators. */
+  for (let attempt = 0; attempt < MAX_PROVENANCE_CAS_ATTEMPTS; attempt += 1) {
+    const current = await Message.findOne(identity)
+      .select({
+        isUserSubmitted: 1,
+        userSubmittedPaths: 1,
+        userSubmittedMessageFieldPaths: 1,
+        _id: 0,
+      })
+      .lean<MessageProvenance | null>();
+    if (current == null && !options.upsert) {
+      return null;
+    }
+
+    const provenance = mergeMessageProvenance(
+      current,
+      userSubmittedPaths,
+      userSubmittedMessageFieldPaths,
+      options.stampModelOutputOnInsert,
+      typeof safeUpdate.isUserSubmitted === 'boolean' ? safeUpdate.isUserSubmitted : undefined,
+      preservesStoredIsUserSubmitted,
+    );
+    const filter = {
+      ...identity,
+      ...(current == null ? getMissingProvenanceFilter() : getProvenanceSnapshotFilter(current)),
+    };
+
+    try {
+      const message = await Message.findOneAndUpdate(
+        filter,
+        {
+          $set: { ...safeUpdate, ...provenance },
+          ...(current == null &&
+            options.retentionOnInsert != null && { $setOnInsert: options.retentionOnInsert }),
+          ...(options.unsetContextMeta && { $unset: { contextMeta: 1 } }),
+        },
+        { upsert: options.upsert && current == null, new: true },
+      );
+      if (message != null) {
+        return message;
+      }
+    } catch (err) {
+      if (!isDuplicateKeyError(err) || !options.upsert) {
+        throw err;
+      }
+    }
+  }
+
+  throw new Error('Message provenance write contention exceeded its retry bound.');
+}
+
+/**
+ * Maximum private transcript JSON that may cross the MongoDB projection seam
+ * for the bounded public subagent-activity view. This gives the sanitizer
+ * enough source headroom while preventing multi-megabyte transcripts from
+ * being materialized merely to produce a 64 KiB public activity response.
+ */
+export const SUBAGENT_TRANSCRIPT_SOURCE_BYTE_LIMIT: number = 256 * 1024;
+const SUBAGENT_ACTIVITY_PROJECTION_SOURCE_BYTE_LIMIT = 64 * 1024;
+
+/**
+ * Maximum activity sources materialized for one child-view poll. New writers
+ * supply at most four 64 KiB public projections; legacy rows fall back to at
+ * most four 256 KiB private transcripts during a rolling deployment.
+ */
+export const SUBAGENT_TRANSCRIPT_PAGE_LIMIT: number = 4;
+const SUBAGENT_ACTIVITY_SOURCE_CANDIDATE_LIMIT = SUBAGENT_TRANSCRIPT_PAGE_LIMIT * 2;
+
+/**
+ * Ordinary persisted message content is the authoritative refresh source when
+ * an execution did not write a private subagent transcript. Project only the
+ * visible activity vocabulary and bound it before MongoDB returns the row.
+ */
+/**
+ * Per-item bounds mirror `SUBAGENT_ACTIVITY_LIMITS` in `packages/api`
+ * (`src/agents/activity.ts`) at worst-case 4-byte UTF-8, so activity projected
+ * from ordinary message content is clipped no harder than activity projected
+ * from a private transcript. The whole view stays bounded downstream by the
+ * 64KB serialized-activity budget and the 256KB response trim.
+ */
+export const SUBAGENT_MESSAGE_ACTIVITY_ITEM_LIMIT: number = 100;
+const SUBAGENT_MESSAGE_ACTIVITY_TEXT_CODE_POINT_LIMIT = 8192;
+const SUBAGENT_MESSAGE_ACTIVITY_TOOL_INPUT_CODE_POINT_LIMIT = 2048;
+const SUBAGENT_MESSAGE_ACTIVITY_TOOL_OUTPUT_CODE_POINT_LIMIT = 4096;
+const SUBAGENT_MESSAGE_ACTIVITY_ID_CODE_POINT_LIMIT = 128;
+const SUBAGENT_MESSAGE_ACTIVITY_LABEL_CODE_POINT_LIMIT = 512;
+const SUBAGENT_MESSAGE_ACTIVITY_LABEL_IDS_LIMIT = 8;
+const SUBAGENT_MESSAGE_ACTIVITY_TOTAL_BYTE_LIMIT = 64 * 1024;
+const SUBAGENT_VIEW_CONTROL_RECEIPT_LIMIT = 32;
+const SUBAGENT_VIEW_CONTROL_STRING_CODE_POINT_LIMIT = 128;
+
+/**
+ * Exclusion projection for message reads that feed the chat client (the
+ * conversation GET and shared-link reads). Every excluded field is either
+ * server-internal (ids, replay signatures, legacy summarization state) or a
+ * web_search SERP vertical no citation marker or UI can address: markers
+ * resolve `search|image|news|video|ref|file` through organic/images/
+ * topStories/videos/references (all kept — `news` markers read topStories,
+ * never the `news` collection). The JSON export mirrors this cache, so
+ * fields removed here also leave user exports.
+ */
+/**
+ * A response the server generated and sampled into a trace. Its trace fields are
+ * an ownership claim, so rows a client authored (the message-create route and
+ * imports stamp `isUserSubmitted: true`) never count, even if one was persisted
+ * with forged fields before those writes stripped them.
+ */
+/** A response's position in trace order: its creation time, then its `_id`. */
+function traceOrderKey(createdAt: Date, id: Types.ObjectId): string {
+  return `${createdAt.getTime().toString(36)}.${id.toString()}`;
+}
+
+function parseTraceOrderKey(key: string): { createdAt: Date; id: string } | undefined {
+  const [time, hex] = key.split('.');
+  const createdAt = new Date(Number.parseInt(time ?? '', 36));
+  if (Number.isNaN(createdAt.getTime()) || hex == null || !/^[0-9a-f]{24}$/.test(hex)) {
+    return undefined;
+  }
+  return { createdAt, id: hex };
+}
+
+/** An explicit tenant scope, so a read without request tenant context still cannot span tenants. */
+const traceTenantScope = (tenantId?: string) =>
+  tenantId == null ? { tenantId: { $exists: false } } : { tenantId };
+
+const SERVER_AUTHORED_SAMPLED_RESPONSE = {
+  langfuseSampled: true,
+  isCreatedByUser: false,
+  isUserSubmitted: { $ne: true },
+} as const;
+
+export const CLIENT_MESSAGE_SELECT: string = [
+  '-_id',
+  '-__v',
+  '-user',
+  '-clientId',
+  '-invocationId',
+  '-conversationSignature',
+  '-summary',
+  '-summaryTokenCount',
+  '-contextMeta',
+  '-langfuseSampled',
+  '-langfuseDestinationIds',
+  '-langfuseRunId',
+  '-metadata.thoughtSignatures',
+  '-content.tool_call.backgroundTask.resultClaim',
+  '-content.tool_call.backgroundTask.completionWakeup',
+  '-attachments.web_search.knowledgeGraph',
+  '-attachments.web_search.peopleAlsoAsk',
+  '-attachments.web_search.relatedSearches',
+  '-attachments.web_search.shopping',
+  '-attachments.web_search.places',
+  '-attachments.web_search.news',
+  '-attachments.web_search.organic.sitelinks',
+  '-attachments.web_search.organic.highlights',
+  '-attachments.web_search.topStories.highlights',
+].join(' ');
+
+interface MessageQueryOptions {
+  limit?: number;
+  sort?: Record<string, 1 | -1> | false;
+}
+
+export type SubagentTaskResultClaim =
+  | { status: 'not_found' }
+  | { status: 'claimed'; message: IMessage }
+  | { status: 'acquired'; message: IMessage };
+
+export interface BackgroundToolResultRecord {
+  taskId: string;
+  toolCallId: string;
+  toolName: string;
+  status: 'completed' | 'error' | 'cancelled';
+  output: string;
+  agentId?: string;
+  /** When the task reached this terminal status. Absent on rows written before
+   * the stamp existed, so a consumer must treat it as optional. */
+  settledAt?: Date;
+}
+
+export type BackgroundToolResultClaim =
+  | { status: 'not_found' | 'not_ready' }
+  | { status: 'outcome_unknown'; toolName: string }
+  | {
+      status: 'claimed';
+      claim?: { kind: 'manual' | 'wakeup'; claimId: string; generationId?: string };
+      messageId?: string;
+    }
+  | { status: 'acquired'; results: BackgroundToolResultRecord[]; messageId?: string };
+
+export type SubagentThreadViewMessageRecord = Pick<
+  IMessage,
+  | 'messageId'
+  | 'parentMessageId'
+  | 'isCreatedByUser'
+  | 'text'
+  | 'createdAt'
+  | 'error'
+  | 'unfinished'
+  | 'subagentTranscript'
+  | 'subagentTriggerProjection'
+> & {
+  textProjectionTruncated?: boolean;
+  subagentTranscriptProjectionTruncated?: boolean;
+  /** Storage-bounded visible content; validated into the public activity type by the API. */
+  subagentActivity?: unknown[];
+  subagentActivityProjectionJson?: string;
+  subagentActivityProjectionTruncated?: boolean;
+  /** Storage-bounded task state; private replay and execution fields never cross this seam. */
+  subagentTask?: {
+    status?: NonNullable<IMessage['subagentTask']>['status'];
+    controlReceipts?: Array<
+      Omit<StoredSubagentControlReceipt, 'fingerprint'> & { fingerprint?: never }
+    >;
+    controlReceiptsProjectionTruncated?: boolean;
+  };
+};
+
+/** Amazon DocumentDB does not support `$$REMOVE`, so the bounded thread-view
+ * projections emit `null` where they mean "omit this key". This is the shape as
+ * it leaves the aggregation, before those sentinels are pruned back to absent. */
+/** Widens the given keys to admit the projection's `null` sentinel. */
+type WithNullSentinels<T, K extends keyof T> = Omit<T, K> & {
+  [P in K]?: NonNullable<T[P]> | null;
+};
+
+type ThreadViewRecord = SubagentThreadViewMessageRecord;
+export type ProjectedSubagentThreadViewMessage = WithNullSentinels<
+  Omit<ThreadViewRecord, 'subagentTask' | 'subagentTriggerProjection'>,
+  'subagentTranscriptProjectionTruncated'
+> & {
+  subagentTriggerProjection?: WithNullSentinels<
+    NonNullable<ThreadViewRecord['subagentTriggerProjection']>,
+    'expectedActionToolName'
+  > | null;
+  subagentTask?:
+    | (Omit<NonNullable<ThreadViewRecord['subagentTask']>, 'controlReceipts'> & {
+        controlReceipts?: Array<
+          WithNullSentinels<
+            NonNullable<NonNullable<ThreadViewRecord['subagentTask']>['controlReceipts']>[number],
+            'controlId' | 'reason' | 'message'
+          >
+        >;
+      })
+    | null;
+};
+
+/** Restores the absent-vs-present contract by dropping the `null` sentinels the
+ * projection emitted. Bounded by the projection's own row, receipt, and byte
+ * limits, and folded into the pass that already materializes each record. */
+function pruneProjectedThreadViewMessage(
+  message: ProjectedSubagentThreadViewMessage,
+): SubagentThreadViewMessageRecord {
+  if (message.subagentTranscriptProjectionTruncated === null) {
+    delete message.subagentTranscriptProjectionTruncated;
+  }
+  if (message.subagentTriggerProjection === null) {
+    delete message.subagentTriggerProjection;
+  } else if (message.subagentTriggerProjection?.expectedActionToolName === null) {
+    delete message.subagentTriggerProjection.expectedActionToolName;
+  }
+  if (message.subagentTask === null) {
+    delete message.subagentTask;
+  } else {
+    for (const receipt of message.subagentTask?.controlReceipts ?? []) {
+      if (receipt.controlId === null) delete receipt.controlId;
+      if (receipt.reason === null) delete receipt.reason;
+      if (receipt.message === null) delete receipt.message;
+    }
+  }
+  return message as SubagentThreadViewMessageRecord;
+}
+
+export type ParentSubagentTaskRecord = {
+  conversationId: string;
+  /** The shared bounded source window filled, so this child's history may be incomplete. */
+  sourceTruncated?: boolean;
+  tasks: Array<
+    Pick<IMessage, 'messageId' | 'createdAt'> & {
+      status: NonNullable<IMessage['subagentTask']>['status'];
+      /** True when status was inferred from an ordinary event-turn row. */
+      statusDerived?: boolean;
+      /** Private ordering token used only while merging bounded storage reads. */
+      occurrenceId?: Types.ObjectId;
+    }
+  >;
+};
+
+/** A response message whose run was sampled into a trace. */
+export interface SampledTraceMessage {
+  messageId: string;
+  createdAt?: Date;
+  /** Opaque ids of the tracing destinations eligible to hold the trace, when recorded. */
+  langfuseDestinationIds?: string[];
+  /** The run whose trace this response reports, when it is not the message's own id. */
+  langfuseRunId?: string;
+  /** Opaque position in the conversation's response order, which a later read can resume from. */
+  orderKey?: string;
+}
+
+export interface ConversationTraceRefs {
+  /** Creation time of the user's earliest message in the conversation. */
+  firstMessageAt?: Date;
+  /** Sampled response messages, oldest first. */
+  sampledMessages: SampledTraceMessage[];
+}
+
+/**
+ * Reads a stored terminal stamp defensively: rows written before the stamp existed
+ * omit it, and a document can reach here from a raw read where the date is still a
+ * string, so an unusable value is reported as absent rather than as `Invalid Date`.
+ */
+function toSettledAt(value: unknown): Date | undefined {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value;
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+  return undefined;
+}
 
 export interface MessageMethods {
   saveMessage(
@@ -258,9 +888,9 @@ export function createMessageMethods(mongoose: typeof import('mongoose')): Messa
 
     const conversationId = params.conversationId as string | undefined;
     if (!isValidConversationId(conversationId)) {
-      logger.warn(`Invalid conversation ID: ${conversationId}`);
-      logger.info(`---\`saveMessage\` context: ${metadata?.context}`);
-      logger.info(`---Invalid conversation ID Params: ${JSON.stringify(params, null, 2)}`);
+      logger.warn(
+        `Invalid conversation ID: ${conversationId} (context: ${metadata?.context ?? 'n/a'})`,
+      );
       return;
     }
 

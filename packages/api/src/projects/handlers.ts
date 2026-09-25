@@ -16,16 +16,7 @@ const CONVERSATION_NOT_FOUND = 'Conversation not found';
 
 const PROJECT_SORT_FIELDS = new Set<ChatProjectSortBy>(['name', 'createdAt', 'lastConversationAt']);
 
-interface ProjectUser {
-  id: string;
-  _id?: {
-    toString(): string;
-  };
-}
-
-interface ProjectRequest extends Request {
-  user?: ProjectUser;
-}
+type ProjectRequest = Request;
 
 type ProjectHandlerDependencies = Pick<
   ChatProjectMethods,

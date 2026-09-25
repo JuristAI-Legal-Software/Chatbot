@@ -31,7 +31,15 @@ const {
   ListModelsController,
   GetModelController,
 } = require('~/server/controllers/agents/openai');
-const { configMiddleware, createAccessLimiters } = require('~/server/middleware');
+const {
+  agentEventUserLimiter,
+  configMiddleware,
+  createAccessLimiters,
+} = require('~/server/middleware');
+const {
+  enqueueAgentTrigger,
+  getAgentTriggerDeliveryStatus,
+} = require('~/server/services/Agents/triggers');
 const {
   checkAgentPermission,
   checkAgentTriggerPermission,
@@ -45,6 +53,18 @@ const router = express.Router();
 const { accessIpLimiter, accessUserLimiter } = createAccessLimiters();
 /** Baseline IP rate limiter applied alongside the access limiters. */
 const routeRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
+const eventHandlers = createAgentTriggerIngressHandlers({
+  enqueue: enqueueAgentTrigger,
+  getDeliveryStatus: getAgentTriggerDeliveryStatus,
+});
+const eventBindingHandlers = createAgentEventBindingHandlers({
+  getAgent: db.getAgent,
+  getConvo: db.getConvo,
+  getBinding: db.getAgentEventBinding,
+  getMessage: db.getMessage,
+  deleteConvos: db.deleteConvos,
+  reserveThread: db.reserveSubagentThread,
+});
 
 router.use(preAuthTenantMiddleware);
 router.use(requireRemoteAgentAuth);

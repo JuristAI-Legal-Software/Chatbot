@@ -74,19 +74,83 @@ const isOpenIdReuseUser = (strategy, user, openIdReuseUserId) =>
  * for downstream Mongoose tenant isolation and structured logging.
  */
 const requireJwtAuth = (req, res, next) => {
-  const cookieHeader = req.headers.cookie;
-  const parsedCookies = cookieHeader ? cookies.parse(cookieHeader) : {};
-  const tokenProvider = parsedCookies.token_provider;
-  const openidReuseEnabled = isEnabled(process.env.OPENID_REUSE_TOKENS);
-  const openidJwtAvailable = openidReuseEnabled && hasPassportStrategy('openidJwt');
-  const openIdReuseUserId = getValidOpenIdReuseUserId(parsedCookies);
-  const useOpenIdJwt =
-    tokenProvider === 'openid' && openidJwtAvailable && openIdReuseUserId != null;
-  const chatMintedJwtAvailable = hasPassportStrategy('chatMintedJwt');
-  const strategies = useOpenIdJwt ? ['openidJwt', 'jwt'] : ['jwt'];
-  if (chatMintedJwtAvailable) {
+  const {
+    tokenProvider,
+    tokenSource,
+    openidReuseEnabled,
+    openidJwtAvailable,
+    openIdReuseUserId,
+    strategies,
+  } = getAuthStrategies(req);
+  if (hasPassportStrategy('chatMintedJwt')) {
     strategies.push('chatMintedJwt');
   }
+  const authLogState = {
+    tokenProvider,
+    tokenSource,
+    openidReuseEnabled,
+    openidJwtAvailable,
+    hasOpenIdReuseUserId: openIdReuseUserId != null,
+  };
+  let primaryFailureReasonCategory;
+  let fallbackAttempted = false;
+
+  const logOpenIdFallbackAttempt = ({ fallbackStrategy, reasonCategory, status }) => {
+    primaryFailureReasonCategory = reasonCategory;
+    fallbackAttempted = true;
+    const message = '[requireJwtAuth] OpenID JWT auth failed; trying fallback';
+    const context = buildSafeAuthLogContext(req, authLogState, {
+      event_name: 'jwt_auth_fallback_attempt',
+      primary_strategy: 'openidJwt',
+      fallback_strategy: fallbackStrategy,
+      fallback_attempted: true,
+      reason_category: reasonCategory,
+      recovery_classification: 'fallback_attempted',
+      strategy_status: status,
+    });
+    logger.debug({ message, ...context });
+  };
+
+  const logAuthenticationFailure = ({ strategy, info, status, err }) => {
+    const message = '[requireJwtAuth] Authentication failed after all strategies';
+    const reasonCategory = getAuthFailureReasonCategory(err, info);
+    const context = buildSafeAuthLogContext(req, authLogState, {
+      event_name: 'jwt_auth_rejected',
+      primary_strategy: strategies[0],
+      fallback_strategy: strategies[1],
+      fallback_attempted: fallbackAttempted,
+      fallback_succeeded: false,
+      attempted_strategies: strategies,
+      final_strategy: strategy,
+      ...(fallbackAttempted && {
+        primary_failure_reason_category: primaryFailureReasonCategory,
+      }),
+      reason_category: reasonCategory,
+      recovery_classification: 'terminal_rejection',
+      response_status: status || 401,
+    });
+    const log =
+      fallbackAttempted || reasonCategory === 'malformed_jwt' ? logger.warn : logger.debug;
+    log.call(logger, { message, ...context });
+  };
+
+  const logFallbackSuccess = (strategy) => {
+    if (!fallbackAttempted || strategy !== 'jwt') {
+      return;
+    }
+    const message = '[requireJwtAuth] JWT fallback succeeded after OpenID JWT failure';
+    const context = buildSafeAuthLogContext(req, authLogState, {
+      event_name: 'jwt_auth_recovered',
+      auth_strategy: 'jwt',
+      primary_strategy: 'openidJwt',
+      fallback_strategy: 'jwt',
+      fallback_attempted: true,
+      fallback_succeeded: true,
+      primary_failure_reason_category: primaryFailureReasonCategory,
+      recovery_classification: 'fallback_succeeded',
+    });
+    logger.debug({ message, ...context });
+  };
 
   const authenticateWithStrategy = (index) => {
     const strategy = strategies[index];

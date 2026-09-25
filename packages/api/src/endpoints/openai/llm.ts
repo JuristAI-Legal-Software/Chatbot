@@ -991,11 +991,7 @@ export function getOpenAILLMConfig({
     const updatedDropParams = dropParams || [];
     const combinedDropParams = [...new Set([...updatedDropParams, ...reasoningExcludeParams])];
 
-    combinedDropParams.forEach((param) => {
-      if (param in llmConfig) {
-        delete llmConfig[param as keyof t.OAIClientOptions];
-      }
-    });
+    combinedDropParams.forEach((param) => deleteConfigParam({ param, llmConfig, modelKwargs }));
   } else if (modelOptions.model && isGpt4oSearchModel(modelOptions.model as string)) {
     /**
      * Note: OpenAI Web Search models do not support any known parameters besides `max_tokens`

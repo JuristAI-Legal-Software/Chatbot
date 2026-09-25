@@ -14,7 +14,6 @@ const {
 } = require('@librechat/api');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { spendTokens, getFiles } = require('~/models');
-const proxyAgent = getEnvProxyDispatcher();
 
 /**
  * Configure proxy support for Google APIs
@@ -35,12 +34,13 @@ function isGoogleApisUrl(value) {
   }
 }
 
-if (proxyAgent) {
+const googleApiProxyDispatcher = getEnvProxyDispatcher();
+if (googleApiProxyDispatcher) {
   const originalFetch = globalThis.fetch;
 
   globalThis.fetch = function (url, options = {}) {
     if (isGoogleApisUrl(url)) {
-      options = { ...options, dispatcher: proxyAgent };
+      options = { ...options, dispatcher: googleApiProxyDispatcher };
     }
     return originalFetch.call(this, url, options);
   };

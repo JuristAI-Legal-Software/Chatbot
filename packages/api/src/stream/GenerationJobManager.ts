@@ -2737,20 +2737,54 @@ class GenerationJobManagerClass {
         // briefly unsubscribing the successor.
         this.releaseReplacementTransportHold(streamId, replacedRuntime);
       }
-    });
-
-    /**
-     * Set up cross-replica abort listener (Redis mode only).
-     * When abort is triggered on ANY replica, this replica receives the signal
-     * and aborts its local AbortController (if it's the one running generation).
-     */
-    if (this.eventTransport.onAbort) {
-      await this.eventTransport.onAbort(streamId, () => {
-        const currentRuntime = this.runtimeState.get(streamId);
-        if (currentRuntime && !currentRuntime.abortController.signal.aborted) {
-          logger.debug(`[GenerationJobManager] Received cross-replica abort for ${streamId}`);
-          currentRuntime.abortController.abort();
-        }
+      // This epoch is not exposed to its controller until the durable bit and
+      // owner listener agree. A replacement that wins before this write sees
+      // explicit false and can safely skip an acknowledgement because no
+      // provider could have started; a lost write reply is confirmed below.
+      await this.jobStore.updateJob(streamId, { providerAbortReady: true }, runtime.createdAt);
+      /**
+       * NOT awaited, unlike abort. Abort must be deliverable before the job
+       * is exposed — a missed abort strands a run. A missed preempt only
+       * degrades that steer to the next tool boundary, which is the
+       * documented fallback, so blocking job creation on a second channel
+       * subscription would trade a real hang risk for a cosmetic guarantee.
+       * The registration's own lost-race tail releases it if the runtime is
+       * retired before the subscription resolves, and it swallows and logs
+       * its own failures, so this detached call cannot reject.
+       */
+      void this.registerPreemptSubscription(streamId, runtime);
+      if (this.runtimeState.get(streamId) !== runtime) {
+        throw new Error('Generation job was replaced during initialization');
+      }
+      const confirmedJobData = await this.jobStore.getJob(streamId);
+      if (
+        this.runtimeState.get(streamId) !== runtime ||
+        !confirmedJobData ||
+        confirmedJobData.createdAt !== runtime.createdAt ||
+        confirmedJobData.status !== 'running' ||
+        confirmedJobData.providerAbortReady !== true
+      ) {
+        throw new Error('Generation job was replaced during initialization');
+      }
+      if (this.shuttingDown) {
+        throw new Error(SHUTTING_DOWN_ERROR);
+      }
+    } catch (error) {
+      if (replacedRuntime != null && replacedRuntime !== runtime) {
+        this.releaseReplacementTransportHold(streamId, replacedRuntime);
+      }
+      // The durable job already exists, but the caller has not received its
+      // generation identity yet. Finalize that exact epoch here so a controller
+      // catch never needs to issue an unsafe unscoped terminal mutation.
+      let message = SHUTDOWN_JOB_ERROR;
+      if (!this.shuttingDown) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+      await this.completeJob(streamId, message, jobData.createdAt).catch((finalizeError) => {
+        logger.error(
+          `[GenerationJobManager] Failed to finalize partially initialized job ${streamId}:`,
+          finalizeError,
+        );
       });
       if (jobData.providerExecutionId) {
         await this.markProviderExecutionDrained(
@@ -3022,18 +3056,10 @@ class GenerationJobManagerClass {
 
     this.registerAllSubscribersLeft(streamId);
 
-    // Set up cross-replica abort listener (Redis mode only)
-    // This ensures lazily-initialized jobs can receive abort signals
-    if (this.eventTransport.onAbort) {
-      await this.eventTransport.onAbort(streamId, () => {
-        const currentRuntime = this.runtimeState.get(streamId);
-        if (currentRuntime && !currentRuntime.abortController.signal.aborted) {
-          logger.debug(
-            `[GenerationJobManager] Received cross-replica abort for lazily-init job ${streamId}`,
-          );
-          currentRuntime.abortController.abort();
-        }
-      });
+    if (jobData.status === 'running' || jobData.status === 'requires_action') {
+      await this.registerAbortSubscription(streamId, runtime);
+      /** Best-effort, non-blocking — see the createJob registration. */
+      void this.registerPreemptSubscription(streamId, runtime);
     }
 
     const runtimeAfterAbortRegistration = this.runtimeState.get(streamId);

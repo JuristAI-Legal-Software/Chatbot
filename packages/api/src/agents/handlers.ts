@@ -226,6 +226,35 @@ export type PersistToolCallInput = {
 
 export type PersistToolCall = (input: PersistToolCallInput) => Promise<void>;
 
+/**
+ * Preserve the SDK's event-handler contract while attaching the graph-owned
+ * step identity to legacy artifact callbacks. `toolCallStepIds` is populated
+ * by ToolNode for the actual provider tool call; this wrapper never invents a
+ * fallback identity.
+ */
+export function createOwnedToolEndHandler(
+  callback: SdkToolEndCallback,
+  loggerArg: typeof logger = logger,
+): EventHandler {
+  const toolEndHandler = new ToolEndHandler(callback, loggerArg);
+  return {
+    handle: async (event, data: StreamEventData, metadata, graph) => {
+      const output = data?.output;
+      const toolCallId =
+        typeof output === 'object' && output != null
+          ? (output as { tool_call_id?: unknown }).tool_call_id
+          : undefined;
+      const stepId =
+        typeof toolCallId === 'string' ? graph?.toolCallStepIds?.get(toolCallId) : undefined;
+      const ownedMetadata =
+        typeof stepId === 'string' && stepId.length > 0
+          ? { ...(metadata ?? {}), stepId }
+          : metadata;
+      return toolEndHandler.handle(event, data, ownedMetadata, graph);
+    },
+  };
+}
+
 export interface ToolExecuteOptions {
   /**
    * Host-owned signal for the foreground run. This is authoritative across
@@ -264,6 +293,81 @@ export interface ToolExecuteOptions {
   toolEndCallback?: ToolEndCallback;
   /** Optional persistence hook for executed agent tool calls */
   persistToolCall?: PersistToolCall;
+  /** Durable internal-completion adapter, present only for an Event Actor invocation. */
+  eventActorDetachedAction?: EventActorDetachedActionLifecycle;
+  /** Called once per batch before tool execution to lazily provision files to tool
+   *  environments. Resolves to the code-env refs it uploaded, which the caller folds
+   *  into this batch's code-session context. */
+  provisionFiles?: (
+    toolNames: string[],
+    agentId?: string,
+    signal?: AbortSignal,
+    executionContext?: SubagentExecutionContext,
+  ) => Promise<CodeEnvFile[] | void>;
+  /**
+   * Persists a backgrounded code-execution result onto the dispatch turn once
+   * the detached call settles: downloads/persists generated files, patches the
+   * original tool-call part's `output`, and appends the attachments to the
+   * dispatch turn's message row. Returns the persisted attachments so the poll
+   * turn can re-emit them on its live stream. With `reapply: true` it only
+   * re-applies the (idempotent) row patch using the provided attachments — no
+   * file processing — to heal a full-row save that reverted the anchor.
+   */
+  persistBackgroundCodeResult?: (params: {
+    toolName: string;
+    toolCallId: string;
+    stepId?: string;
+    messageId?: string;
+    conversationId?: string;
+    agentId?: string;
+    dispatchedAt?: number;
+    output?: string;
+    artifact?: unknown;
+    codeExecutionContext?: CodeExecutionContext;
+    attachments?: unknown[];
+    reapply?: boolean;
+    backgroundTask?: BackgroundToolResultState;
+    resolveBackgroundTask?: () => BackgroundToolResultState;
+  }) => Promise<{ attachments?: unknown[]; deliveryReady?: boolean } | null>;
+  /** Shared ordinary-tool completion lifecycle. The delivery is registered
+   * before invoke; settlement is persisted onto the original response row. */
+  backgroundToolCompletion?: {
+    preregister?: (
+      registration: BackgroundToolWakeupRegistration,
+    ) => Promise<BackgroundToolWakeupAdmission | false>;
+    persist: (params: {
+      toolName: string;
+      toolCallId: string;
+      stepId?: string;
+      messageId?: string;
+      conversationId?: string;
+      agentId?: string;
+      output?: string;
+      backgroundTask: BackgroundToolResultState;
+      resolveBackgroundTask?: () => BackgroundToolResultState;
+    }) => Promise<boolean>;
+    claim: (params: {
+      userId: string;
+      conversationId: string;
+      messageId?: string;
+      taskId: string;
+      agentId?: string;
+      kind: 'manual';
+      claimId: string;
+      generationId?: string;
+      allowUnfinished?: boolean;
+    }) => Promise<BackgroundToolResultClaim>;
+    recoverDeadClaim?: BackgroundToolDeadClaimRecovery;
+  };
+  /** Emits an `attachment` SSE event on the current request's live stream. */
+  emitAttachment?: (attachment: unknown) => void;
+  /**
+   * Emits an `on_ptc_tool_call` SSE event for one inner tool invocation made
+   * by a programmatic tool-calling program. Absent on transports that don't
+   * carry the LibreChat step stream (Open Responses), which simply skips the
+   * instrumentation.
+   */
+  emitPtcProgress?: (event: PtcToolCallEvent) => void;
   /**
    * Loads a skill by name with ACL constraint (returns full body for injection).
    *
@@ -5395,7 +5499,23 @@ function createSkillFilesHandoff(
 }
 
 export function createToolExecuteHandler(options: ToolExecuteOptions): EventHandler {
-  const { loadTools, toolEndCallback, persistToolCall } = options;
+  const {
+    runSignal: hostRunSignal,
+    foregroundRunId,
+    loadTools,
+    toolEndCallback,
+    eventActorDetachedAction,
+    persistBackgroundCodeResult,
+    backgroundToolCompletion,
+    emitAttachment,
+    emitPtcProgress,
+    subagentTasks,
+    runFiles,
+    ordinaryToolCancellation = false,
+    backgroundCompletionResultMaxChars = AGENT_BACKGROUND_COMPLETION_RESULT_MAX_CHARS_DEFAULT,
+    provisionFiles,
+    persistToolCall,
+  } = options;
 
   const persistResult = async (input: PersistToolCallInput) => {
     if (!persistToolCall) {
@@ -5475,6 +5595,15 @@ export function createToolExecuteHandler(options: ToolExecuteOptions): EventHand
        * {@link createSkillFilesHandoff}); `undefined` leaves every other batch
        * fully concurrent. */
       let skillFilesHandoff: SkillFilesHandoff | undefined;
+      /** Tool-call persistence writes started by `reportResult`; the batch
+       * settles only after they finish so callers observe persisted rows. */
+      const pendingPersists: Promise<void>[] = [];
+      const toolNamesById = new Map(toolCalls.map((tc) => [tc.id, tc.name]));
+      const flushPersists = async (): Promise<void> => {
+        if (pendingPersists.length > 0) {
+          await Promise.all(pendingPersists);
+        }
+      };
       /** Reports a settled result so the agent graph can emit that call's
        * completion immediately instead of waiting for the whole batch;
        * `resolve` below remains the authoritative batch outcome. */
@@ -5487,6 +5616,21 @@ export function createToolExecuteHandler(options: ToolExecuteOptions): EventHand
           onResult?.(result);
         } catch (callbackError) {
           logger.warn('[ON_TOOL_EXECUTE] onResult callback error:', callbackError);
+        }
+        if (persistToolCall) {
+          const isError = result.status === 'error';
+          pendingPersists.push(
+            persistResult({
+              toolId: toolNamesById.get(result.toolCallId) ?? '',
+              toolCallId: result.toolCallId,
+              result: isError
+                ? `Tool call failed: ${result.errorMessage || result.content || 'Unknown error'}`
+                : result.content,
+              artifact: isError ? undefined : result.artifact,
+              metadata: metadata as ToolEndCallbackMetadata | undefined,
+              status: isError ? 'error' : 'success',
+            }),
+          );
         }
         return result;
       };
@@ -5507,14 +5651,14 @@ export function createToolExecuteHandler(options: ToolExecuteOptions): EventHand
               }
             }
             if (allowedToolCalls.length === 0) {
-              resolve(
-                toolCalls.map((tc) =>
-                  reportResult(
-                    preloadedNameBlocks.get(tc) ??
-                      errorResult(tc, 'Submitted tool name was blocked.'),
-                  ),
+              const blockedResults = toolCalls.map((tc) =>
+                reportResult(
+                  preloadedNameBlocks.get(tc) ??
+                    errorResult(tc, 'Submitted tool name was blocked.'),
                 ),
               );
+              await flushPersists();
+              resolve(blockedResults);
               return;
             }
             const toolNames = [...new Set(allowedToolCalls.map((tc) => tc.name))];
@@ -5542,50 +5686,24 @@ export function createToolExecuteHandler(options: ToolExecuteOptions): EventHand
               executionContext,
             );
             const toolMap = new Map(loadedTools.map((t) => [t.name, t]));
-            const mergedConfigurable = { ...configurable, ...toolConfigurable };
-
-            const results: ToolExecuteResult[] = await Promise.all(
-              toolCalls.map(async (tc: ToolCallRequest) => {
-                if (tc.name === Constants.SKILL_TOOL || tc.name === Constants.READ_FILE) {
-                  const req = mergedConfigurable?.req as ServerRequest | undefined;
-                  const handlerResult =
-                    tc.name === Constants.SKILL_TOOL
-                      ? await handleSkillToolCall(tc, mergedConfigurable, options, req)
-                      : await handleReadFileCall(tc, mergedConfigurable, options, req);
-
-                  if (toolEndCallback && handlerResult.artifact) {
-                    await toolEndCallback(
-                      {
-                        output: {
-                          name: tc.name,
-                          tool_call_id: tc.id,
-                          content: handlerResult.content,
-                          artifact: handlerResult.artifact,
-                        },
-                      },
-                      {
-                        run_id: (metadata as Record<string, unknown>)?.run_id as string | undefined,
-                        thread_id: (metadata as Record<string, unknown>)?.thread_id as
-                          | string
-                          | undefined,
-                        ...metadata,
-                      },
-                    );
-                  }
-
-                  await persistResult({
-                    toolId: tc.name,
-                    toolCallId: tc.id,
-                    result:
-                      handlerResult.status === 'error'
-                        ? `Tool call failed: ${handlerResult.errorMessage || handlerResult.content || 'Unknown error'}`
-                        : handlerResult.content,
-                    artifact: handlerResult.artifact,
-                    metadata,
-                    status: handlerResult.status,
-                  });
-
-                  return handlerResult;
+            const loadedConfigurable = toolConfigurable as Record<string, unknown> | undefined;
+            const mergedConfigurable = mergeToolConfigurables(
+              sourceConfigurable,
+              loadedConfigurable,
+            );
+            if (mergedConfigurable != null) mergedConfigurable.executionContext = executionContext;
+            /* The graph populated each call's code-session context from the sessions that
+             * existed at run start, before this batch provisioned anything, and nothing
+             * downstream refreshes it. buildToolCallConfig reads `_injected_files` from
+             * that context alone, so without this fold a successful upload still reaches
+             * a sandbox that cannot see the file. */
+            if (provisionedCodeFiles && provisionedCodeFiles.length > 0) {
+              for (const tc of allowedToolCalls) {
+                if (
+                  !isCodeSessionAwareToolCall(tc.name, mergedConfigurable) &&
+                  !(runFileSharingActive && isCodeFileToolName(tc.name))
+                ) {
+                  continue;
                 }
                 const merged = mergeCodeFilesIntoContext(
                   tc.codeSessionContext as CodeSessionContext | undefined,
@@ -5612,17 +5730,180 @@ export function createToolExecuteHandler(options: ToolExecuteOptions): EventHand
               skillFilesHandoff = createSkillFilesHandoff(skillToolCallIds, runSignal);
             }
 
-                if (!tool) {
-                  logger.warn(
-                    `[ON_TOOL_EXECUTE] Tool "${tc.name}" not found. Available: ${[...toolMap.keys()].map((k) => `"${k}"`).join(', ')}`,
-                  );
-                  await persistResult({
-                    toolId: tc.name,
-                    toolCallId: tc.id,
-                    result: `Tool call failed: Tool ${tc.name} not found`,
-                    metadata,
-                    status: 'error',
-                  });
+            const codeExecutionContext = getCodeExecutionContext(mergedConfigurable);
+            const runtimeSessionHint = codeExecutionContext?.runtimeSessionHint;
+            if (runFileSharingActive && executionContext != null) {
+              for (const tc of allowedToolCalls) {
+                if (
+                  !isCodeSessionAwareToolCall(tc.name, mergedConfigurable) &&
+                  !isCodeFileToolName(tc.name)
+                )
+                  continue;
+                if (!runtimeSessionHint || codeExecutionContext?.environmentType === 'attached') {
+                  throw new Error('This child execution has no isolated file workspace.');
+                }
+                // SDK tool configs may still carry a parent's runtime hint. The
+                // host prepared this partition using the authorized child identity.
+                tc.runtimeSessionHint = runtimeSessionHint;
+              }
+            }
+            const executionRouteKey =
+              codeExecutionContext?.executionRouteKey ?? codeExecutionContext?.executionProfile;
+            const sandboxConversationId =
+              ((metadata as Record<string, unknown>)?.thread_id as string | undefined) ??
+              (mergedConfigurable?.thread_id as string | undefined) ??
+              (
+                (mergedConfigurable?.req as ServerRequest | undefined)?.body as
+                  | { conversationId?: string }
+                  | undefined
+              )?.conversationId;
+            const markCodeSandboxWarm = (): void => {
+              if (runtimeSessionHint) {
+                void markSandboxReady(runtimeSessionHint, executionRouteKey);
+              }
+              if (sandboxConversationId) {
+                void markSandboxReady(sandboxConversationId);
+              }
+            };
+            const authoringQueues = new Map<string, Promise<void>>();
+            const sandboxAuthoringContexts = new Map<string, SandboxSessionContext>();
+
+            /**
+             * Background tool calls. The set of tools that received the injected
+             * `run_in_background` param is threaded per-agent from `initializeAgent`
+             * via `configurable.backgroundToolNames` (a reliable channel, unlike
+             * `toolRegistry` which only reaches the executor for PTC/tool_search).
+             * A non-empty set is the exact condition under which the run registered
+             * the poll tool and the model could have been shown the param, so it
+             * also gates the `check_background_task` interception and enforces the
+             * per-tool opt-in (a tool not in the set never had the param).
+             */
+            const backgroundToolNames = mergedConfigurable?.backgroundToolNames as
+              | string[]
+              | undefined;
+            const backgroundEnabledForRun = (backgroundToolNames?.length ?? 0) > 0;
+            const backgroundControlEnabled = backgroundEnabledForRun || subagentTasks != null;
+            const backgroundToolSet: ReadonlySet<string> = backgroundEnabledForRun
+              ? new Set(backgroundToolNames)
+              : EMPTY_BACKGROUND_TOOL_SET;
+            const backgroundReq = backgroundControlEnabled
+              ? (mergedConfigurable?.req as ServerRequest | undefined)
+              : undefined;
+            const backgroundUserId = backgroundControlEnabled
+              ? resolveBackgroundUserId(mergedConfigurable)
+              : '';
+            const backgroundConversationId = backgroundControlEnabled
+              ? (((metadata as Record<string, unknown>)?.thread_id as string | undefined) ??
+                (mergedConfigurable?.thread_id as string | undefined) ??
+                (backgroundReq?.body as { conversationId?: string } | undefined)?.conversationId ??
+                '')
+              : '';
+
+            /**
+             * Registers the task, returns a synthetic handle immediately, and
+             * runs the real tool as a floating promise whose result lands in the
+             * registry for `check_background_task` to collect. Idempotent by
+             * `toolCallId` so graph re-execution (resume/replay) never double-fires.
+             */
+            const backgroundRunId = (metadata as Record<string, unknown>)?.run_id as
+              | string
+              | undefined;
+            const dispatchBackgroundToolCall = async (
+              tc: ToolCallRequest,
+            ): Promise<ToolExecuteResult> => {
+              /** A tool that failed to load must error immediately (matching the
+               *  foreground path) — a synthetic "started" handle would tell the
+               *  model a side effect is in flight that never executed. */
+              const tool = toolMap.get(tc.name);
+              if (!tool) {
+                const missingToolResult: ToolExecuteResult = {
+                  toolCallId: tc.id,
+                  status: 'error' as const,
+                  content: '',
+                  errorMessage: `Tool ${tc.name} not found`,
+                };
+                return (
+                  filteredToolOutputResult(tc, backgroundReq, {
+                    errorMessage: missingToolResult.errorMessage,
+                  }) ?? missingToolResult
+                );
+              }
+              const isCodeCall = isCodeSessionAwareToolCall(tc.name, mergedConfigurable);
+              const harvestEnabled = isCodeCall && persistBackgroundCodeResult != null;
+              const liveArtifactPollRequired =
+                !harvestEnabled &&
+                (tool as StructuredToolInterface & { responseFormat?: unknown }).responseFormat ===
+                  Constants.CONTENT_AND_ARTIFACT;
+              const backgroundStepId =
+                typeof tc.stepId === 'string' && tc.stepId.trim() !== '' ? tc.stepId : undefined;
+              const strippedArgs = stripIntentForInvoke(stripRunInBackgroundArg(tc.args), tool);
+              const normalizedArgs = normalizeToolInvokeArgs(strippedArgs, tool);
+              const filtered = filteredToolArgumentsResult(tc, backgroundReq, normalizedArgs);
+              if (filtered != null) {
+                return filtered;
+              }
+              const registration = {
+                userId: backgroundUserId,
+                conversationId: backgroundConversationId,
+                toolCallId: tc.id,
+                stepId: backgroundStepId,
+                toolName: tc.name,
+                messageId: backgroundRunId,
+                harvestStarted: harvestEnabled,
+                liveArtifactPollRequired,
+                /** Scope idempotency to the agent + run + turn so a later turn's
+                 *  or a second agent's repeated provider id (e.g. `call_0`)
+                 *  starts a fresh task instead of colliding. */
+                agentId,
+                runId: `${backgroundRunId ?? ''}:${tc.turn ?? backgroundStepId ?? ''}`,
+              };
+              const capacityAdmission =
+                eventActorDetachedAction == null
+                  ? undefined
+                  : backgroundTaskRegistry.reserveCapacity(registration);
+              if (capacityAdmission != null && 'atCapacity' in capacityAdmission) {
+                return {
+                  toolCallId: tc.id,
+                  status: 'success' as const,
+                  content: buildBackgroundCapacityContent(tc.name, capacityAdmission.scope),
+                };
+              }
+              const capacityPermit =
+                capacityAdmission != null && 'permit' in capacityAdmission
+                  ? capacityAdmission.permit
+                  : undefined;
+              let detachedReservation;
+              try {
+                detachedReservation = await eventActorDetachedAction?.reserve({
+                  toolName: tc.name,
+                  toolCallId: tc.id,
+                  turnId: registration.runId,
+                  arguments: normalizedArgs,
+                });
+              } catch (error) {
+                if (capacityPermit != null) {
+                  backgroundTaskRegistry.releaseCapacity(capacityPermit);
+                }
+                throw error;
+              }
+              if (detachedReservation?.status === 'conflict') {
+                if (capacityPermit != null) {
+                  backgroundTaskRegistry.releaseCapacity(capacityPermit);
+                }
+                return {
+                  toolCallId: tc.id,
+                  status: 'error' as const,
+                  content: '',
+                  errorMessage:
+                    detachedReservation.error ??
+                    'Detached Event Actor action conflicts with its durable launch authority',
+                };
+              }
+              if (detachedReservation?.status === 'terminal') {
+                if (capacityPermit != null) {
+                  backgroundTaskRegistry.releaseCapacity(capacityPermit);
+                }
+                if (detachedReservation.outcome === 'succeeded') {
                   return {
                     toolCallId: tc.id,
                     status: 'success' as const,
@@ -6018,42 +6299,61 @@ export function createToolExecuteHandler(options: ToolExecuteOptions): EventHand
                       params.artifact,
                     );
                   }
-
-                  await persistResult({
-                    toolId: tc.name,
-                    toolCallId: tc.id,
-                    result: cleanedContent,
-                    artifact: result.artifact,
-                    metadata,
-                    status: 'success',
-                  });
-
-                  return {
-                    toolCallId: tc.id,
-                    content: cleanedContent,
-                    artifact: result.artifact,
-                    status: 'success' as const,
-                  };
-                } catch (toolError) {
-                  const { message, logContext } = getSafeToolError(toolError);
-                  logger.error(`[ON_TOOL_EXECUTE] Tool ${tc.name} error`, {
-                    ...logContext,
-                    toolCallArgsShape: getValueShape(tc.args),
-                    toolInputSchemaKind: getToolInputSchemaKind(tool),
-                  });
-                  await persistResult({
-                    toolId: tc.name,
-                    toolCallId: tc.id,
-                    result: `Tool call failed: ${message}`,
-                    metadata,
-                    status: 'error',
-                  });
-                  return {
-                    toolCallId: tc.id,
-                    status: 'error' as const,
-                    content: '',
-                    errorMessage: message,
-                  };
+                };
+                const persistSettledBackgroundResult = async (params: {
+                  output?: string;
+                  artifact?: unknown;
+                  status: 'completed' | 'error' | 'cancelled';
+                }): Promise<void> => {
+                  if (harvestEnabled) {
+                    await persistBackgroundResult(params);
+                    return;
+                  }
+                  backgroundTaskRegistry.markCompletionPersistencePending(
+                    backgroundUserId,
+                    backgroundConversationId,
+                    task.id,
+                  );
+                  try {
+                    await persistBackgroundResult(params);
+                  } finally {
+                    backgroundTaskRegistry.markCompletionPersistenceFinished(
+                      backgroundUserId,
+                      backgroundConversationId,
+                      task.id,
+                    );
+                  }
+                };
+                let invokePromise: Promise<{ content?: unknown; artifact?: unknown }>;
+                try {
+                  invokePromise = Promise.resolve(
+                    tool.invoke(normalizedArgs, {
+                      /** Full invoke config (not just identity): a detached
+                       *  code call still needs `session_id`/`_injected_files`/
+                       *  `_runtime_session_hint` or it runs fileless on the
+                       *  Code API's default runtime session. */
+                      toolCall: buildToolCallConfig(tc, mergedConfigurable),
+                      signal: backgroundAbortController.signal,
+                      configurable: {
+                        ...mergedConfigurable,
+                        [BACKGROUND_TOOL_INVOCATION_CONFIG_KEY]: true,
+                        ...(detachedReservation?.status === 'reserved'
+                          ? {
+                              eventActorDetachedAction: {
+                                taskId: detachedReservation.taskId,
+                                idempotencyKey: detachedReservation.idempotencyKey,
+                              },
+                            }
+                          : {}),
+                      },
+                      metadata,
+                    } as Record<string, unknown>),
+                  ) as Promise<{ content?: unknown; artifact?: unknown }>;
+                } catch (error) {
+                  /** Structured tools are permitted to reject synchronously.
+                   * Preserve the durable reservation and route that rejection
+                   * through the same terminal-evidence path as an async one. */
+                  invokePromise = Promise.reject(error);
                 }
                 const persistDetachedTerminal = async (
                   input:
@@ -7250,6 +7550,7 @@ export function createToolExecuteHandler(options: ToolExecuteOptions): EventHand
               }),
             );
 
+            await flushPersists();
             resolve(results);
           } catch (error) {
             logger.error('[ON_TOOL_EXECUTE] Fatal error:', error);

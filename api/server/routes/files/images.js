@@ -40,6 +40,7 @@ const {
   resolvePathFromTrustedRoot,
 } = require('~/server/utils/pathSafety');
 const { createFileLimiters } = require('~/server/middleware/limiters/uploadLimiters');
+const { hasCapability } = require('~/server/middleware/roles/capabilities');
 const db = require('~/models');
 
 const router = express.Router();
@@ -80,15 +81,12 @@ router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) =>
     req.file.originalname = sanitizeFilename(req.file.originalname);
     const isAssistants = isAssistantsEndpoint(metadata.endpoint);
 
-    metadata.temp_file_id = metadata.file_id;
-    metadata.file_id = req.file_id;
-
-    const isAgentToolUpload =
-      !isAssistantsEndpoint(metadata.endpoint) &&
-      metadata.agent_id != null &&
-      metadata.tool_resource != null;
-
-    if (isAgentToolUpload) {
+    /* Authorization runs before anything reads the target agent, matching the file
+     * route. Validating against a record the caller cannot access answers with that
+     * agent's provider limits and content policy, so the rejection reports its
+     * configuration. Message attachments and requests naming no agent pass straight
+     * through without a read. */
+    if (!isAssistants) {
       const denied = await verifyAgentUploadPermission({
         req,
         res,

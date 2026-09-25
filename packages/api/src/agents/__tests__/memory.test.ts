@@ -603,6 +603,7 @@ describe('processMemory - GPT-5+ handling', () => {
         graphConfig: expect.objectContaining({
           llmConfig: expect.objectContaining({
             model: 'gpt-5.4-mini',
+            maxRetries: 0,
           }),
         }),
       }),

@@ -3,9 +3,17 @@ const { createSetBalanceConfig } = require('@librechat/api');
 const router = express.Router();
 const controller = require('../controllers/Balance');
 const { requireJwtAuth, createAccessLimiters } = require('../middleware/');
+const { findBalanceByUser, upsertBalanceFields } = require('~/models');
+const { getAppConfig } = require('~/server/services/Config');
 
 const { accessIpLimiter, accessUserLimiter } = createAccessLimiters();
 
-router.get('/', accessIpLimiter, accessUserLimiter, requireJwtAuth, controller);
+const setBalanceConfig = createSetBalanceConfig({
+  getAppConfig,
+  findBalanceByUser,
+  upsertBalanceFields,
+});
+
+router.get('/', accessIpLimiter, accessUserLimiter, requireJwtAuth, setBalanceConfig, controller);
 
 module.exports = router;

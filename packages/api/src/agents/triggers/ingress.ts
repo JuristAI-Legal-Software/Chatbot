@@ -20,16 +20,9 @@ const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._~:/+=-]+$/;
 const DELIVERY_KEY_PATTERN = /^trigger_[a-f0-9]{64}$/;
 
-interface AgentTriggerIngressUser {
-  id: string;
-  role?: string;
-  tenantId?: string;
-}
-
 interface AgentTriggerIngressRequest extends Request {
   apiKeyId?: { toString(): string } | string;
   requestId?: string;
-  user?: AgentTriggerIngressUser;
   _agentEventBindingResolved?: boolean;
 }
 
@@ -110,7 +103,7 @@ function requireIdempotencyKey(req: Request): string {
   return key;
 }
 
-function requireUser(req: AgentTriggerIngressRequest): AgentTriggerIngressUser {
+function requireUser(req: AgentTriggerIngressRequest): NonNullable<Request['user']> {
   if (typeof req.user?.id !== 'string' || req.user.id.trim() === '') {
     throw new AgentTriggerAuthenticationError();
   }

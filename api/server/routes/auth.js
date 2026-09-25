@@ -99,7 +99,7 @@ router.post(
 );
 router.post(
   '/resetPassword',
-  middleware.resetPasswordLimiter,
+  middleware.resetPasswordSubmissionLimiter,
   middleware.checkBan,
   middleware.validatePasswordReset,
   resetPasswordController,
@@ -123,6 +123,9 @@ router.post(
   '/2fa/verify-temp',
   accessIpLimiter,
   accessUserLimiter,
+  middleware.requireSameOrigin,
+  middleware.setTwoFactorTempUser,
+  middleware.twoFactorTempLimiter,
   middleware.checkBan,
   verify2FAWithTempToken,
 );

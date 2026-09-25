@@ -1782,14 +1782,10 @@ describe('GenerationJobManager Integration Tests', () => {
           });
         }
 
-        const sub2Events: ServerSentEvent[] = [];
-        const sub2 = await manager.subscribe(streamId, (event) => sub2Events.push(event));
+        const stats = manager.getRuntimeStats();
+        expect(stats.earlyBufferedEvents).toBe(0);
+        expect(stats.earlyBufferedBytes).toBe(0);
 
-        await waitForCondition(() => sub2Events.length === 1, 3000);
-        expect(sub2Events.length).toBe(1);
-        expect((sub2Events[0] as StreamEvent).event).toBe('on_message_delta');
-
-        sub2?.unsubscribe();
         await manager.destroy();
       },
     );
@@ -3037,7 +3033,10 @@ describe('GenerationJobManager Integration Tests', () => {
           data: { delta: { content: { type: 'text', text: 'live-redis' } } },
         });
 
-        await waitForCondition(() => liveEvents.length === 1, 3000);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        expect(liveEvents.length).toBe(0);
+
+        subscription?.activate();
         expect(liveEvents.length).toBe(1);
 
         subscription?.unsubscribe();
@@ -3337,7 +3336,6 @@ describe('GenerationJobManager Integration Tests', () => {
       }
 
       subB?.unsubscribe();
-      await replicaBJobStore.destroy();
       await replicaA.destroy();
       await replicaB.destroy();
     });
@@ -3419,7 +3417,6 @@ describe('GenerationJobManager Integration Tests', () => {
 
       subA?.unsubscribe();
       subB?.unsubscribe();
-      await replicaBJobStore.destroy();
       await replicaA.destroy();
       await replicaB.destroy();
     });
@@ -3504,7 +3501,6 @@ describe('GenerationJobManager Integration Tests', () => {
 
       subA?.unsubscribe();
       subB?.unsubscribe();
-      await replicaBJobStore.destroy();
       await replicaA.destroy();
       await replicaB.destroy();
     });

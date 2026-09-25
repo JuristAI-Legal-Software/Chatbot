@@ -415,9 +415,13 @@ const processVisionRequest = async (client, currentAction) => {
       conversationId: (client.responseMessage ?? client.finalMessage).conversationId,
       prompt_tokens: completion.usage.input_tokens ?? completion.usage.prompt_tokens ?? 0,
       completion_tokens: completion.usage.output_tokens ?? completion.usage.completion_tokens ?? 0,
+      transactions: getTransactionsConfig(client.req.config),
     });
   }
-  const output = completion?.output_text ?? completion?.choices?.[0]?.message?.content ?? 'No image details found.';
+  const output =
+    completion?.output_text ??
+    completion?.choices?.[0]?.message?.content ??
+    'No image details found.';
   return {
     tool_call_id: currentAction.toolCallId,
     output,
@@ -552,7 +556,10 @@ async function processRequiredActions(client, requiredActions) {
       );
       continue;
     }
-    if (isActionTool(currentAction.tool) && filterJuristAIActionTools(client.req, [currentAction.tool]).length === 0) {
+    if (
+      isActionTool(currentAction.tool) &&
+      filterJuristAIActionTools(client.req, [currentAction.tool]).length === 0
+    ) {
       promises.push(
         Promise.resolve({
           tool_call_id: currentAction.toolCallId,
@@ -581,7 +588,7 @@ async function processRequiredActions(client, requiredActions) {
         id: currentAction.toolCallId,
         type: 'function',
         progress: 1,
-          action: actionToolLoaded,
+        action: actionToolLoaded,
       };
 
       const toolCallIndex = client.mappedOrder.get(toolCall.id);
@@ -849,8 +856,8 @@ const createExpectedMCPToolsUnavailableError = (agentName, cause) => {
 const isBuiltInTool = (toolName) =>
   Boolean(
     manifestToolMap[toolName] ||
-    toolkits.some((t) => t.pluginKey === toolName) ||
-    nativeTools.has(toolName),
+      toolkits.some((t) => t.pluginKey === toolName) ||
+      nativeTools.has(toolName),
   );
 
 /**
@@ -2732,4 +2739,9 @@ module.exports = {
   filterJuristAIActionTools,
   extractRequestCaseId,
   buildActionInjectParams,
+  isFatalAgentInitializationError,
+  isExpectedMCPToolsUnavailableError,
+  /** Re-exported for controllers that already depend on (and mock) this
+   *  module, avoiding a fresh heavy `services/MCP` require chain there. */
+  getAccessibleMcpServerNames,
 };

@@ -41,6 +41,7 @@ const authFailureRedirectOptions = {
 };
 
 router.use(logHeaders);
+router.use(markOAuthNavigation);
 /** Baseline IP rate limiter applied alongside the per-route login limiter. */
 const routeRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
 router.use(routeRateLimiter);
@@ -133,11 +134,7 @@ router.get('/openid', loginLimiter, (req, res, next) => {
 router.get(
   '/openid/callback',
   loginLimiter,
-  passport.authenticate('openid', {
-    failureRedirect: `${domains.client}/oauth/error`,
-    failureMessage: true,
-    session: false,
-  }),
+  authenticateOpenIDCallback,
   setBalanceConfig,
   checkDomainAllowed,
   oauthHandler,

@@ -60,6 +60,9 @@ const {
 const {
   createToolEndCallback,
   createPersistAgentToolCall,
+  createAttachmentEmitter,
+  createPtcProgressEmitter,
+  createBackgroundCodeResultHandler,
   getDefaultHandlers,
 } = require('~/server/controllers/agents/callbacks');
 const {
@@ -247,8 +250,16 @@ const initializeClientWithProvider = async ({
   const collectedThoughtSignatures = {};
   /** @type {ArtifactPromises} */
   const artifactPromises = [];
-  const { contentParts, aggregateContent } = createContentAggregator();
-  const toolEndCallback = createToolEndCallback({ req, res, artifactPromises, streamId });
+  /** @type {Map<string, import('@librechat/api').ToolInputValidationError>} */
+  const toolInputValidationErrors = new Map();
+  const { contentParts, aggregateContent, stepMap } = createContentAggregator();
+  const artifactToolEndCallback = createToolEndCallback({
+    req,
+    res,
+    artifactPromises,
+    streamId,
+    jobCreatedAt,
+  });
   const persistToolCall = createPersistAgentToolCall({ req });
 
   /** Query accessible skill IDs once per run (shared across all agents).
@@ -489,6 +500,48 @@ const initializeClientWithProvider = async ({
     },
     toolEndCallback,
     persistToolCall,
+    /** Bound later by request.js once the authenticated Event Actor owner and
+     * generation fence are known. Ordinary background calls remain unchanged. */
+    eventActorDetachedAction: {
+      reserve: (input) =>
+        req._agentEventDetachedActionLifecycle?.reserve(input) ??
+        Promise.resolve({ status: 'ignored' }),
+      markRunning: (input) =>
+        req._agentEventDetachedActionLifecycle?.markRunning(input) ?? Promise.resolve(false),
+      settle: (input) =>
+        req._agentEventDetachedActionLifecycle?.settle(input) ?? Promise.resolve(false),
+      wake: (input) => req._agentEventDetachedActionLifecycle?.wake(input) ?? Promise.resolve(),
+    },
+    persistBackgroundCodeResult: createBackgroundCodeResultHandler({
+      req,
+      updateToolCallResult: db.updateToolCallResult,
+    }),
+    backgroundToolCompletion: {
+      ...(completionWakeupsEnabled ? { preregister: preregisterBackgroundToolCompletion } : {}),
+      persist: createBackgroundToolResultPersistence({
+        req,
+        updateToolCallResult: db.updateToolCallResult,
+      }),
+      claim: (input) => claimBackgroundToolResult(db, input),
+      recoverDeadClaim: createDeadBackgroundToolClaimRecovery(
+        db.releaseBackgroundToolResultClaims,
+        (conversationId) => GenerationJobManager.getJob(conversationId),
+        ({ userId, conversationId, claimId }) =>
+          GenerationJobManager.fenceGenerationClaimForRecovery(
+            userId,
+            claimId,
+            conversationId,
+            conversationId,
+          ),
+      ),
+    },
+    emitAttachment: createAttachmentEmitter({ res, streamId, jobCreatedAt }),
+    emitPtcProgress: createPtcProgressEmitter({ res, streamId, jobCreatedAt }),
+    onSkillResolved: (skill, { agentId }) => {
+      if (agentId === primaryConfig.id) {
+        invokedSkillIdentities.set(skill.id, skill);
+      }
+    },
     ...getSkillToolDeps(),
     provisionFiles: createProvisionFilesCallback({
       req,

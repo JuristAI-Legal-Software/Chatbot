@@ -799,8 +799,9 @@ const executeOpenAIChatCompletion = async (envelope, { req, res }) => {
         files: collectModelBoundAgentFiles(modelBoundAgents),
       });
 
-    const toolEndCallback = createToolEndCallback({ req, res, artifactPromises, streamId: null });
-    const persistToolCall = createPersistAgentToolCall({ req });
+      // Determine if streaming is enabled (check both request and agent config)
+      const streamingDisabled = !!primaryConfig.model_parameters?.disableStreaming;
+      const isStreaming = request.stream === true && !streamingDisabled;
 
       // Create tracker for streaming or aggregator for non-streaming
       const tracker = isStreaming ? createOpenAIStreamTracker() : null;
@@ -834,6 +835,7 @@ const executeOpenAIChatCompletion = async (envelope, { req, res }) => {
         artifactPromises,
         streamId: null,
       });
+      const persistToolCall = createPersistAgentToolCall({ req });
 
       /* Stable for the turn: the primary prime list is fixed once
        `initializeAgent` resolves and is used as the fallback when a
@@ -888,6 +890,7 @@ const executeOpenAIChatCompletion = async (envelope, { req, res }) => {
           });
         },
         toolEndCallback,
+        persistToolCall,
         ...getSkillToolDeps(),
       };
 
@@ -924,50 +927,8 @@ const executeOpenAIChatCompletion = async (envelope, { req, res }) => {
           manualSkillPrimes,
           alwaysApplySkillPrimes,
         });
-        return enrichWithSkillConfigurable(
-          result,
-          req,
-          primaryConfig.accessibleSkillIds,
-          ctx.codeEnvAvailable === true,
-          skillPrimedIdsByName,
-        );
-      },
-      toolEndCallback,
-      persistToolCall,
-      ...getSkillToolDeps(),
-    };
-
-    const summarizationConfig = appConfig?.summarization;
-
-    const openaiMessages = convertMessages(request.messages);
-
-    const toolSet = buildToolSet(primaryConfig);
-    const formatted = formatAgentMessages(openaiMessages, {}, toolSet);
-    const formattedMessages = formatted.messages;
-    const initialSummary = formatted.summary;
-    let indexTokenCountMap = formatted.indexTokenCountMap;
-
-    /**
-     * Inject manual + always-apply skill primes so the model sees SKILL.md
-     * bodies for this turn — parity with AgentClient's chat path. OpenAI-
-     * compatible streaming uses its own tracker/aggregator shape, so the
-     * LibreChat-style card SSE events don't apply here; only the
-     * message-context part carries over.
-     */
-    const manualSkillPrimes = primaryConfig.manualSkillPrimes;
-    const alwaysApplySkillPrimes = primaryConfig.alwaysApplySkillPrimes;
-    if (
-      (manualSkillPrimes && manualSkillPrimes.length > 0) ||
-      (alwaysApplySkillPrimes && alwaysApplySkillPrimes.length > 0)
-    ) {
-      const primeResult = injectSkillPrimes({
-        initialMessages: formattedMessages,
-        indexTokenCountMap,
-        manualSkillPrimes,
-        alwaysApplySkillPrimes,
-      });
-      indexTokenCountMap = primeResult.indexTokenCountMap;
-      /* Surface the cap-driven always-apply truncation at the controller
+        indexTokenCountMap = primeResult.indexTokenCountMap;
+        /* Surface the cap-driven always-apply truncation at the controller
          layer too — `injectSkillPrimes` already logs internally, but the
          controller-level warn includes endpoint context so operators can
          tell at a glance which path hit the cap. Mirrors AgentClient's
@@ -990,109 +951,18 @@ const executeOpenAIChatCompletion = async (envelope, { req, res }) => {
         },
       });
 
-    // Create and run the agent
-    const userId = req.user?.id ?? 'api-user';
-
-    // Extract merged userMCPAuthMap (needed for MCP tool connections across
-    // the primary and any discovered handoff sub-agents)
-    const userMCPAuthMap = discoveredMCPAuthMap ?? primaryConfig.userMCPAuthMap;
-
-    const runAgents = [primaryConfig, ...handoffAgentConfigs.values()];
-
-    const run = await createRun({
-      agents: runAgents,
-      messages: formattedMessages,
-      indexTokenCountMap,
-      initialSummary,
-      runId: responseId,
-      summarizationConfig,
-      appConfig,
-      signal: abortController.signal,
-      customHandlers: handlers,
-      requestBody: {
-        messageId: responseId,
-        conversationId,
-      },
-      user: { id: userId },
-    });
-
-    if (!run) {
-      throw new Error('Failed to create agent run');
-    }
-
-    const config = {
-      runName: 'AgentRun',
-      configurable: {
-        thread_id: conversationId,
-        user_id: userId,
-        user: createSafeUser(req.user),
-        requestBody: {
-          messageId: responseId,
-          conversationId,
-        },
-        requestHeaders: {
-          authorization: req.headers?.authorization,
-        },
-        ...(userMCPAuthMap != null && { userMCPAuthMap }),
-      },
-      recursionLimit: resolveRecursionLimit(agentsEConfig, agent),
-      signal: abortController.signal,
-      streamMode: 'values',
-      version: 'v2',
-    };
-
-    await run.processStream({ messages: formattedMessages }, config, {
-      callbacks: {
-        [Callback.TOOL_ERROR]: (graph, error, toolId) => {
-          logger.error(`[OpenAI API] Tool Error "${toolId}"`, error);
-        },
-      },
-    });
-
-    // Record token usage against balance
-    const balanceConfig = getBalanceConfig(appConfig);
-    const transactionsConfig = getTransactionsConfig(appConfig);
-    recordCollectedUsage(
-      {
-        spendTokens: db.spendTokens,
-        spendStructuredTokens: db.spendStructuredTokens,
-        pricing: { getMultiplier: db.getMultiplier, getCacheMultiplier: db.getCacheMultiplier },
-        bulkWriteOps: { insertMany: db.bulkInsertTransactions, updateBalance: db.updateBalance },
-      },
-      {
-        user: userId,
-        conversationId,
-        collectedUsage,
-        context: 'message',
-        messageId: responseId,
-        balance: balanceConfig,
-        transactions: transactionsConfig,
-        model: primaryConfig.model || agent.model_parameters?.model,
-      },
-    ).catch((err) => {
-      logger.error('[OpenAI API] Error recording usage:', err);
-    });
-
-    // Finalize response
-    const duration = Date.now() - requestStartTime;
-    if (isStreaming) {
-      sendFinalChunk(handlerConfig);
-      res.end();
-      logger.debug(`[OpenAI API] Response ${responseId} completed in ${duration}ms (streaming)`);
-
-      // Wait for artifact processing after response ends (non-blocking)
-      if (artifactPromises.length > 0) {
-        Promise.all(artifactPromises).catch((artifactError) => {
-          logger.warn('[OpenAI API] Error processing artifacts:', artifactError);
-        });
-      }
-    } else {
-      // For non-streaming, wait for artifacts before sending response
-      if (artifactPromises.length > 0) {
-        try {
-          await Promise.all(artifactPromises);
-        } catch (artifactError) {
-          logger.warn('[OpenAI API] Error processing artifacts:', artifactError);
+      /**
+       * Stream text content in OpenAI format
+       */
+      const streamText = (text) => {
+        if (!text) {
+          return;
+        }
+        if (isStreaming) {
+          tracker.addText();
+          writeSSE(res, createChunk(context, { content: text }));
+        } else {
+          aggregator.addText(text);
         }
       };
 
@@ -1264,6 +1134,9 @@ const executeOpenAIChatCompletion = async (envelope, { req, res }) => {
           user_id: userId,
           user: createSafeUser(req.user),
           requestBody: mcpRequestBody,
+          requestHeaders: {
+            authorization: req.headers?.authorization,
+          },
           ...(userMCPAuthMap != null && { userMCPAuthMap }),
         },
         recursionLimit: resolveRecursionLimit(agentsEConfig, agent),

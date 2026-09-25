@@ -1,10 +1,17 @@
-const { isEnabled, sanitizeTitle, getAttachmentTitleText } = require('@librechat/api');
+const {
+  createThreadUsageRecorder,
+  isEnabled,
+  sanitizeTitle,
+  getAttachmentTitleText,
+} = require('@librechat/api');
 const { logger } = require('@librechat/data-schemas');
 const { CacheKeys } = require('librechat-data-provider');
 const getLogStores = require('~/cache/getLogStores');
 const initializeClient = require('./initalize');
-const { saveConvo } = require('~/models');
-const { recordUsage } = require('~/server/services/Threads');
+const { saveConvo, spendTokens } = require('~/models');
+const { resolveConversationTitle } = require('../titlePolicy');
+
+const recordUsage = createThreadUsageRecorder(spendTokens);
 
 /**
  * Generates a conversation title using OpenAI SDK
@@ -61,11 +68,11 @@ const addTitle = async (req, { text, responseText, conversationId }) => {
   try {
     const { openai } = await initializeClient({ req });
     const titleResult = await generateTitle({ openai, text, responseText });
-    const title = titleResult.title;
     try {
       await recordUsage({
         prompt_tokens: titleResult.usage.prompt_tokens || titleResult.usage.input_tokens || 0,
-        completion_tokens: titleResult.usage.completion_tokens || titleResult.usage.output_tokens || 0,
+        completion_tokens:
+          titleResult.usage.completion_tokens || titleResult.usage.output_tokens || 0,
         model: titleResult.model,
         user: req?.user?.id,
         conversationId,
@@ -73,6 +80,10 @@ const addTitle = async (req, { text, responseText, conversationId }) => {
       });
     } catch (usageError) {
       logger.error('[addTitle] Error recording title usage:', usageError);
+    }
+    const title = resolveConversationTitle(req, titleResult.title);
+    if (title == null) {
+      return;
     }
     await titleCache.set(key, title, 120000);
 

@@ -7,6 +7,7 @@ export * from './map';
 export * from './json';
 export * from './icons';
 export * from './images';
+export * from './svg';
 export * from './email';
 export * from './share';
 export * from './files';

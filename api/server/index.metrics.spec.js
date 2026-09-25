@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { promisify } = require('util');
 const express = require('express');
 const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
@@ -83,6 +84,14 @@ jest.mock('~/server/services/start/migration', () => ({
   checkMigrations: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('~/server/services/Agents/triggers', () => ({
+  initializeAgentTriggerService: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('~/server/services/Schedules', () => ({
+  initializeScheduleEngine: jest.fn().mockResolvedValue(undefined),
+}));
+
 describe('Server metrics route', () => {
   jest.setTimeout(30_000);
 
@@ -145,6 +154,8 @@ describe('Server metrics route', () => {
       await new Promise((resolve) => app.server.close(resolve));
     }
     delete process.env.METRICS_SECRET;
+    await promisify(server.close).call(server);
+    await mongoServer.stop();
     await mongoose.disconnect();
     await mongoServer.stop();
   });

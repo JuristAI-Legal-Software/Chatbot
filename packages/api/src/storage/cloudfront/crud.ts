@@ -112,7 +112,7 @@ function isInlineFileUpload({ basePath, file, useInlinePath }: UploadFileParams)
  * invalidation path must use the same encoding, or it no longer matches the cached viewer URL.
  */
 function encodeKeyPath(s3Key: string): string {
-  return s3Key.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
+  return stripLeadingSlashes(s3Key).split('/').map(encodeURIComponent).join('/');
 }
 
 function buildCloudFrontUrl(s3Key: string): string {
@@ -121,8 +121,7 @@ function buildCloudFrontUrl(s3Key: string): string {
     throw new Error('[buildCloudFrontUrl] CloudFront not initialized.');
   }
   const cleanDomain = stripTrailingSlashes(config.domain);
-  const cleanKey = stripLeadingSlashes(s3Key);
-  return `${cleanDomain}/${cleanKey}`;
+  return `${cleanDomain}/${encodeKeyPath(s3Key)}`;
 }
 
 function signUrl(url: string | URL): string {

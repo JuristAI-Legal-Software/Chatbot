@@ -30,7 +30,11 @@ type HandlerRequest = Parameters<
   ReturnType<typeof createMemoryManagementHandlers>['updateById']
 >[0];
 
-function createRequest(request: Partial<HandlerRequest>): HandlerRequest {
+type MockHandlerRequest = Partial<Omit<HandlerRequest, 'user'>> & {
+  user?: { id: string };
+};
+
+function createRequest(request: MockHandlerRequest): HandlerRequest {
   return Object.assign({} as HandlerRequest, request);
 }
 

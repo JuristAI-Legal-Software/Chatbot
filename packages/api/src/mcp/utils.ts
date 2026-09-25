@@ -23,7 +23,7 @@ import { isEnabled } from '~/utils/common';
  * Exposed as an object with `.test()` to preserve the previous call sites.
  */
 const mcpDelimiter = Constants.mcp_delimiter;
-export const mcpToolPattern = {
+export const mcpToolPattern: { test(value: string): boolean } = {
   test(value: string): boolean {
     if (typeof value !== 'string') {
       return false;
@@ -32,6 +32,252 @@ export const mcpToolPattern = {
     return idx > 0 && idx + mcpDelimiter.length < value.length;
   },
 };
+
+function isMCPServerConfig(config: unknown): config is ParsedServerConfig {
+  return MCPOptionsSchema.safeParse(config).success;
+}
+
+/** Validates an effective MCP config without stripping its server-managed metadata. */
+export function validateMCPServerConfig(config: unknown): ParsedServerConfig {
+  if (!isMCPServerConfig(config)) {
+    throw new Error('Invalid effective MCP server configuration');
+  }
+  return config;
+}
+
+/**
+ * Prefix of the lazily-expanded MCP placeholder `mcp_all<delim><server>`,
+ * pushed into an agent's `tools` for overlay/user-connection servers whose
+ * tool names are not known until the definitions loader expands them.
+ *
+ * The name is reserved by that convention: the definitions loader treats ANY
+ * matching entry as "expand every tool on this server", so a remote tool
+ * literally named `mcp_all` cannot be addressed individually anywhere in the
+ * pipeline. Kept here as the one definition of the prefix.
+ */
+export const MCP_ALL_PLACEHOLDER_PREFIX: string = `${Constants.mcp_all}${Constants.mcp_delimiter}`;
+
+/** Whether a tool entry is the lazily-expanded `mcp_all` placeholder. */
+export function isMCPAllPlaceholder(toolName: string): boolean {
+  return toolName.startsWith(MCP_ALL_PLACEHOLDER_PREFIX);
+}
+
+/** Server-pin token (`sys__server__sys<delim><server>`) that keeps a server
+ *  attached to an agent independent of its tool selection. */
+const MCP_SERVER_TOKEN_PREFIX: string = `${Constants.mcp_server}${Constants.mcp_delimiter}`;
+
+/**
+ * Later-configured server names whose normalized form is already claimed by an
+ * earlier different name. Such a pair produces IDENTICAL model-facing tool
+ * keys, so tool selection and execution cannot tell the servers apart —
+ * `buildServerNameAliases` deterministically routes to the first name, and
+ * the shadowed later server must be EXCLUDED from tool exposure entirely:
+ * offering its tools would let a user select a tool that silently executes
+ * against the first server's configuration.
+ */
+/**
+ * Whether a resolved server name is normalization-sensitive — its own name
+ * needs normalizing, or it EQUALS the normalized form of some configured
+ * special-character name. Under an incomplete collision audit these are the
+ * references whose routing cannot be proven unambiguous, so they fail closed.
+ */
+export function isNormalizationSensitiveName(
+  serverName: string,
+  rawServerNames: readonly string[],
+): boolean {
+  if (normalizeServerName(serverName) !== serverName) {
+    return true;
+  }
+  return rawServerNames.some(
+    (raw) => raw !== serverName && normalizeServerName(raw) === serverName,
+  );
+}
+
+export function findShadowedServerNames(rawServerNames: readonly string[]): Set<string> {
+  /** Derived from `buildServerNameAliases` so shadow detection can never
+   *  diverge from the tie-break routing actually uses (identity entries
+   *  first, then configuration order). */
+  const aliases = buildServerNameAliases(rawServerNames);
+  const shadowed = new Set<string>();
+  for (const raw of rawServerNames) {
+    if (raw && aliases.get(normalizeServerName(raw)) !== raw) {
+      shadowed.add(raw);
+    }
+  }
+  return shadowed;
+}
+
+/**
+ * Heals legacy persisted agent data whose MCP tool keys embed a RAW server
+ * name: model-facing keys carry `normalizeServerName(server)` (matching cache
+ * keys, definition names, and runtime instance names), so an agent document
+ * saved before that convention — or through the old raw-keyed cache — would
+ * neither load its tools nor have its `tool_options` (defer / programmatic /
+ * background / intent) honored for a server whose name needs normalizing.
+ *
+ * Placeholder and server-pin tokens are left untouched: they are
+ * config-identity references consumed against raw config names (the client's
+ * selectors, the definitions loader's expansion), never model-facing names.
+ * Returns the same references when nothing needs rewriting, so the common
+ * path (every server name already normalized) allocates nothing.
+ */
+export function normalizeAgentToolKeys(params: {
+  tools: string[] | undefined;
+  toolOptions: AgentToolOptions | undefined;
+  rawServerNames: readonly string[];
+}): { tools: string[] | undefined; toolOptions: AgentToolOptions | undefined } {
+  const { tools, toolOptions, rawServerNames } = params;
+  /**
+   * A SHADOWED server (its normalized form claimed by an earlier different
+   * name) must NOT be healed: rewriting its raw key would produce the first
+   * server's key exactly, silently executing the wrong server's action. Left
+   * raw, the key fails to match the (normalized-keyed) tool map and the tool
+   * errors visibly — broken beats misrouted.
+   */
+  const shadowed = findShadowedServerNames(rawServerNames);
+  const rewritableNames = rawServerNames.filter(
+    (name) => normalizeServerName(name) !== name && !shadowed.has(name),
+  );
+  if (rewritableNames.length === 0) {
+    return { tools, toolOptions };
+  }
+
+  const rewriteKey = (key: string): string => {
+    if (
+      !key.includes(Constants.mcp_delimiter) ||
+      isMCPAllPlaceholder(key) ||
+      key.startsWith(MCP_SERVER_TOKEN_PREFIX)
+    ) {
+      return key;
+    }
+    return normalizeMCPToolKey(key, rewritableNames);
+  };
+
+  let toolsChanged = false;
+  let nextTools = tools?.map((key) => {
+    const rewritten = rewriteKey(key);
+    if (rewritten !== key) {
+      toolsChanged = true;
+    }
+    return rewritten;
+  });
+  /** A document carrying BOTH spellings converges on one key after healing —
+   *  collapse duplicates (order-preserving) so the loaders never build two
+   *  instances with the same function name. */
+  if (toolsChanged && nextTools) {
+    const seen = new Set<string>();
+    nextTools = nextTools.filter((key) => {
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  }
+
+  let optionsChanged = false;
+  let nextOptions: AgentToolOptions | undefined;
+  if (toolOptions) {
+    nextOptions = {};
+    for (const [key, options] of Object.entries(toolOptions)) {
+      const rewritten = rewriteKey(key);
+      if (rewritten !== key) {
+        optionsChanged = true;
+      }
+      /** When both spellings carry options, the CURRENT (normalized) entry
+       *  wins regardless of object insertion order — a legacy entry must not
+       *  clobber settings a client already wrote under the new spelling. */
+      nextOptions[rewritten] =
+        rewritten !== key
+          ? { ...options, ...nextOptions[rewritten] }
+          : { ...nextOptions[key], ...options };
+    }
+  }
+
+  return {
+    tools: toolsChanged ? nextTools : tools,
+    toolOptions: optionsChanged ? nextOptions : toolOptions,
+  };
+}
+
+const RUNTIME_CONTEXT_PLACEHOLDER_PATTERN = /\{\{LIBRECHAT_(?:USER|OPENID|GRAPH)_[^}]+\}\}/;
+const BODY_PLACEHOLDER_FIELDS = Object.fromEntries(
+  ALLOWED_BODY_FIELDS.map((field) => [field.toUpperCase(), field]),
+) as Record<string, keyof RequestBody>;
+const RUNTIME_BODY_FIELD_NAMES = Object.keys(BODY_PLACEHOLDER_FIELDS).join('|');
+const RUNTIME_BODY_PLACEHOLDER_PATTERN = new RegExp(
+  `\\{\\{LIBRECHAT_BODY_(?:${RUNTIME_BODY_FIELD_NAMES})\\}\\}`,
+);
+const RUNTIME_BODY_PLACEHOLDER_CAPTURE_PATTERN = new RegExp(
+  `\\{\\{LIBRECHAT_BODY_(${RUNTIME_BODY_FIELD_NAMES})\\}\\}`,
+  'g',
+);
+
+type PlaceholderValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | readonly PlaceholderValue[]
+  | { readonly [key: string]: PlaceholderValue };
+
+export interface MCPRequestScope {
+  requestScoped: boolean;
+  requiredBodyFields: Array<keyof RequestBody>;
+}
+
+type UserScopedConnectionConfig = Pick<
+  ParsedServerConfig,
+  'requiresOAuth' | 'source' | 'dbId' | 'startup'
+> & {
+  /** Loosened like the fields below: raw (pre-inspection) configs carry
+   *  optional API-key fields, and the gating predicates only inspect them. */
+  apiKey?: Partial<NonNullable<ParsedServerConfig['apiKey']>> | null;
+  args?: string[];
+  /** Loosened from the parsed shapes so raw (pre-inspection) configs qualify;
+   *  scoping predicates only check key presence */
+  obo?: { scopes?: string } | null;
+  customUserVars?: Record<
+    string,
+    { description?: string; title?: string; sensitive?: boolean } | undefined
+  >;
+  env?: Record<string, string | undefined>;
+  headers?: Record<string, string | undefined>;
+  /** Operator-configured headers sent only on chat-time connections. */
+  requestHeaders?: Record<string, string | undefined>;
+  oauth?: PlaceholderValue;
+  oauth_headers?: Record<string, string | undefined>;
+  url?: string;
+};
+
+function mergeHeaderMaps<T extends string | undefined>(
+  headers: Record<string, T> | undefined,
+  requestHeaders: Record<string, T>,
+): Record<string, T> {
+  const overridden = new Set(Object.keys(requestHeaders).map((name) => name.toLowerCase()));
+  const merged: Record<string, T> = {};
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    if (!overridden.has(name.toLowerCase())) {
+      merged[name] = value;
+    }
+  }
+  return { ...merged, ...requestHeaders };
+}
+
+function placeholderBearingFields(config: UserScopedConnectionConfig): PlaceholderValue[] {
+  return [
+    isApiKeyHeaderOverridden(config.apiKey, config.requestHeaders) ? undefined : config.apiKey?.key,
+    config.args,
+    config.env,
+    config.requestHeaders == null
+      ? config.headers
+      : mergeHeaderMaps(config.headers, config.requestHeaders),
+    config.oauth,
+    config.oauth_headers,
+    config.url,
+  ];
+}
 
 /** Whether a server should use MCP OAuth handling. */
 export function isOAuthServer(
@@ -554,81 +800,6 @@ export function redactAllServerSecrets(
     result[key] = redactServerSecrets(config, { canEdit });
   }
   return result;
-}
-
-/**
- * Normalizes a server name to match the pattern ^[a-zA-Z0-9_.-]+$
- * This is required for Azure OpenAI models with Tool Calling
- */
-/**
- * Single-pass character-class check. Replaces `/^[a-zA-Z0-9_.-]+$/.test(...)`
- * so CodeQL's polynomial-regex tracker stops following the underscore class.
- */
-function isAllowedServerNameChar(code: number): boolean {
-  return (
-    (code >= 48 && code <= 57) || // 0-9
-    (code >= 65 && code <= 90) || // A-Z
-    (code >= 97 && code <= 122) || // a-z
-    code === 45 || // -
-    code === 46 || // .
-    code === 95 // _
-  );
-}
-
-function isCanonicalServerName(value: string): boolean {
-  if (value.length === 0) {
-    return false;
-  }
-  for (let i = 0; i < value.length; i++) {
-    if (!isAllowedServerNameChar(value.charCodeAt(i))) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/** Linear trim of `_` runs from both ends. */
-function trimUnderscores(value: string): string {
-  let start = 0;
-  let end = value.length;
-  while (start < end && value.charCodeAt(start) === 95) {
-    start++;
-  }
-  while (end > start && value.charCodeAt(end - 1) === 95) {
-    end--;
-  }
-  return start === 0 && end === value.length ? value : value.slice(start, end);
-}
-
-export function normalizeServerName(serverName: string): string {
-  if (isCanonicalServerName(serverName)) {
-    return serverName;
-  }
-
-  /** Replace non-matching characters with underscores via a single-pass scan.
-    This preserves the general structure while ensuring compatibility.
-    Trims leading/trailing underscores
-    */
-  const replaced: string[] = new Array(serverName.length);
-  for (let i = 0; i < serverName.length; i++) {
-    const code = serverName.charCodeAt(i);
-    replaced[i] = isAllowedServerNameChar(code) ? serverName[i] : '_';
-  }
-  const normalized = trimUnderscores(replaced.join(''));
-
-  // If the result is empty (e.g., all characters were non-ASCII and got trimmed),
-  // generate a fallback name to ensure we always have a valid function name
-  if (!normalized) {
-    /** Hash of the original name to ensure uniqueness */
-    let hash = 0;
-    for (let i = 0; i < serverName.length; i++) {
-      hash = (hash << 5) - hash + serverName.charCodeAt(i);
-      hash |= 0; // Convert to 32bit integer
-    }
-    return `server_${Math.abs(hash)}`;
-  }
-
-  return normalized;
 }
 
 /**

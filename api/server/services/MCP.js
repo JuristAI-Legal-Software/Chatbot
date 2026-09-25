@@ -1329,9 +1329,11 @@ function createToolInstance({
         options: {
           signal: derivedSignal,
         },
-        user: config?.configurable?.user,
-        requestBody: config?.configurable?.requestBody,
+        user: effectiveUser,
+        requestBody: config?.configurable?.requestBody ?? capturedRequestBody,
         requestHeaders: config?.configurable?.requestHeaders,
+        requestScopedConnections:
+          config?.configurable?.requestScopedConnections ?? capturedRequestScopedConnections,
         customUserVars,
         flowManager,
         tokenMethods: {

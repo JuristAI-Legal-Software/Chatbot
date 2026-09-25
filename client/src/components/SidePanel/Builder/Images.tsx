@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import * as Popover from '@radix-ui/react-popover';
-import { useLocalize } from '~/hooks';
+import useLocalize from '~/hooks/useLocalize';
 
 export function NoImage() {
   return (
@@ -87,7 +87,6 @@ export function AvatarMenu({
 }: {
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
-  const localize = useLocalize();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const localize = useLocalize();
 

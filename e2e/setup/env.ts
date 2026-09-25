@@ -9,6 +9,11 @@ const GENERATED_CREDS_IV = crypto.randomBytes(16).toString('hex');
 const GENERATED_JWT_SECRET = crypto.randomBytes(32).toString('hex');
 const GENERATED_JWT_REFRESH_SECRET = crypto.randomBytes(32).toString('hex');
 const DEFAULT_MCP_JURISTAI_DJANGO_URL = 'http://127.0.0.1:8001/mcp';
+const DEFAULT_REDIS_URI = 'redis://127.0.0.1:6379/15';
+const DEFAULT_REDIS_CLUSTER_URI = [7001, 7002, 7003]
+  .map((port) => `redis://127.0.0.1:${port}`)
+  .join(',');
+const DEFAULT_REDIS_KEY_PREFIX = 'LibreChatE2E';
 const PASSTHROUGH_ENV_KEYS = [
   'APPDATA',
   'CI',

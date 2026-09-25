@@ -11,6 +11,8 @@ const GENERATED_CREDS_KEY = crypto.randomBytes(32).toString('hex');
 const GENERATED_CREDS_IV = crypto.randomBytes(16).toString('hex');
 const GENERATED_JWT_SECRET = crypto.randomBytes(32).toString('hex');
 const GENERATED_JWT_REFRESH_SECRET = crypto.randomBytes(32).toString('hex');
+const REDIS_STREAM_STARTUP_TIMEOUT_MS = 15_000;
+const REDIS_PING_TIMEOUT_MS = 10_000;
 let mongoServer;
 
 function ensureDefaultEnv() {
@@ -25,8 +27,7 @@ function ensureDefaultEnv() {
   process.env.CREDS_KEY = process.env.CREDS_KEY || GENERATED_CREDS_KEY;
   process.env.CREDS_IV = process.env.CREDS_IV || GENERATED_CREDS_IV;
   process.env.JWT_SECRET = process.env.JWT_SECRET || GENERATED_JWT_SECRET;
-  process.env.JWT_REFRESH_SECRET =
-    process.env.JWT_REFRESH_SECRET || GENERATED_JWT_REFRESH_SECRET;
+  process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || GENERATED_JWT_REFRESH_SECRET;
   process.env.SEARCH = process.env.SEARCH || 'false';
   process.env.EMAIL_HOST = process.env.EMAIL_HOST || '';
   process.env.SESSION_EXPIRY = process.env.SESSION_EXPIRY || '60000';

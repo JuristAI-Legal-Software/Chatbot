@@ -17,15 +17,8 @@ const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._~:/+=-]+$/;
 const MAX_ACTOR_ID_LENGTH = 128;
 const MAX_REGISTRATION_KEY_LENGTH = 256;
 
-interface EventBindingUser {
-  id?: string;
-  role?: string;
-  tenantId?: string;
-}
-
 interface EventBindingRequest extends Request {
   apiKeyId?: { toString(): string } | string;
-  user?: EventBindingUser;
   _agentEventBindingResolved?: boolean;
 }
 

@@ -175,6 +175,7 @@ export async function createOAuthMCPServer(
     string,
     { client_id: string; client_secret: string; redirect_uris: string[] }
   >();
+  let rejectedRefreshTokensRemaining = rejectRefreshTokens;
 
   let port = 0;
   const getBaseUrl = () => `http://127.0.0.1:${port}`;

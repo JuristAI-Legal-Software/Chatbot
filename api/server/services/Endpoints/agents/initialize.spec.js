@@ -52,8 +52,11 @@ let capturedToolExecuteOptions;
 let capturedDefaultHandlerOptions;
 const mockArtifactToolEndCallback = jest.fn();
 jest.mock('~/server/controllers/agents/callbacks', () => ({
-  createToolEndCallback: jest.fn(() => jest.fn()),
+  createToolEndCallback: jest.fn(() => mockArtifactToolEndCallback),
   createPersistAgentToolCall: jest.fn(() => jest.fn()),
+  createAttachmentEmitter: jest.fn(() => jest.fn()),
+  createPtcProgressEmitter: jest.fn(() => jest.fn()),
+  createBackgroundCodeResultHandler: jest.fn(() => jest.fn()),
   getDefaultHandlers: jest.fn((opts) => {
     capturedDefaultHandlerOptions = opts;
     capturedToolExecuteOptions = opts?.toolExecuteOptions;
@@ -1928,15 +1931,46 @@ describe('initializeClient — subagent loading', () => {
     expect(arg.actionsEnabled).toBe(true);
   });
 
-  it('wires a persistence hook into toolExecuteOptions', async () => {
+  it('threads run-scoped MCP tool definitions into ON_TOOL_EXECUTE loading', async () => {
+    /** Regression guard for the request-scoped MCP/PTC handoff: the
+     *  `mcpAvailableTools` discovered at run start must survive
+     *  `buildAgentToolContext` and reach `loadToolsForExecution`, otherwise
+     *  request-scoped servers reinitialize on every programmatic tool call
+     *  and can trip the MCP circuit breaker under parallel calls. */
+    const mcpTool = 'list_tables_mcp_ClickHouse';
+    const mcpAvailableTools = {
+      ClickHouse: {
+        [mcpTool]: {
+          type: 'function',
+          function: {
+            name: mcpTool,
+            description: 'List tables',
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      },
+    };
+    const primaryConfig = {
+      ...makePrimaryConfig({}),
+      toolRegistry: new Map([[mcpTool, { name: mcpTool }]]),
+      mcpAvailableTools,
+    };
+    mockInitializeAgent.mockResolvedValue(primaryConfig);
+
     await initializeClient({
       req: makeSubagentReq(),
-      res: { write: jest.fn() },
+      res: {},
       signal: new AbortController().signal,
       endpointOption: makeEndpointOption(),
     });
 
-    expect(typeof capturedToolExecuteOptions?.persistToolCall).toBe('function');
+    expect(capturedToolExecuteOptions?.loadTools).toBeInstanceOf(Function);
+    await capturedToolExecuteOptions.loadTools([mcpTool], PRIMARY_ID);
+
+    expect(mockLoadToolsForExecution).toHaveBeenCalledTimes(1);
+    expect(mockLoadToolsForExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ mcpAvailableTools }),
+    );
   });
 
   it('deduplicates repeated ids in subagents.agent_ids', async () => {
@@ -2370,6 +2404,17 @@ describe('initializeClient — subagent loading', () => {
       { definition, memberConfigs: [primaryConfig, memberConfig] },
     ]);
     expect(agentClientArgs.agentConfigs.has(PRIMARY_ID)).toBe(false);
+  });
+
+  it('wires a persistence hook into toolExecuteOptions', async () => {
+    await initializeClient({
+      req: makeSubagentReq(),
+      res: { write: jest.fn() },
+      signal: new AbortController().signal,
+      endpointOption: makeEndpointOption(),
+    });
+
+    expect(typeof capturedToolExecuteOptions?.persistToolCall).toBe('function');
   });
 
   it('keeps an added-conversation agent that is also a graph member', async () => {

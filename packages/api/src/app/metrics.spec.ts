@@ -2,6 +2,8 @@ import { omitResolvedCanonicalFileLocators } from '../protection/files';
 /// <reference types="jest" />
 import express from 'express';
 import request from 'supertest';
+import { EventEmitter } from 'events';
+import { recordAgentEventActorReceiptMetric } from '@librechat/data-schemas';
 import type { Request, Response } from 'express';
 import {
   createMetrics,

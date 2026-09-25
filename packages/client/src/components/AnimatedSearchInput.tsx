@@ -1,5 +1,6 @@
 import React from 'react';
 import { Search } from 'lucide-react';
+import { JSX } from 'react/jsx-runtime';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 

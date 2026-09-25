@@ -213,40 +213,54 @@ function applyResponseRequestOptions(agentConfig, request, { forceResponsesApi =
   };
 }
 
+const getRequestedToolName = (tool) => {
+  if (typeof tool === 'string') {
+    return tool;
+  }
+  if (tool?.type === 'function') {
+    return tool.name ?? tool.function?.name;
+  }
+  return tool?.type;
+};
+
+const getAgentToolName = (tool) =>
+  tool?.name ?? tool?.function?.name ?? tool?.type ?? tool?.schema?.name;
+
 /**
- * Restrict model-visible tools to the intersection of the caller's request
- * and the tools authorized and initialized for the agent. This deliberately
- * does not add request-defined schemas to the execution registry.
+ * Splits the caller's `tools` into selectors that name tools the agent already
+ * provides and caller-executed tools. Selectors restrict the model-visible
+ * agent tools to their intersection; the rest go to the client tool handoff,
+ * so naming an agent tool narrows instead of colliding with it.
  */
 function narrowResponseTools(agentConfig, requestedTools) {
-  if (!Array.isArray(requestedTools)) {
-    return agentConfig;
+  if (!Array.isArray(requestedTools) || !Array.isArray(agentConfig.toolDefinitions)) {
+    return { agentConfig, clientTools: requestedTools };
   }
 
-  const requestedNames = new Set(
-    requestedTools
-      .map((tool) => {
-        if (typeof tool === 'string') {
-          return tool;
-        }
-        if (tool?.type === 'function') {
-          return tool.name ?? tool.function?.name;
-        }
-        return tool?.type;
-      })
-      .filter((name) => typeof name === 'string' && name.length > 0),
-  );
+  const agentToolNames = new Set(agentConfig.toolDefinitions.map(getAgentToolName));
+  const selectedNames = new Set();
+  const clientTools = [];
+  for (const tool of requestedTools) {
+    const name = getRequestedToolName(tool);
+    if (typeof name === 'string' && agentToolNames.has(name)) {
+      selectedNames.add(name);
+    } else {
+      clientTools.push(tool);
+    }
+  }
 
-  const getToolName = (tool) =>
-    tool?.name ?? tool?.function?.name ?? tool?.type ?? tool?.schema?.name;
-
-  const toolDefinitions = Array.isArray(agentConfig.toolDefinitions)
-    ? agentConfig.toolDefinitions.filter((tool) => requestedNames.has(getToolName(tool)))
-    : agentConfig.toolDefinitions;
+  if (selectedNames.size === 0) {
+    return { agentConfig, clientTools };
+  }
 
   return {
-    ...agentConfig,
-    ...(Array.isArray(agentConfig.toolDefinitions) && { toolDefinitions }),
+    agentConfig: {
+      ...agentConfig,
+      toolDefinitions: agentConfig.toolDefinitions.filter((tool) =>
+        selectedNames.has(getAgentToolName(tool)),
+      ),
+    },
+    clientTools,
   };
 }
 
@@ -948,50 +962,7 @@ const executeResponse = async (envelope, { req, res }) => {
         ephemeralSkillsToggle,
       });
 
-    Object.assign(
-      primaryConfig,
-      narrowResponseTools(
-        applyResponseRequestOptions(primaryConfig, request, {
-          forceResponsesApi: agent.provider === EModelEndpoint.openAI,
-        }),
-        request.tools,
-      ),
-    );
-
-    /**
-     * Per-agent tool-execution context map, keyed by agentId. Ensures the
-     * ON_TOOL_EXECUTE callback routes each sub-agent's tool calls to the
-     * correct toolRegistry / userMCPAuthMap / tool_resources.
-     * @type {Map<string, {
-     *   agent: object,
-     *   toolRegistry?: import('@librechat/agents').LCToolRegistry,
-     *   userMCPAuthMap?: Record<string, Record<string, string>>,
-     *   tool_resources?: object,
-     *   actionsEnabled?: boolean,
-     * }>}
-     */
-    const agentToolContexts = new Map();
-    agentToolContexts.set(primaryConfig.id, {
-      agent,
-      toolRegistry: primaryConfig.toolRegistry,
-      userMCPAuthMap: primaryConfig.userMCPAuthMap,
-      tool_resources: primaryConfig.tool_resources,
-      actionsEnabled: primaryConfig.actionsEnabled,
-      codeEnvAvailable: primaryConfig.codeEnvAvailable,
-    });
-
-    // Only run BFS discovery (and pay `getModelsConfig` upfront) when the
-    // primary has edges to follow — the common API case is single-agent.
-    let handoffAgentConfigs = new Map();
-    let discoveredEdges = [];
-    let discoveredMCPAuthMap;
-    if (primaryConfig.edges?.length) {
-      const modelsConfig = await getModelsConfig(req);
-      ({
-        agentConfigs: handoffAgentConfigs,
-        edges: discoveredEdges,
-        userMCPAuthMap: discoveredMCPAuthMap,
-      } = await discoverConnectedAgents(
+      const primaryConfig = await initializeAgent(
         {
           runtime: agentRuntime,
           loadTools,
@@ -1028,6 +999,14 @@ const executeResponse = async (envelope, { req, res }) => {
         },
         dbMethods,
       );
+
+      const narrowedTools = narrowResponseTools(
+        applyResponseRequestOptions(primaryConfig, request, {
+          forceResponsesApi: agent.provider === EModelEndpoint.openAI,
+        }),
+        request.tools,
+      );
+      Object.assign(primaryConfig, narrowedTools.agentConfig);
 
       /**
        * Per-agent tool-execution context map, keyed by agentId. Ensures the
@@ -1233,7 +1212,7 @@ const executeResponse = async (envelope, { req, res }) => {
        *  matches on tool name across the whole graph: a name a subagent owns
        *  collides exactly as a primary one does. */
       const clientTools = createClientToolHandoff({
-        tools: request.tools,
+        tools: narrowedTools.clientTools,
         agentDefinitions: primaryConfig.toolDefinitions,
         serverDefinitions: modelBoundAgents.flatMap((runAgent) => runAgent.toolDefinitions ?? []),
         responseId,
@@ -1341,205 +1320,23 @@ const executeResponse = async (envelope, { req, res }) => {
         // Collect usage for balance tracking
         const collectedUsage = [];
 
-      // Collect usage for balance tracking
-      const collectedUsage = [];
-
-      // Artifact promises for processing tool outputs
-      /** @type {Promise<import('librechat-data-provider').TAttachment | null>[]} */
-      const artifactPromises = [];
-      // Use Responses API-specific callback that emits librechat:attachment events
-      const toolEndCallback = createResponsesToolEndCallback({
-        req,
-        res,
-        tracker,
-        artifactPromises,
-      });
-      const persistToolCall = createPersistAgentToolCall({ req });
-
-      // Create tool execute options for event-driven tool execution
-      const toolExecuteOptions = {
-        loadTools: async (toolNames, agentId) => {
-          const ctx =
-            agentToolContexts.get(agentId) ?? agentToolContexts.get(primaryConfig.id) ?? {};
-          const result = await loadToolsForExecution({
-            req,
-            res,
-            toolNames,
-            agent: ctx.agent ?? agent,
-            signal: abortController.signal,
-            toolRegistry: ctx.toolRegistry,
-            userMCPAuthMap: ctx.userMCPAuthMap,
-            tool_resources: ctx.tool_resources,
-            actionsEnabled: ctx.actionsEnabled,
-          });
-          return enrichWithSkillConfigurable(
-            result,
-            req,
-            primaryConfig.accessibleSkillIds,
-            ctx.codeEnvAvailable === true,
-            skillPrimedIdsByName,
-          );
-        },
-        toolEndCallback,
-        persistToolCall,
-        ...getSkillToolDeps(),
-      };
-
-      // Combine handlers
-      const handlers = {
-        on_message_delta: responsesHandlers.on_message_delta,
-        on_reasoning_delta: responsesHandlers.on_reasoning_delta,
-        on_run_step: responsesHandlers.on_run_step,
-        on_run_step_delta: responsesHandlers.on_run_step_delta,
-        on_chat_model_end: {
-          handle: (event, data, metadata) => {
-            responsesHandlers.on_chat_model_end.handle(event, data);
-            const usage = data?.output?.usage_metadata;
-            if (usage) {
-              const taggedUsage = markSummarizationUsage(usage, metadata);
-              collectedUsage.push(taggedUsage);
-            }
-          },
-        },
-        on_tool_end: new ToolEndHandler(toolEndCallback, logger),
-        on_run_step_completed: { handle: () => {} },
-        on_chain_stream: { handle: () => {} },
-        on_chain_end: { handle: () => {} },
-        on_agent_update: { handle: () => {} },
-        on_custom_event: { handle: () => {} },
-        on_tool_execute: createToolExecuteHandler(toolExecuteOptions),
-        on_agent_log: agentLogHandlerObj,
-        ...(summarizationConfig?.enabled !== false
-          ? buildSummarizationHandlers({ isStreaming: actuallyStreaming, res })
-          : {}),
-      };
-
-      // Create and run the agent
-      const userId = req.user?.id ?? 'api-user';
-      const userMCPAuthMap = mergedMCPAuthMap;
-
-      const run = await createRun({
-        agents: runAgents,
-        messages: formattedMessages,
-        indexTokenCountMap,
-        initialSummary,
-        runId: responseId,
-        summarizationConfig,
-        appConfig,
-        signal: abortController.signal,
-        customHandlers: handlers,
-        requestBody: {
-          messageId: responseId,
-          conversationId,
-        },
-        user: { id: userId },
-      });
-
-      if (!run) {
-        throw new Error('Failed to create agent run');
-      }
-
-      // Process the stream
-      const config = {
-        runName: 'AgentRun',
-        configurable: {
-          thread_id: conversationId,
-          user_id: userId,
-          user: createSafeUser(req.user),
-          requestBody: {
-            messageId: responseId,
-            conversationId,
-          },
-          requestHeaders: {
-            authorization: req.headers.authorization,
-          },
-          ...(userMCPAuthMap != null && { userMCPAuthMap }),
-        },
-        signal: abortController.signal,
-        streamMode: 'values',
-        version: 'v2',
-      };
-
-      await run.processStream({ messages: formattedMessages }, config, {
-        callbacks: {
-          [Callback.TOOL_ERROR]: (graph, error, toolId) => {
-            logger.error(`[Responses API] Tool Error "${toolId}"`, error);
-          },
-        },
-      });
-
-      // Record token usage against balance
-      const balanceConfig = getBalanceConfig(appConfig);
-      const transactionsConfig = getTransactionsConfig(appConfig);
-      recordCollectedUsage(
-        {
-          spendTokens: db.spendTokens,
-          spendStructuredTokens: db.spendStructuredTokens,
-          pricing: { getMultiplier: db.getMultiplier, getCacheMultiplier: db.getCacheMultiplier },
-          bulkWriteOps: { insertMany: db.bulkInsertTransactions, updateBalance: db.updateBalance },
-        },
-        {
-          user: userId,
-          conversationId,
-          collectedUsage,
-          context: 'message',
-          messageId: responseId,
-          balance: balanceConfig,
-          transactions: transactionsConfig,
-          model: primaryConfig.model || agent.model_parameters?.model,
-        },
-      ).catch((err) => {
-        logger.error('[Responses API] Error recording usage:', err);
-      });
-
-      // Finalize the stream
-      finalizeStream();
-      res.end();
-
-      const duration = Date.now() - requestStartTime;
-      logger.debug(`[Responses API] Request ${responseId} completed in ${duration}ms (streaming)`);
-
-      // Save to database if store: true
-      if (request.store === true) {
-        try {
-          // Save conversation
-          await saveConversation(req, conversationId, agentId, agent);
-
-          // Save input messages
-          await saveInputMessages(req, conversationId, inputMessages, agentId);
-
-          // Build response for saving (use tracker with buildResponse for streaming)
-          const finalResponse = buildResponse(context, tracker, 'completed');
-          await saveResponseOutput(req, conversationId, responseId, finalResponse, agentId);
-
-          logger.debug(
-            `[Responses API] Stored response ${responseId} in conversation ${conversationId}`,
-          );
-        } catch (saveError) {
-          logger.error('[Responses API] Error saving response:', saveError);
-          // Don't fail the request if saving fails
-        }
-      }
-
-      // Wait for artifact processing after response ends (non-blocking)
-      if (artifactPromises.length > 0) {
-        Promise.all(artifactPromises).catch((artifactError) => {
-          logger.warn('[Responses API] Error processing artifacts:', artifactError);
+        // Artifact promises for processing tool outputs
+        // Use Responses API-specific callback that emits librechat:attachment events
+        const toolEndCallback = createResponsesToolEndCallback({
+          req,
+          res,
+          tracker,
+          artifactPromises,
         });
+        const persistToolCall = createPersistAgentToolCall({ req });
 
-      // Collect usage for balance tracking
-      const collectedUsage = [];
-
-      /** @type {Promise<import('librechat-data-provider').TAttachment | null>[]} */
-      const artifactPromises = [];
-      const toolEndCallback = createToolEndCallback({ req, res, artifactPromises, streamId: null });
-      const persistToolCall = createPersistAgentToolCall({ req });
-
-      const toolExecuteOptions = {
-        loadTools: async (toolNames, agentId) => {
-          const ctx =
-            agentToolContexts.get(agentId) ?? agentToolContexts.get(primaryConfig.id) ?? {};
-          const result = await loadToolsForExecution({
+        // Create tool execute options for event-driven tool execution
+        const toolExecuteOptions = {
+          runSignal: execution.signal,
+          foregroundRunId: responseId,
+          ordinaryToolCancellation: ordinaryToolCancellationEnabled,
+          backgroundCompletionResultMaxChars,
+          provisionFiles: createProvisionFilesCallback({
             req,
             agentToolContexts,
             resolvePrimaryAgentId: () => primaryConfig.id,
@@ -1580,6 +1377,7 @@ const executeResponse = async (envelope, { req, res }) => {
             });
           },
           toolEndCallback,
+          persistToolCall,
           ...getSkillToolDeps(),
         };
 
@@ -1656,6 +1454,9 @@ const executeResponse = async (envelope, { req, res }) => {
             user_id: userId,
             user: createSafeUser(req.user),
             requestBody: mcpRequestBody,
+            requestHeaders: {
+              authorization: req.headers.authorization,
+            },
             ...(userMCPAuthMap != null && { userMCPAuthMap }),
           },
           recursionLimit: resolveRecursionLimit(agentsEConfig, agent),
@@ -1770,6 +1571,7 @@ const executeResponse = async (envelope, { req, res }) => {
           artifactPromises,
           streamId: null,
         });
+        const persistToolCall = createPersistAgentToolCall({ req });
 
         const toolExecuteOptions = {
           runSignal: execution.signal,
@@ -1778,31 +1580,46 @@ const executeResponse = async (envelope, { req, res }) => {
           backgroundCompletionResultMaxChars,
           provisionFiles: createProvisionFilesCallback({
             req,
-            primaryConfig.accessibleSkillIds,
-            ctx.codeEnvAvailable === true,
-            skillPrimedIdsByName,
-          );
-        },
-        toolEndCallback,
-        persistToolCall,
-        ...getSkillToolDeps(),
-      };
-
-      const handlers = {
-        on_message_delta: aggregatorHandlers.on_message_delta,
-        on_reasoning_delta: aggregatorHandlers.on_reasoning_delta,
-        on_run_step: aggregatorHandlers.on_run_step,
-        on_run_step_delta: aggregatorHandlers.on_run_step_delta,
-        on_chat_model_end: {
-          handle: (event, data, metadata) => {
-            aggregatorHandlers.on_chat_model_end.handle(event, data);
-            const usage = data?.output?.usage_metadata;
-            if (usage) {
-              const taggedUsage = markSummarizationUsage(usage, metadata);
-              collectedUsage.push(taggedUsage);
-            }
+            agentToolContexts,
+            resolvePrimaryAgentId: () => primaryConfig.id,
+          }),
+          loadTools: async (
+            toolNames,
+            agentId,
+            _configurable,
+            callerCapabilityProjection,
+            runSignal,
+          ) => {
+            const ctx =
+              agentToolContexts.get(agentId) ?? agentToolContexts.get(primaryConfig.id) ?? {};
+            const result = await loadToolsForExecution({
+              req,
+              res,
+              agentResourceType: ResourceType.REMOTE_AGENT,
+              conversationId,
+              requestBody: mcpRequestBody,
+              toolNames,
+              agent: ctx.agent ?? agent,
+              signal: runSignal,
+              toolRegistry: ctx.toolRegistry,
+              callerCapabilityProjection,
+              backgroundToolNames: ctx.backgroundToolNames,
+              intentToolNames: ctx.intentToolNames,
+              mcpAvailableTools: ctx.mcpAvailableTools,
+              requestScopedConnections: ctx.requestScopedConnections,
+              userMCPAuthMap: ctx.userMCPAuthMap,
+              tool_resources: ctx.tool_resources,
+              actionsEnabled: ctx.actionsEnabled,
+              accessibleMcpServerNames: ctx.accessibleMcpServerNames,
+            });
+            return enrichLoadedToolsWithAgentContext({
+              result,
+              req,
+              ctx,
+            });
           },
           toolEndCallback,
+          persistToolCall,
           ...getSkillToolDeps(),
         };
 
@@ -1822,15 +1639,21 @@ const executeResponse = async (envelope, { req, res }) => {
               }
             },
           },
-          requestHeaders: {
-            authorization: req.headers.authorization,
-          },
-          ...(userMCPAuthMap != null && { userMCPAuthMap }),
-        },
-        signal: abortController.signal,
-        streamMode: 'values',
-        version: 'v2',
-      };
+          on_tool_end: createOwnedToolEndHandler(toolEndCallback, logger),
+          on_run_step_completed: { handle: () => {} },
+          on_chain_stream: { handle: () => {} },
+          on_chain_end: { handle: () => {} },
+          on_agent_update: { handle: () => {} },
+          on_custom_event: { handle: () => {} },
+          on_tool_execute: clientTools.wrapToolExecute(
+            createToolExecuteHandler(toolExecuteOptions),
+            (callId, output) => aggregator.toolOutputs.set(callId, output),
+          ),
+          on_agent_log: agentLogHandlerObj,
+          ...(summarizationConfig?.enabled !== false
+            ? buildSummarizationHandlers({ isStreaming: false, res })
+            : {}),
+        };
 
         const userId = principal.userId;
         const userMCPAuthMap = mergedMCPAuthMap;
@@ -1868,6 +1691,9 @@ const executeResponse = async (envelope, { req, res }) => {
             user_id: userId,
             user: createSafeUser(req.user),
             requestBody: mcpRequestBody,
+            requestHeaders: {
+              authorization: req.headers.authorization,
+            },
             ...(userMCPAuthMap != null && { userMCPAuthMap }),
           },
           recursionLimit: resolveRecursionLimit(agentsEConfig, agent),

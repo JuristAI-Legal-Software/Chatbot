@@ -1,7 +1,12 @@
 const passport = require('passport');
 const session = require('express-session');
 const { CacheKeys } = require('librechat-data-provider');
-const { isEnabled } = require('@librechat/api');
+const {
+  math,
+  isEnabled,
+  shouldUseSecureCookie,
+  registerOpenIdWithRetry,
+} = require('@librechat/api');
 const { logger, DEFAULT_SESSION_EXPIRY } = require('@librechat/data-schemas');
 const {
   openIdJwtLogin,
@@ -36,6 +41,22 @@ function mountAuthSessionMiddleware(app, sessionOptions) {
   app.use('/oauth', sessionMiddleware, passportSessionMiddleware);
   app.use('/api/admin/oauth', sessionMiddleware, passportSessionMiddleware);
 }
+
+const DEFAULT_OPENID_REUSE_MAX_SESSION_AGE_MS = 15 * 60 * 1000;
+const getSessionExpiry = () => math(process.env.SESSION_EXPIRY, DEFAULT_SESSION_EXPIRY);
+
+const getOpenIdSessionExpiry = () => {
+  const sessionExpiry = getSessionExpiry();
+  if (!isEnabled(process.env.OPENID_REUSE_TOKENS)) {
+    return sessionExpiry;
+  }
+
+  const reuseMaxSessionAge = math(
+    process.env.OPENID_REUSE_MAX_SESSION_AGE_MS,
+    DEFAULT_OPENID_REUSE_MAX_SESSION_AGE_MS,
+  );
+  return Math.max(sessionExpiry, reuseMaxSessionAge);
+};
 
 /**
  * Configures OpenID Connect for the application.

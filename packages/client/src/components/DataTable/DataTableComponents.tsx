@@ -122,11 +122,14 @@ interface GenericRowProps {
   cellsVersion?: number;
 }
 
-export const MemoizedTableRow = memo(
-  ForwardTableRowComponent as (props: GenericRowProps) => React.JSX.Element,
-  (prev: GenericRowProps, next: GenericRowProps) =>
-    prev.row.original === next.row.original && prev.selected === next.selected,
-);
+export const MemoizedTableRow: React.MemoExoticComponent<(props: GenericRowProps) => JSX.Element> =
+  memo(
+    ForwardTableRowComponent as (props: GenericRowProps) => JSX.Element,
+    (prev: GenericRowProps, next: GenericRowProps) =>
+      prev.row.original === next.row.original &&
+      prev.selected === next.selected &&
+      prev.cellsVersion === next.cellsVersion,
+  );
 
 export const SkeletonRows: React.MemoExoticComponent<
   <TData extends Record<string, unknown>, TValue>({

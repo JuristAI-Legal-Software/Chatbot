@@ -53,6 +53,7 @@ jest.mock('~/server/middleware', () => {
       accessIpLimiter: pass,
       accessUserLimiter: pass,
     })),
+    requireSameOrigin: pass,
     loginLimiter: pass,
     setTwoFactorTempUser: pass,
     twoFactorTempLimiter: pass,

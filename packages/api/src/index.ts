@@ -70,6 +70,7 @@ export * from './modelSpecs';
 export * from './agents';
 /* Assistants */
 export * from './assistants';
+export * from './threads/usage';
 /* Actions */
 export * from './actions';
 /* Prompts */
