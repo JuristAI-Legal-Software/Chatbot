@@ -92,7 +92,6 @@ jest.mock('~/server/services/Files/process', () => ({
 }));
 
 jest.mock('~/models', () => ({
-  ...jest.requireActual('~/models'),
   createToolCall: jest.fn(),
 }));
 

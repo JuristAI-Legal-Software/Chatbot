@@ -37,9 +37,14 @@ jest.mock('~/models', () => ({
 }));
 
 jest.mock('@librechat/api', () => ({
+  AGENT_TRIGGER_SCOPE: 'agent_trigger',
   isEnabled: () => false,
   tenantContextMiddleware: (_req, _res, next) => next(),
   maybeRefreshCloudFrontAuthCookiesMiddleware: (_req, _res, next) => next(),
+  getValidOpenIdReuseUserId: () => null,
+  getAuthFailureReasonCategory: () => 'unknown',
+  buildSafeAuthLogContext: () => ({}),
+  recordRumProxyRequest: () => {},
 }));
 
 const mintChatProxyToken = (secret) =>

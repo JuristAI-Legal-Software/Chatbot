@@ -49,7 +49,14 @@ jest.mock('~/server/utils/getFileStrategy', () => ({
 jest.mock('~/server/services/Files/process', () => ({
   filterFile: jest.fn(),
 }));
+jest.mock('~/server/middleware/limiters/uploadLimiters', () => ({
+  createFileLimiters: () => ({
+    fileUploadIpLimiter: (req, res, next) => next(),
+    fileUploadUserLimiter: (req, res, next) => next(),
+  }),
+}));
 
+const path = require('path');
 const fs = require('fs').promises;
 const {
   inspectContent,
@@ -64,7 +71,8 @@ const { getFileStrategy } = require('~/server/utils/getFileStrategy');
 const { filterFile } = require('~/server/services/Files/process');
 const router = require('./avatar');
 
-const uploadAvatar = router.stack[0].route.stack[0].handle;
+const uploadAvatar = router.stack[0].route.stack.at(-1).handle;
+const tempUploadPath = path.resolve('/tmp/uploads', 'temp', 'user-1', 'avatar.png');
 
 describe('profile avatar filename content filtering', () => {
   let readFileSpy;
@@ -72,9 +80,10 @@ describe('profile avatar filename content filtering', () => {
   let processAvatar;
 
   const createRequest = (config) => ({
-    config,
+    config: { paths: { uploads: '/tmp/uploads' }, ...config },
     file: {
       path: '/tmp/avatar.png',
+      filename: 'avatar.png',
       originalname: 'avatar.png',
       mimetype: 'image/png',
       size: 10,
@@ -131,7 +140,7 @@ describe('profile avatar filename content filtering', () => {
     expect(readFileSpy).not.toHaveBeenCalled();
     expect(resizeAvatar).not.toHaveBeenCalled();
     expect(processAvatar).not.toHaveBeenCalled();
-    expect(unlinkSpy).toHaveBeenCalledWith('/tmp/avatar.png');
+    expect(unlinkSpy).toHaveBeenCalledWith(tempUploadPath);
   });
 
   it('blocks uninspectable image content before reading or storing it', async () => {
@@ -160,7 +169,7 @@ describe('profile avatar filename content filtering', () => {
     expect(readFileSpy).not.toHaveBeenCalled();
     expect(resizeAvatar).not.toHaveBeenCalled();
     expect(processAvatar).not.toHaveBeenCalled();
-    expect(unlinkSpy).toHaveBeenCalledWith('/tmp/avatar.png');
+    expect(unlinkSpy).toHaveBeenCalledWith(tempUploadPath);
   });
 
   it('preserves the default-off upload path', async () => {
@@ -170,7 +179,7 @@ describe('profile avatar filename content filtering', () => {
     await uploadAvatar(req, res);
 
     expect(inspectContent).not.toHaveBeenCalled();
-    expect(readFileSpy).toHaveBeenCalledWith('/tmp/avatar.png');
+    expect(readFileSpy).toHaveBeenCalledWith(tempUploadPath);
     expect(processAvatar).toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith({ url: 'https://example.com/avatar.png' });
   });
@@ -187,7 +196,7 @@ describe('profile avatar filename content filtering', () => {
     await uploadAvatar(req, res);
 
     expect(inspectContent).not.toHaveBeenCalled();
-    expect(readFileSpy).toHaveBeenCalledWith('/tmp/avatar.png');
+    expect(readFileSpy).toHaveBeenCalledWith(tempUploadPath);
     expect(processAvatar).toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith({ url: 'https://example.com/avatar.png' });
   });

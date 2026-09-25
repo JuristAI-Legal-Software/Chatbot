@@ -46,6 +46,10 @@ jest.mock('~/server/services/Agents/triggers', () => ({
 jest.mock('~/server/middleware', () => ({
   agentEventUserLimiter: (_req, _res, next) => next(),
   configMiddleware: (_req, _res, next) => next(),
+  createAccessLimiters: () => ({
+    accessIpLimiter: (_req, _res, next) => next(),
+    accessUserLimiter: (_req, _res, next) => next(),
+  }),
 }));
 
 jest.mock('../middleware', () => ({

@@ -2374,6 +2374,16 @@ describe('createResponse controller', () => {
 
     it('forwards model controls and instructions into the agent run', async () => {
       const api = require('@librechat/api');
+      /* Fresh agent config: the shared default mock object can carry instructions
+       * mutated by earlier applyContextToAgent stubs. */
+      api.initializeAgent.mockResolvedValueOnce({
+        id: 'agent-123',
+        model: 'claude-3',
+        model_parameters: {},
+        toolRegistry: {},
+        edges: [],
+        agentContextAttachments: [],
+      });
       api.validateResponseRequest.mockReturnValueOnce({
         request: {
           model: 'agent-123',

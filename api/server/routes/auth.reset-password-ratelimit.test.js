@@ -67,6 +67,7 @@ jest.mock('~/server/middleware', () => {
     resetPasswordSubmissionLimiter: (...args) => mockResetPasswordSubmissionLimiter(...args),
     validatePasswordReset: (...args) => mockValidatePasswordReset(...args),
     requireJwtAuth: pass,
+    createAccessLimiters: () => ({ accessIpLimiter: pass, accessUserLimiter: pass }),
   };
 });
 

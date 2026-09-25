@@ -117,12 +117,13 @@ const ImagePreview = ({
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
       >
+        {/* Decorative via empty alt; the trigger's aria-label names it. No aria-hidden,
+            so the expand affordance stays the only aria-hidden child (see spec). */}
         <img
           src={safeRenderableImageUrl}
           alt=""
           className="size-full object-cover"
           draggable={false}
-          aria-hidden="true"
         />
         {progress < 1 ? (
           <ProgressCircle

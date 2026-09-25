@@ -33,7 +33,9 @@ const resolveProvisioningEmail = (payload, id) => {
   const candidates = [payload?.email, payload?.username];
 
   for (const candidate of candidates) {
-    const normalized = String(candidate ?? '').trim().toLowerCase();
+    const normalized = String(candidate ?? '')
+      .trim()
+      .toLowerCase();
     if (normalized && EMAIL_PATTERN.test(normalized)) {
       return normalized;
     }
@@ -51,11 +53,11 @@ const chatMintedJwtLogin = () =>
     },
     async (payload, done) => {
       try {
-        // ActionService mints the stable user identifier as the standard JWT
-        // `sub` claim. Keep accepting the legacy `id` claim for tokens issued
-        // by older Chatbot callers while ensuring current action tokens can
-        // provision and authenticate the intended user.
-        const id = String(payload?.sub ?? payload?.id ?? '').trim();
+        // chat_proxy mints the Mongo-compatible user id as `id` and puts the
+        // Cognito sub in `sub`; ActionService mints only `sub` (the Mongo id).
+        // Prefer `id` so a chat_proxy token never provisions a user keyed by the
+        // Cognito sub, and fall back to `sub` for ActionService tokens.
+        const id = String(payload?.id ?? payload?.sub ?? '').trim();
         if (!id) {
           return done(null, false, { message: 'Invalid JuristAI chat token' });
         }

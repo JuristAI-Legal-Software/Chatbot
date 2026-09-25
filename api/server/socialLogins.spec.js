@@ -116,6 +116,8 @@ describe('configureSocialLogins OpenID session expiry', () => {
         cookie: {
           maxAge: 3600000,
           secure: true,
+          httpOnly: true,
+          sameSite: 'lax',
         },
       }),
     );

@@ -33,6 +33,10 @@ jest.mock('~/models', () => ({
 }));
 jest.mock('~/server/middleware', () => ({
   canAccessAgentResource: jest.fn(() => (_req, _res, next) => next()),
+  createAccessLimiters: () => ({
+    accessIpLimiter: (_req, _res, next) => next(),
+    accessUserLimiter: (_req, _res, next) => next(),
+  }),
 }));
 
 const router = require('./actions');

@@ -7,10 +7,11 @@ import type React from 'react';
 import { MorphIcon } from './MorphIcon';
 import { cn } from '~/utils';
 
-interface BadgeProps extends Omit<
-  ButtonHTMLAttributes<HTMLButtonElement>,
-  'onAnimationStart' | 'onDragStart' | 'onDragEnd' | 'onDrag'
-> {
+interface BadgeProps
+  extends Omit<
+    ButtonHTMLAttributes<HTMLButtonElement>,
+    'onAnimationStart' | 'onDragStart' | 'onDragEnd' | 'onDrag'
+  > {
   icon?: LucideIcon;
   label: string;
   id?: string;

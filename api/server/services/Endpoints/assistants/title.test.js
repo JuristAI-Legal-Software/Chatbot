@@ -23,6 +23,7 @@ jest.mock(
 );
 jest.mock('~/models', () => ({
   saveConvo: (...args) => mockSaveConvo(...args),
+  spendTokens: jest.fn(),
 }));
 
 const addTitle = require('./title');
@@ -34,10 +35,10 @@ describe('assistants addTitle content policy', () => {
 
   it('replaces a blocked generated title before caching or saving it', async () => {
     const create = jest.fn().mockResolvedValue({
-      choices: [{ message: { content: 'BLOCKED-GENERATED-TITLE' } }],
+      output_text: 'BLOCKED-GENERATED-TITLE',
     });
     mockInitializeClient.mockResolvedValue({
-      openai: { chat: { completions: { create } } },
+      openai: { responses: { create } },
     });
     const req = {
       user: { id: 'user-1' },
@@ -74,7 +75,7 @@ describe('assistants addTitle content policy', () => {
   it('replaces a blocked submitted-text fallback before caching or saving it', async () => {
     const create = jest.fn().mockRejectedValue(new Error('title model unavailable'));
     mockInitializeClient.mockResolvedValue({
-      openai: { chat: { completions: { create } } },
+      openai: { responses: { create } },
     });
     const req = {
       user: { id: 'user-1' },

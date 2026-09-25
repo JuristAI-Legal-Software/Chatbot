@@ -1352,7 +1352,8 @@ describe('Conversation Operations', () => {
 
   describe('saveConvo appendMessageIds', () => {
     const ctx = { userId: 'append-user' };
-    const conversationId = 'append-conversation';
+    /** JuristAI: saveConvo rejects ids that are neither UUIDs nor structured ids. */
+    const conversationId = uuidv4();
 
     beforeEach(async () => {
       await Conversation.deleteMany({ user: ctx.userId });
@@ -1472,7 +1473,8 @@ describe('Conversation Operations', () => {
 
   describe('appendConvoMessageReference', () => {
     const ctx = { userId: 'append-ref-user' };
-    const conversationId = 'append-ref-conversation';
+    /** JuristAI: saveConvo rejects ids that are neither UUIDs nor structured ids. */
+    const conversationId = uuidv4();
 
     const appendConvoMessageReference = (
       ...args: Parameters<ConversationMethods['appendConvoMessageReference']>

@@ -12,7 +12,7 @@ RUN set -eux; \
         echo "apk install failed; retrying $i/5"; \
         rm -rf /var/cache/apk/* /tmp/*; \
         sleep 10; \
-    done; \
+    done
 
 # @librechat/agents 3.9 requires Node >=24; fail the image build early if the
 # base image ever resolves an older Node release.

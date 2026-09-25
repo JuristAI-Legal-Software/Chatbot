@@ -5107,10 +5107,7 @@ describe('composite conversationId persistence', () => {
     const history = await getMessages({ conversationId: PROD_CONVERSATION_ID, user: userId });
 
     expect(history).toHaveLength(2);
-    expect(history.map((message) => message.messageId)).toEqual([
-      'turn-user',
-      'turn-assistant',
-    ]);
+    expect(history.map((message) => message.messageId)).toEqual(['turn-user', 'turn-assistant']);
   });
 
   it('still persists messages for upstream UUID conversation ids', async () => {

@@ -89,33 +89,6 @@ jest.mock('~/server/services/Config', () => ({
   getCachedTools: (...args) => mockGetCachedTools(...args),
 }));
 
-// ToolService imports the complete LibreChat agent/provider graph. This suite
-// exercises capability gating and tool loading with mocked collaborators; do
-// not make collection boot unrelated model, database, or provider startup.
-jest.mock('@librechat/data-schemas', () => ({
-  logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
-}));
-jest.mock('@librechat/agents/langchain/tools', () => ({
-  tool: jest.fn((fn) => fn),
-  DynamicStructuredTool: class DynamicStructuredTool {},
-}));
-jest.mock('@librechat/agents', () => ({
-  sleep: jest.fn(),
-  StepTypes: {},
-  GraphEvents: {},
-  Constants: {
-    TOOL_SEARCH: 'tool_search',
-    BASH_PROGRAMMATIC_TOOL_CALLING: 'run_tools_with_bash',
-    PROGRAMMATIC_TOOL_CALLING: 'run_tools_with_code',
-    BASH_TOOL: 'bash_tool',
-    SKILL_TOOL: 'skill_tool',
-    READ_FILE: 'read_file',
-  },
-  createToolSearch: jest.fn(() => ({ name: 'tool_search' })),
-  createBashExecutionTool: jest.fn(() => ({ name: 'bash_tool' })),
-  createBashProgrammaticToolCallingTool: jest.fn(() => ({})),
-}));
-
 const mockLoadToolDefinitions = jest.fn();
 const mockGetUserMCPAuthMap = jest.fn();
 jest.mock('@librechat/api', () => ({

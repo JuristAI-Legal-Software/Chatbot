@@ -11,6 +11,15 @@ const binaryParser = (res, callback) => {
   res.on('end', () => callback(null, Buffer.concat(chunks)));
 };
 
+/** superagent >= 10.2 decodes `br` responses itself; older versions return the raw bytes. */
+const decodeBrotliBody = (body) => {
+  try {
+    return zlib.brotliDecompressSync(body).toString();
+  } catch {
+    return body.toString();
+  }
+};
+
 describe('staticCache', () => {
   let app;
   let testDir;
@@ -232,7 +241,7 @@ describe('staticCache', () => {
       expect(response.headers['content-encoding']).toBe('br');
       expect(response.headers['content-type']).toMatch(/javascript/);
       expect(response.headers['cache-control']).toBe('public, max-age=172800, s-maxage=86400');
-      expect(zlib.brotliDecompressSync(response.body).toString()).toBe('console.log("test");');
+      expect(decodeBrotliBody(response.body)).toBe('console.log("test");');
     });
 
     it('should prefer Brotli over gzip when both encodings are accepted', async () => {
@@ -248,7 +257,7 @@ describe('staticCache', () => {
 
       expect(response.headers['content-encoding']).toBe('br');
       expect(response.headers['content-type']).toMatch(/css/);
-      expect(zlib.brotliDecompressSync(response.body).toString()).toBe('body { color: red; }');
+      expect(decodeBrotliBody(response.body)).toBe('body { color: red; }');
     });
 
     it('should keep serving gzip when Brotli is not enabled', async () => {

@@ -168,7 +168,19 @@ async function assertReachable(target: ProbeTarget) {
   );
 }
 
+/** Upstream CI e2e runs against mocked services with no JuristAI backends to probe. */
+function isUnconfiguredCIRun(): boolean {
+  return (
+    Boolean(process.env.CI) &&
+    !process.env.DJANGO_API_BASE_URL &&
+    !process.env.MCP_JURISTAI_DJANGO_URL
+  );
+}
+
 export async function runJuristAIPreflight() {
+  if (isUnconfiguredCIRun()) {
+    return;
+  }
   for (const target of getProbeTargets()) {
     await assertReachable(target);
   }

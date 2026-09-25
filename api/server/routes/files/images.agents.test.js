@@ -338,7 +338,9 @@ describe('POST /images - Agent Upload Permission Check (Integration)', () => {
         field,
       });
       expect(processAgentFileUpload).not.toHaveBeenCalled();
-      expect(fs.promises.unlink).toHaveBeenCalledWith('/tmp/t.png');
+      expect(fs.promises.unlink).toHaveBeenCalledWith(
+        `/tmp/uploads/temp/${authorId.toString()}/test.png`,
+      );
     },
   );
 
@@ -458,7 +460,9 @@ describe('POST /images - Agent Upload Permission Check (Integration)', () => {
       field: 'extracted_text',
     });
     expect(fs.promises.unlink).toHaveBeenCalledWith(`/tmp/images/${authorId.toString()}/test.png`);
-    expect(fs.promises.unlink).toHaveBeenCalledWith('/tmp/t.png');
+    expect(fs.promises.unlink).toHaveBeenCalledWith(
+      `/tmp/uploads/temp/${authorId.toString()}/test.png`,
+    );
   });
 
   it('blocks extracted-text fail-close when configured OCR does not support the image MIME type', async () => {

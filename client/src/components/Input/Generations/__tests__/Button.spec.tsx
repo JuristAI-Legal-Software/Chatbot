@@ -1,4 +1,3 @@
-/* eslint-disable i18next/no-literal-string */
 import { RecoilRoot } from 'recoil';
 import { render, fireEvent } from '@testing-library/react';
 import enTranslation from '~/locales/en/translation.json';

@@ -505,8 +505,8 @@ describe('importChatGptConvo', () => {
 
     // Test missing model slug (should default to openAISettings.model.default)
     const noModel = savedMessages.find((msg) => msg.text === 'No model slug response');
-    // When no model slug is provided, it defaults to gpt-4o-mini which gets formatted to GPT-4o-mini
-    expect(noModel.sender).toBe('GPT-4o-mini');
+    // When no model slug is provided, it defaults to JuristAI's gpt-5.4-mini, formatted to GPT-5.4-mini
+    expect(noModel.sender).toBe('GPT-5.4-mini');
     expect(noModel.model).toBe(openAISettings.model.default);
 
     // Verify user message is unaffected

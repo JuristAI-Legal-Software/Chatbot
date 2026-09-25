@@ -107,7 +107,7 @@ async function ensureJuristaiAgentAction({ dryRun = true, deps } = {}) {
     throw new Error(`Agent not found: ${agentId}`);
   }
 
-  const existingActions = (await getActions({ agent_id: agentId }, true)) || [];
+  const existingActions = (await getActions({ agentId }, true)) || [];
   const domainAction = existingActions.find((action) => {
     const currentDomain = action?.metadata?.domain || '';
     return currentDomain === domain || legacyEncode(currentDomain) === legacyDomain;
@@ -175,7 +175,7 @@ async function ensureJuristaiAgentAction({ dryRun = true, deps } = {}) {
   if (!domainAction) {
     updateData.user = agent.author;
   }
-  await updateAction({ action_id, agent_id: agentId }, updateData);
+  await updateAction({ actionId: action_id, agentId }, updateData);
 
   logger.info('[ensure-juristai-agent-action] bound action', {
     ...plan,

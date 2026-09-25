@@ -1,15 +1,20 @@
 const { sanitizeTitle } = require('@librechat/api');
 
+const mockRecordUsage = jest.fn();
+
 jest.mock('@librechat/api', () => ({
   isEnabled: jest.fn(() => true),
   sanitizeTitle: jest.fn((value) => value),
+  getAttachmentTitleText: jest.fn(() => ''),
+  createThreadUsageRecorder: jest.fn(() => mockRecordUsage),
+  SAFE_CONVERSATION_TITLE: 'New Chat',
+  resolveConversationTitle: jest.fn(({ candidate }) => candidate),
 }));
 jest.mock('@librechat/data-schemas', () => ({ logger: { error: jest.fn() } }));
 jest.mock('librechat-data-provider', () => ({ CacheKeys: { GEN_TITLE: 'gen-title' } }));
 jest.mock('~/cache/getLogStores', () => jest.fn(() => ({ set: jest.fn() })));
 jest.mock('./initalize', () => jest.fn());
-jest.mock('~/models', () => ({ saveConvo: jest.fn() }));
-jest.mock('~/server/services/Threads', () => ({ recordUsage: jest.fn() }));
+jest.mock('~/models', () => ({ saveConvo: jest.fn(), spendTokens: jest.fn() }));
 
 const initializeClient = require('./initalize');
 const addTitle = require('./title');
@@ -29,7 +34,11 @@ describe('Assistants title generation', () => {
 
     await addTitle(
       { user: { id: 'user-1' }, body: {}, config: {} },
-      { text: 'How should we approach discovery?', responseText: 'Start with the requests.', conversationId: 'conv-1' },
+      {
+        text: 'How should we approach discovery?',
+        responseText: 'Start with the requests.',
+        conversationId: 'conv-1',
+      },
     );
 
     expect(initializeClient).toHaveBeenCalled();
@@ -40,5 +49,15 @@ describe('Assistants title generation', () => {
       store: false,
     });
     expect(sanitizeTitle).toHaveBeenCalledWith('Matter strategy');
+    expect(mockRecordUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt_tokens: 12,
+        completion_tokens: 4,
+        model: 'gpt-5.4-nano',
+        user: 'user-1',
+        conversationId: 'conv-1',
+        context: 'title',
+      }),
+    );
   });
 });

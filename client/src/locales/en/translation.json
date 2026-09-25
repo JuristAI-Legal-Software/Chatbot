@@ -554,6 +554,7 @@
   "com_files_download_percent_complete": "{{0}}% complete",
   "com_files_download_progress": "{{0}} of {{1}} files",
   "com_files_downloading": "Downloading Files",
+  "com_files_select_file": "Select a file to view details.",
   "com_files_attached_to": "Attached To",
   "com_files_bytes": "{{count}} bytes",
   "com_files_choose_file": "Choose File",

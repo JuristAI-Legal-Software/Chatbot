@@ -42,7 +42,7 @@ ARG NPM_CI_TIMEOUT_SECONDS=1500
 ARG NPM_CI_ATTEMPTS=2
 WORKDIR /app
 RUN attempt=1; \
-    until timeout "$NPM_CI_TIMEOUT_SECONDS" npm ci --legacy-peer-deps; do \
+    until timeout "$NPM_CI_TIMEOUT_SECONDS" npm ci; do \
       status=$?; \
       if [ "$attempt" -ge "$NPM_CI_ATTEMPTS" ]; then \
         exit "$status"; \
@@ -104,7 +104,7 @@ RUN uv --version
 WORKDIR /app
 # Install only production deps
 RUN attempt=1; \
-    until timeout "$NPM_CI_TIMEOUT_SECONDS" npm ci --omit=dev --legacy-peer-deps; do \
+    until timeout "$NPM_CI_TIMEOUT_SECONDS" npm ci --omit=dev; do \
       status=$?; \
       if [ "$attempt" -ge "$NPM_CI_ATTEMPTS" ]; then \
         exit "$status"; \
