@@ -4,6 +4,8 @@ const { v4: uuidv4 } = require('uuid');
 const { logger } = require('@librechat/data-schemas');
 const { Tool } = require('@librechat/agents/langchain/tools');
 const {
+  applyAxiosProxyConfig,
+  getHttpsProxyAgent,
   createMinimalRetentionRequest,
   getBalanceConfig,
   getTransactionsConfig,

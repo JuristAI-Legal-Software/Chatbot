@@ -1,4 +1,5 @@
 const path = require('path');
+const { maxWorkers } = require('../config/jest.workers.cjs');
 
 const babelPresetEnv = require.resolve('@babel/preset-env', {
   paths: [path.resolve(__dirname, '..')],

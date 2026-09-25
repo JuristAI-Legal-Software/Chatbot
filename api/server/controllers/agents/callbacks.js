@@ -23,7 +23,6 @@ const {
   writeAttachmentEvent,
   createToolExecuteHandler,
   createOwnedToolEndHandler,
-  createBackgroundCodeResultHandler: createCodeHarvestHandler,
   HOST_FILE_AUTHORING_ARTIFACT_KEY,
   isCodeSessionToolName,
   isCodeArtifactToolOutput,
@@ -1233,12 +1232,15 @@ function createPersistAgentToolCall({ req }) {
     const messageId = metadata?.run_id ?? req?.body?.messageId ?? req?.body?.message_id ?? null;
 
     if (!userId || !conversationId || !messageId || !toolId) {
-      logger.warn('[persistAgentToolCall] Skipping tool-call persistence due to missing identifiers', {
-        hasUserId: Boolean(userId),
-        hasConversationId: Boolean(conversationId),
-        hasMessageId: Boolean(messageId),
-        toolId,
-      });
+      logger.warn(
+        '[persistAgentToolCall] Skipping tool-call persistence due to missing identifiers',
+        {
+          hasUserId: Boolean(userId),
+          hasConversationId: Boolean(conversationId),
+          hasMessageId: Boolean(messageId),
+          toolId,
+        },
+      );
       return;
     }
 

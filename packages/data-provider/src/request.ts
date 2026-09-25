@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
+import type * as t from './types';
 import { setTokenHeader } from './headers-helpers';
 import * as endpoints from './api-endpoints';
 

@@ -60,6 +60,7 @@ const {
   warnOnUnreachableDeliveryPaths,
   createCodeApiUploadRegistry,
 } = require('@librechat/api');
+const { startExpiredFileSweep } = require('./services/Files/process');
 const { connectDb, indexSync } = require('~/db');
 const {
   updateAccessPermissions,
@@ -70,6 +71,7 @@ const {
 const initializeOAuthReconnectManager = require('./services/initializeOAuthReconnectManager');
 const { capabilityContextMiddleware } = require('./middleware/roles/capabilities');
 const { createAccessLimiters, createFileLimiters, createShareLimiters } = require('./middleware');
+const { configureSubagentTaskRouting } = require('./services/Endpoints/agents/subagentThreadStore');
 const createValidateImageRequest = require('./middleware/validateImageRequest');
 const { initializeGitHubSkillSync } = require('./services/Skills/sync');
 const { initializeAgentTriggerService } = require('./services/Agents/triggers');
@@ -80,9 +82,7 @@ const chatMintedJwtLogin = require('~/strategies/chatMintedJwtStrategy');
 const { checkMigrations } = require('./services/start/migration');
 const optionalJwtAuth = require('./middleware/optionalJwtAuth');
 const initializeMCPs = require('./services/initializeMCPs');
-const { configureSubagentTaskRouting } = require('./services/Endpoints/agents/subagentThreadStore');
 const configureSocialLogins = require('./socialLogins');
-const createSpaFallback = require('./utils/fallback');
 const { getAppConfig } = require('./services/Config');
 const staticCache = require('./utils/staticCache');
 const noIndex = require('./middleware/noIndex');
@@ -183,7 +183,23 @@ const configureGenerationStreams = () => {
 const SHUTDOWN_TEARDOWN_RESERVE_MS = 10_000;
 
 const startServer = async () => {
-  const { metricsMiddleware, metricsRouter } = createMetrics();
+  await waitForKeyvRedisClient();
+  await configureSubagentTaskRouting();
+  const { metricsMiddleware, metricsRouter } = createMetrics({
+    collectAgentEventActorStorageMetrics: () =>
+      runAsSystem(async () => {
+        const now = new Date();
+        const [receiptMetrics, reconciliationMetrics] = await Promise.all([
+          agentEventMethods.getAgentEventActorReceiptStorageMetrics(now),
+          agentEventMethods.getAgentEventActorReconciliationStorageMetrics(now),
+        ]);
+        return {
+          ...receiptMetrics,
+          pendingReconciliations: reconciliationMetrics.pending,
+          oldestPendingAgeSeconds: reconciliationMetrics.oldestPendingAgeSeconds,
+        };
+      }),
+  });
   const { accessIpLimiter, accessUserLimiter } = createAccessLimiters();
   const { fileUploadIpLimiter, fileUploadUserLimiter } = createFileLimiters();
   const { shareIpLimiter } = createShareLimiters();

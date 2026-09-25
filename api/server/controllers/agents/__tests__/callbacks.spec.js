@@ -1,4 +1,4 @@
-const { Tools, StepEvents } = require('librechat-data-provider');
+const { Tools } = require('librechat-data-provider');
 
 // Mock all dependencies before requiring the module
 jest.mock('nanoid', () => ({

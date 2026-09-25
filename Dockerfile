@@ -1,13 +1,13 @@
 # v0.8.8-rc4
 
 # Base node image
-FROM alpine:3.24 AS node
+FROM node:24.16.0-alpine AS node
 
 RUN set -eux; \
     for i in 1 2 3 4 5; do \
         apk update \
         && apk upgrade --no-cache \
-        && apk add --no-cache nodejs npm python3 py3-pip uv jemalloc 'expat>=2.8.4-r0' \
+        && apk add --no-cache python3 py3-pip uv jemalloc 'expat>=2.8.4-r0' \
         && break; \
         echo "apk install failed; retrying $i/5"; \
         rm -rf /var/cache/apk/* /tmp/*; \
@@ -16,9 +16,9 @@ RUN set -eux; \
     addgroup -S node; \
     adduser -S node -G node
 
-# pdfjs-dist 6.x requires Node >=22.13; fail the image build before runtime if
-# the Alpine repository ever resolves an older Node version.
-RUN node -e 'const [major,minor]=process.versions.node.split(".").map(Number); if (major < 22 || (major === 22 && minor < 13)) throw new Error(`Node ${process.versions.node} is incompatible with pdfjs-dist 6.2.108`);'
+# @librechat/agents 3.9 requires Node >=24; fail the image build early if the
+# base image ever resolves an older Node release.
+RUN node -e 'const [major]=process.versions.node.split(".").map(Number); if (major < 24) throw new Error(`Node ${process.versions.node} is incompatible with @librechat/agents 3.9`);'
 
 # Set environment variable to use jemalloc
 ENV LD_PRELOAD=/usr/lib/libjemalloc.so.2

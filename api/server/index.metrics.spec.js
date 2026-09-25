@@ -1,5 +1,4 @@
 const fs = require('fs');
-const { promisify } = require('util');
 const express = require('express');
 const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');

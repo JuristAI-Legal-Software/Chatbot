@@ -40,7 +40,7 @@ describe('GeminiImageGen Proxy Configuration', () => {
           isGoogleApis = false;
         }
         if (isGoogleApis) {
-          options = { ...options, dispatcher: proxyAgent };
+          options = { ...options, dispatcher: proxyDispatcher };
         }
         return _originalFetch.call(this, url, options);
       };

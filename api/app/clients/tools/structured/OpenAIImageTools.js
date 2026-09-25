@@ -9,6 +9,8 @@ const {
   logAxiosError,
   oaiToolkit,
   extractBaseURL,
+  getProxyDispatcher,
+  applyAxiosProxyConfig,
   getBalanceConfig,
   getTransactionsConfig,
 } = require('@librechat/api');
