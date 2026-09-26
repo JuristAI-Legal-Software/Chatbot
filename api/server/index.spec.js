@@ -15,6 +15,7 @@ jest.mock('@librechat/data-schemas', () => ({
   },
   runAsSystem: jest.fn(async (callback) => callback()),
   createModels: jest.fn(),
+  createMethods: jest.fn(() => ({})),
   SystemCapabilities: new Proxy({}, { get: (_target, property) => String(property) }),
   getTenantId: jest.fn(),
 }));

@@ -101,7 +101,7 @@ describe('performSync() - syncThreshold logic', () => {
     // Mock MeiliSearch client responses
     mockMeiliHealth.mockResolvedValue({ status: 'available' });
     mockMeiliIndex.mockReturnValue({
-      getSettings: jest.fn().mockResolvedValue({ filterableAttributes: ['user'] }),
+      getSettings: jest.fn().mockResolvedValue({ filterableAttributes: ['user', 'conversationId'] }),
       updateSettings: jest.fn().mockResolvedValue({}),
       search: jest.fn().mockResolvedValue({ hits: [] }),
     });
@@ -392,6 +392,9 @@ describe('performSync() - syncThreshold logic', () => {
     // Assert: Flags were reset due to settings update
     expect(mockBatchResetMeiliFlags).toHaveBeenCalledWith(Message.collection);
     expect(mockBatchResetMeiliFlags).toHaveBeenCalledWith(Conversation.collection);
+    expect(mockMeiliIndex.mock.results[0].value.updateSettings).toHaveBeenCalledWith({
+      filterableAttributes: ['user', 'conversationId'],
+    });
 
     // Assert: Message sync triggered despite being below threshold (50 < 1000)
     expect(Message.syncWithMeili).toHaveBeenCalledTimes(1);

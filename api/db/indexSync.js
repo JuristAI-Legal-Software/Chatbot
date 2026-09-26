@@ -96,12 +96,20 @@ async function ensureFilterableAttributes(client) {
       const messagesIndex = client.index('messages');
       const settings = await messagesIndex.getSettings();
 
-      if (!settings.filterableAttributes || !settings.filterableAttributes.includes('user')) {
-        logger.info('[indexSync] Configuring messages index to filter by user...');
+      const currentFilterableAttributes = Array.isArray(settings.filterableAttributes)
+        ? settings.filterableAttributes
+        : [];
+      const requiredFilterableAttributes = ['user', 'conversationId'];
+      const missingFilterableAttributes = requiredFilterableAttributes.filter(
+        (attribute) => !currentFilterableAttributes.includes(attribute),
+      );
+
+      if (missingFilterableAttributes.length > 0) {
+        logger.info('[indexSync] Configuring messages index filterable attributes...');
         await messagesIndex.updateSettings({
-          filterableAttributes: ['user'],
+          filterableAttributes: [...currentFilterableAttributes, ...missingFilterableAttributes],
         });
-        logger.info('[indexSync] Messages index configured for user filtering');
+        logger.info('[indexSync] Messages index filterable attributes configured');
         settingsUpdated = true;
       }
 

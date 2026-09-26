@@ -98,9 +98,11 @@ describe('Experimental server configuration', () => {
   it('matches the standard server pre-authentication tenant routes', () => {
     expect(source).toContain("app.use('/oauth', preAuthTenantMiddleware, routes.oauth);");
     expect(source).toContain("app.use('/api/auth', preAuthTenantMiddleware, routes.auth);");
-    expect(source).toContain(
-      "app.use('/api/config', preAuthTenantMiddleware, optionalJwtAuth, routes.config);",
+    expect(source).toMatch(
+      /app\.use\(\s*['"]\/api\/config['"],\s*preAuthTenantMiddleware,\s*accessIpLimiter,\s*accessUserLimiter,\s*optionalJwtAuth,\s*routes\.config,/,
     );
-    expect(source).toContain("app.use('/api/share', preAuthTenantMiddleware, routes.share);");
+    expect(source).toContain(
+      "app.use('/api/share', preAuthTenantMiddleware, shareIpLimiter, routes.share);",
+    );
   });
 });

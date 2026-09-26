@@ -633,6 +633,33 @@ describe('message route conversation ownership filters', () => {
     },
   );
 
+  it('scopes message search to the supplied conversation IDs', async () => {
+    searchMessages.mockResolvedValue({ hits: [] });
+    getConvosQueried.mockResolvedValue({ convoMap: {} });
+
+    const response = await request(app).get(
+      '/api/messages?search=needle&conversationIds=convo-1&conversationIds=convo-2',
+    );
+
+    expect(response.status).toBe(200);
+    expect(searchMessages).toHaveBeenCalledWith(
+      'needle',
+      {
+        filter: `user = "${authenticatedUserId}" AND (conversationId = "convo-1" OR conversationId = "convo-2")`,
+        limit: 25,
+      },
+      true,
+    );
+  });
+
+  it('rejects an empty conversation search scope instead of broadening the search', async () => {
+    const response = await request(app).get('/api/messages?search=needle&conversationIds=');
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: 'Invalid conversation search scope' });
+    expect(searchMessages).not.toHaveBeenCalled();
+  });
+
   it('strips server-private context meta from hydrated search hits', async () => {
     searchMessages.mockResolvedValue({
       hits: [

@@ -20,13 +20,23 @@ jest.mock('@librechat/api', () => ({
 jest.mock('~/server/controllers/assistants/helpers', () => ({
   getOpenAIClient: mockGetOpenAIClient,
 }));
-jest.mock('~/models', () => ({
-  getAssistant: jest.fn(),
-  getActions: jest.fn(),
-  updateAssistantDoc: jest.fn(),
-  updateAction: jest.fn(),
-  deleteAction: jest.fn(),
-}));
+jest.mock(
+  '~/models',
+  () =>
+    new Proxy(
+      {
+        getAssistant: jest.fn(),
+        getActions: jest.fn(),
+        updateAssistantDoc: jest.fn(),
+        updateAction: jest.fn(),
+        deleteAction: jest.fn(),
+      },
+      {
+        get: (target, property) =>
+          property in target ? target[property] : jest.fn().mockResolvedValue(undefined),
+      },
+    ),
+);
 
 const router = require('./actions');
 const db = require('~/models');

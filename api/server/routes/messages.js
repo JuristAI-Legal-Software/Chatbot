@@ -41,6 +41,10 @@ const {
 const db = require('~/models');
 
 const router = express.Router();
+const MAX_SCOPED_SEARCH_CONVERSATIONS = 50;
+
+const escapeMeiliFilterValue = (value) => value.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+
 const filterStoredMessageContent = createContentFilter({
   messageCount: 1,
   onTraversalFailure: reportLocatorTraversalFailure,
@@ -98,11 +102,25 @@ router.get('/', async (req, res) => {
       sortDirection = 'desc',
       pageSize: pageSizeRaw,
       conversationId,
+      conversationIds,
       messageId,
       search,
     } = req.query;
     const parsedPageSize = parseInt(pageSizeRaw, 10);
     const pageSize = Number.isFinite(parsedPageSize) && parsedPageSize > 0 ? parsedPageSize : 25;
+
+    let scopedSearchConversationIds;
+    if (conversationIds !== undefined) {
+      const requestedIds = Array.isArray(conversationIds) ? conversationIds : [conversationIds];
+      if (
+        requestedIds.length === 0 ||
+        requestedIds.length > MAX_SCOPED_SEARCH_CONVERSATIONS ||
+        requestedIds.some((id) => typeof id !== 'string' || id.trim() === '' || id.length > 512)
+      ) {
+        return res.status(400).json({ error: 'Invalid conversation search scope' });
+      }
+      scopedSearchConversationIds = [...new Set(requestedIds.map((id) => id.trim()))];
+    }
 
     let response;
     const sortField = ['endpoint', 'createdAt', 'updatedAt'].includes(sortBy)
@@ -151,10 +169,15 @@ router.get('/', async (req, res) => {
       }
       response = messageResult.value;
     } else if (search) {
+      const conversationFilter = scopedSearchConversationIds
+        ? ` AND (${scopedSearchConversationIds
+            .map((id) => `conversationId = "${escapeMeiliFilterValue(id)}"`)
+            .join(' OR ')})`
+        : '';
       const searchResults = await db.searchMessages(
         search,
         {
-          filter: `user = "${user}"`,
+          filter: `user = "${user}"${conversationFilter}`,
           limit: Math.min(pageSize, MEILI_SEARCH_LIMIT),
         },
         true,

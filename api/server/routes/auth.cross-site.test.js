@@ -58,6 +58,7 @@ jest.mock('~/server/services/Config', () => ({
 jest.mock('~/server/middleware', () => {
   const pass = (req, res, next) => next();
   return {
+    createAccessLimiters: () => ({ accessIpLimiter: pass, accessUserLimiter: pass }),
     logHeaders: pass,
     requireSameOrigin: jest.requireActual('~/server/middleware/requireSameOrigin'),
     loginLimiter: (...args) => mockLoginLimiter(...args),

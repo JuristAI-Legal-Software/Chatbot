@@ -10,6 +10,7 @@ const TEST_TENANT = 'tenant-files-strict';
 let mockCurrentUser;
 
 jest.mock('fs/promises', () => ({
+  ...jest.requireActual('fs/promises'),
   unlink: jest.fn().mockResolvedValue(undefined),
 }));
 

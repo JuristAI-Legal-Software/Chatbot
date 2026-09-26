@@ -291,6 +291,7 @@
     ]
   },
   "dependencies": {
+    "@radix-ui/react-slot": "^1.0.0",
     "fast-uri": "3.1.6",
     "fflate": "0.8.3",
     "form-data": "4.0.6",
