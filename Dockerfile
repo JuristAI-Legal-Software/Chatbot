@@ -114,8 +114,13 @@ RUN \
     NODE_OPTIONS="--max-old-space-size=${NODE_MAX_OLD_SPACE_SIZE}" npm run frontend && \
     test -s /app/client/dist/index.html && \
     npm prune --production && \
-    rm -rf /usr/local/include/node && \
     npm cache clean --force
+
+# The base image owns Node's headers; remove them as root after the build
+# completes, then return to the unprivileged application user.
+USER root
+RUN rm -rf /usr/local/include/node
+USER node
 
 # Re-apply patched package versions after npm prune for Vanta high/medium findings.
 RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.parse(fs.readFileSync(p,"utf8")); const names=["hono","multer","undici","uuid","form-data","protobufjs","nodemailer","dompurify","@opentelemetry/core","file-type"]; if (pkg.overrides) { for (const n of names) delete pkg.overrides[n]; } fs.writeFileSync(p, JSON.stringify(pkg,null,2));' \

@@ -1,19 +1,22 @@
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { promisify } = require('util');
 const express = require('express');
 const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
+const mockTestRoot = path.join(os.tmpdir(), 'librechat-metrics');
 
 jest.mock('~/server/services/Config', () => ({
   syncStaticTools: jest.fn().mockResolvedValue(undefined),
   loadCustomConfig: jest.fn(() => Promise.resolve({})),
   getAppConfig: jest.fn().mockResolvedValue({
     paths: {
-      uploads: '/tmp',
-      dist: '/tmp/dist',
-      fonts: '/tmp/fonts',
-      assets: '/tmp/assets',
+      uploads: mockTestRoot,
+      dist: require('path').join(mockTestRoot, 'dist'),
+      fonts: require('path').join(mockTestRoot, 'fonts'),
+      assets: require('path').join(mockTestRoot, 'assets'),
     },
     fileStrategy: 'local',
     imageOutputType: 'PNG',
@@ -77,9 +80,11 @@ jest.mock(
 );
 
 jest.mock('~/server/services/initializeMCPs', () => jest.fn().mockResolvedValue(undefined));
-jest.mock('~/server/services/Endpoints/agents/subagentThreadStore', () => ({
-  configureSubagentTaskRouting: jest.fn().mockResolvedValue(undefined),
-}));
+jest.mock('~/server/services/Endpoints/agents/subagentThreadStore', () => {
+  const store = jest.requireActual('~/server/services/Endpoints/agents/subagentThreadStore');
+  store.configureSubagentTaskRouting = jest.fn().mockResolvedValue(undefined);
+  return store;
+});
 jest.mock('~/server/services/initializeOAuthReconnectManager', () =>
   jest.fn().mockResolvedValue(undefined),
 );
@@ -118,10 +123,7 @@ describe('Server metrics route', () => {
   });
 
   beforeAll(async () => {
-    const fs = require('fs');
-    const path = require('path');
-
-    const dirs = ['/tmp/dist', '/tmp/fonts', '/tmp/assets'];
+    const dirs = ['dist', 'fonts', 'assets'].map((dir) => path.join(mockTestRoot, dir));
     dirs.forEach((dir) => {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -129,7 +131,7 @@ describe('Server metrics route', () => {
     });
 
     fs.writeFileSync(
-      path.join('/tmp/dist', 'index.html'),
+      path.join(mockTestRoot, 'dist', 'index.html'),
       '<!DOCTYPE html><html><head><title>LibreChat</title></head><body><div id="root"></div></body></html>',
     );
 
@@ -157,10 +159,11 @@ describe('Server metrics route', () => {
       await new Promise((resolve) => app.server.close(resolve));
     }
     delete process.env.METRICS_SECRET;
-    await promisify(server.close).call(server);
-    await mongoServer.stop();
+    if (server) {
+      await promisify(server.close).call(server);
+    }
     await mongoose.disconnect();
-    await mongoServer.stop();
+    await mongoServer?.stop();
   });
 
   it('returns 401 at /metrics when METRICS_SECRET is unset', async () => {

@@ -86,6 +86,11 @@ jest.mock(
 );
 
 jest.mock('~/server/services/initializeMCPs', () => jest.fn().mockResolvedValue(undefined));
+jest.mock('~/server/services/Endpoints/agents/subagentThreadStore', () => {
+  const store = jest.requireActual('~/server/services/Endpoints/agents/subagentThreadStore');
+  store.configureSubagentTaskRouting = jest.fn().mockResolvedValue(undefined);
+  return store;
+});
 jest.mock('~/server/services/initializeOAuthReconnectManager', () =>
   jest.fn().mockResolvedValue(undefined),
 );
