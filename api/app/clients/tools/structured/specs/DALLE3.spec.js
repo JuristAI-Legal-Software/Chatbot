@@ -17,6 +17,8 @@ jest.mock('@librechat/data-schemas', () => {
 jest.mock('@librechat/api', () => ({
   getImageBasename: (url) => String(url).split('/').pop(),
   extractBaseURL: (url) => url,
+  getProxyDispatcher: () => undefined,
+  getEnvProxyDispatcher: () => undefined,
   createMinimalRetentionRequest: (req) => req,
 }));
 

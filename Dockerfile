@@ -1,27 +1,27 @@
-# v0.8.6-rc1
+# v0.8.8-rc4
 
 # Base node image
-FROM alpine:3.24 AS node
+FROM node:24.16.0-alpine AS node
 
 RUN set -eux; \
     for i in 1 2 3 4 5; do \
         apk update \
         && apk upgrade --no-cache \
-        && apk add --no-cache nodejs npm python3 py3-pip uv jemalloc 'expat>=2.8.4-r0' \
+        && apk add --no-cache python3 py3-pip uv jemalloc 'expat>=2.8.4-r0' \
         && break; \
         echo "apk install failed; retrying $i/5"; \
         rm -rf /var/cache/apk/* /tmp/*; \
         sleep 10; \
-    done; \
-    addgroup -S node; \
-    adduser -S node -G node
+    done
 
-# pdfjs-dist 6.x requires Node >=22.13; fail the image build before runtime if
-# the Alpine repository ever resolves an older Node version.
-RUN node -e 'const [major,minor]=process.versions.node.split(".").map(Number); if (major < 22 || (major === 22 && minor < 13)) throw new Error(`Node ${process.versions.node} is incompatible with pdfjs-dist 6.2.108`);'
+# @librechat/agents 3.9 requires Node >=24; fail the image build early if the
+# base image ever resolves an older Node release.
+RUN node -e 'const [major]=process.versions.node.split(".").map(Number); if (major < 24) throw new Error(`Node ${process.versions.node} is incompatible with @librechat/agents 3.9`);'
 
 # Set environment variable to use jemalloc
 ENV LD_PRELOAD=/usr/lib/libjemalloc.so.2
+# Disable dependency installation analytics before any npm lifecycle scripts run.
+ENV SCARF_ANALYTICS=false
 
 # Add `uv` for extended MCP support
 COPY --from=ghcr.io/astral-sh/uv:0.9.5-python3.12-alpine /usr/local/bin/uv /usr/local/bin/uvx /bin/
@@ -59,7 +59,8 @@ COPY --chown=node:node packages/client/package.json ./packages/client/package.js
 RUN \
     touch .env ; \
     # Create directories for the volumes to inherit the correct permissions
-    mkdir -p /app/client/public/images /app/logs /app/uploads ; \
+    mkdir -p /app/client/public/images /app/logs /app/uploads /app/skill /app/data ; \
+    chmod 1777 /app/data ; \
     npm config set fetch-retry-maxtimeout 600000 ; \
     npm config set fetch-retries 5 ; \
     npm config set fetch-retry-mintimeout 15000 ; \
@@ -119,29 +120,33 @@ RUN \
 # Re-apply patched package versions after npm prune for Vanta high/medium findings.
 RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.parse(fs.readFileSync(p,"utf8")); const names=["hono","multer","undici","uuid","form-data","protobufjs","nodemailer","dompurify","@opentelemetry/core","file-type"]; if (pkg.overrides) { for (const n of names) delete pkg.overrides[n]; } fs.writeFileSync(p, JSON.stringify(pkg,null,2));' \
     && npm install --force --legacy-peer-deps --ignore-scripts --no-audit --omit=dev --save=false \
-    hono@4.12.34 \
-    multer@3.0.0-alpha.2 \
+    hono@4.13.7 \
+    multer@2.3.0 \
     nanoid@3.3.18 \
     undici@8.10.0 \
     uuid@13.0.1 \
     form-data@4.0.6 \
     protobufjs@8.6.6 \
-    nodemailer@9.0.1 \
+    nodemailer@10.0.1 \
     dompurify@3.4.13 \
     postcss@8.5.26 \
-    svgo@2.8.3 \
+    svgo@2.8.4 \
     @opentelemetry/propagator-jaeger@2.9.0 \
     @hono/node-server@2.0.11 \
     body-parser@2.3.0 \
-    axios@1.19.0 \
-    @opentelemetry/core@2.8.0 \
+    axios@1.20.0 \
+    @opentelemetry/core@2.9.0 \
     file-type@21.3.2 \
-    js-yaml@4.3.1 \
+    js-yaml@4.3.2 \
     brace-expansion@5.0.9 \
     fast-uri@3.1.6 \
+    fflate@0.8.3 \
     ip-address@10.3.1 \
     pdfjs-dist@6.2.108 \
-    sharp@0.35.3 \
+    sharp@0.35.4 \
+    && rm -rf /app/api/node_modules/sharp /app/packages/api/node_modules/sharp \
+    && mkdir -p /app/api/node_modules \
+    && cp -a /app/node_modules/sharp /app/api/node_modules/sharp \
     && rm -rf /app/node_modules/gaxios/node_modules/uuid \
     && mkdir -p /app/node_modules/gaxios/node_modules \
     && cp -a /app/node_modules/uuid /app/node_modules/gaxios/node_modules/uuid \

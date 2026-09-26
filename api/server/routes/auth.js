@@ -54,8 +54,10 @@ router.post(
 router.post(
   '/login',
   middleware.logHeaders,
+  middleware.requireSameOrigin,
   middleware.loginLimiter,
   middleware.checkBan,
+  middleware.validateEmailLogin,
   ldapAuth ? middleware.requireLdapAuth : middleware.requireLocalAuth,
   setBalanceConfig,
   loginController,
@@ -97,7 +99,7 @@ router.post(
 );
 router.post(
   '/resetPassword',
-  middleware.resetPasswordLimiter,
+  middleware.resetPasswordSubmissionLimiter,
   middleware.checkBan,
   middleware.validatePasswordReset,
   resetPasswordController,
@@ -121,6 +123,9 @@ router.post(
   '/2fa/verify-temp',
   accessIpLimiter,
   accessUserLimiter,
+  middleware.requireSameOrigin,
+  middleware.setTwoFactorTempUser,
+  middleware.twoFactorTempLimiter,
   middleware.checkBan,
   verify2FAWithTempToken,
 );

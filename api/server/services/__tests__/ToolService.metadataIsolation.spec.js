@@ -74,7 +74,9 @@ jest.mock('~/server/services/Tools/mcp', () => ({ reinitMCPServer: jest.fn() }))
 jest.mock('~/server/services/MCP', () => ({ resolveConfigServers: jest.fn() }));
 jest.mock('~/server/services/Threads', () => ({ recordUsage: jest.fn() }));
 jest.mock('~/app/clients/tools/util', () => ({ loadTools: (...args) => mockLoadTools(...args) }));
-jest.mock('~/config/parsers', () => ({ redactMessage: (value) => String(value) }));
+jest.mock('~/config/parsers', () => ({ redactMessage: (value) => String(value) }), {
+  virtual: true,
+});
 jest.mock('~/models', () => ({ findPluginAuthsByKeys: jest.fn() }));
 jest.mock('~/config', () => ({ getFlowStateManager: jest.fn(), getMCPServersRegistry: jest.fn() }));
 jest.mock('~/cache', () => ({ getLogStores: jest.fn() }));

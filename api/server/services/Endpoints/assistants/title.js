@@ -1,10 +1,17 @@
-const { isEnabled, sanitizeTitle } = require('@librechat/api');
+const {
+  createThreadUsageRecorder,
+  isEnabled,
+  sanitizeTitle,
+  getAttachmentTitleText,
+} = require('@librechat/api');
 const { logger } = require('@librechat/data-schemas');
 const { CacheKeys } = require('librechat-data-provider');
 const getLogStores = require('~/cache/getLogStores');
 const initializeClient = require('./initalize');
-const { saveConvo } = require('~/models');
-const { recordUsage } = require('~/server/services/Threads');
+const { saveConvo, spendTokens } = require('~/models');
+const { resolveConversationTitle } = require('../titlePolicy');
+
+const recordUsage = createThreadUsageRecorder(spendTokens);
 
 /**
  * Generates a conversation title using OpenAI SDK
@@ -61,11 +68,11 @@ const addTitle = async (req, { text, responseText, conversationId }) => {
   try {
     const { openai } = await initializeClient({ req });
     const titleResult = await generateTitle({ openai, text, responseText });
-    const title = titleResult.title;
     try {
       await recordUsage({
         prompt_tokens: titleResult.usage.prompt_tokens || titleResult.usage.input_tokens || 0,
-        completion_tokens: titleResult.usage.completion_tokens || titleResult.usage.output_tokens || 0,
+        completion_tokens:
+          titleResult.usage.completion_tokens || titleResult.usage.output_tokens || 0,
         model: titleResult.model,
         user: req?.user?.id,
         conversationId,
@@ -74,11 +81,16 @@ const addTitle = async (req, { text, responseText, conversationId }) => {
     } catch (usageError) {
       logger.error('[addTitle] Error recording title usage:', usageError);
     }
+    const title = resolveConversationTitle(req, titleResult.title);
+    if (title == null) {
+      return;
+    }
     await titleCache.set(key, title, 120000);
 
     const reqCtx = {
       userId: req?.user?.id,
-      isTemporary: req?.body?.isTemporary,
+      isTemporary: req?.resolvedConversation?.isTemporary ?? req?.body?.isTemporary,
+      expiredAt: req?.resolvedConversation?.expiredAt,
       interfaceConfig: req?.config?.interfaceConfig,
     };
     await saveConvo(
@@ -91,12 +103,28 @@ const addTitle = async (req, { text, responseText, conversationId }) => {
     );
   } catch (error) {
     logger.error('[addTitle] Error generating title:', error);
-    const fallbackTitle = text.length > 40 ? text.substring(0, 37) + '...' : text;
+    /**
+     * An attachment-only turn has no text to fall back on, and saving the
+     * empty string would replace the conversation's default title with a
+     * blank sidebar entry. Use the filenames, then the response, and leave
+     * the default in place when neither says anything.
+     */
+    const fallbackSource = text || getAttachmentTitleText(req?.body?.files) || responseText || '';
+    if (!fallbackSource) {
+      return;
+    }
+    const submittedFallback =
+      fallbackSource.length > 40 ? fallbackSource.substring(0, 37) + '...' : fallbackSource;
+    const fallbackTitle = resolveConversationTitle(req, submittedFallback);
+    if (fallbackTitle == null) {
+      return;
+    }
     await titleCache.set(key, fallbackTitle, 120000);
     await saveConvo(
       {
         userId: req?.user?.id,
-        isTemporary: req?.body?.isTemporary,
+        isTemporary: req?.resolvedConversation?.isTemporary ?? req?.body?.isTemporary,
+        expiredAt: req?.resolvedConversation?.expiredAt,
         interfaceConfig: req?.config?.interfaceConfig,
       },
       {

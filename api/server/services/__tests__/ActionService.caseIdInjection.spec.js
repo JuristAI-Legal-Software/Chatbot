@@ -1,7 +1,9 @@
 // This unit lane exercises only ActionService request shaping. Prevent the
 // unrelated provider/cache/model import graph from booting during collection.
 jest.mock('@librechat/agents', () => ({ GraphEvents: {}, sleep: jest.fn() }));
-jest.mock('@librechat/agents/langchain/tools', () => ({ tool: jest.fn((call) => ({ _call: call })) }));
+jest.mock('@librechat/agents/langchain/tools', () => ({
+  tool: jest.fn((call) => ({ _call: call })),
+}));
 jest.mock('@librechat/data-schemas', () => ({
   logger: { debug: jest.fn(), error: jest.fn(), warn: jest.fn() },
   encryptV2: jest.fn(async (value) => value),
@@ -9,6 +11,9 @@ jest.mock('@librechat/data-schemas', () => ({
 }));
 jest.mock('@librechat/api', () => ({
   sendEvent: jest.fn(),
+  isAbortError: jest.fn((error) => error?.name === 'AbortError'),
+  detachOnAbort: jest.fn((promise) => promise),
+  getTokenExpiresAt: jest.fn(),
   logAxiosError: jest.fn(({ error }) => `error:${error?.message || 'unknown'}`),
   refreshAccessToken: jest.fn(),
   GenerationJobManager: { emitChunk: jest.fn() },
@@ -26,8 +31,12 @@ jest.mock('librechat-data-provider', () => ({
   actionDomainSeparator: '---',
 }));
 jest.mock('~/models', () => ({
-  findToken: jest.fn(), updateToken: jest.fn(), createToken: jest.fn(),
-  getActions: jest.fn(), deleteActions: jest.fn(), deleteAssistant: jest.fn(),
+  findToken: jest.fn(),
+  updateToken: jest.fn(),
+  createToken: jest.fn(),
+  getActions: jest.fn(),
+  deleteActions: jest.fn(),
+  deleteAssistant: jest.fn(),
 }));
 jest.mock('~/config', () => ({ getFlowStateManager: jest.fn() }));
 jest.mock('~/cache', () => ({ getLogStores: jest.fn(() => ({})) }));

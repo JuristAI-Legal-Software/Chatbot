@@ -6,6 +6,8 @@
  *
  * Usage:
  *   POST /v1/chat/completions - Chat with an agent
+ *   POST /v1/events - Durably deliver a source-neutral event
+ *   GET /v1/events/:id - Read an event delivery status and result
  *   GET /v1/models - List available agents
  *   GET /v1/models/:model - Get agent details
  *
@@ -19,22 +21,50 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const {
+  reportLocatorTraversalFailure,
+  createAgentEventBindingHandlers,
+  createAgentTriggerIngressHandlers,
+  createMessageFilterPii,
+} = require('@librechat/api');
+const {
   OpenAIChatCompletionController,
   ListModelsController,
   GetModelController,
 } = require('~/server/controllers/agents/openai');
-const { configMiddleware, createAccessLimiters } = require('~/server/middleware');
+const {
+  agentEventUserLimiter,
+  configMiddleware,
+  createAccessLimiters,
+} = require('~/server/middleware');
+const {
+  enqueueAgentTrigger,
+  getAgentTriggerDeliveryStatus,
+} = require('~/server/services/Agents/triggers');
 const {
   checkAgentPermission,
+  checkAgentTriggerPermission,
   preAuthTenantMiddleware,
   requireRemoteAgentAuth,
   checkRemoteAgentsFeature,
 } = require('./middleware');
+const db = require('~/models');
 
 const router = express.Router();
 const { accessIpLimiter, accessUserLimiter } = createAccessLimiters();
 /** Baseline IP rate limiter applied alongside the access limiters. */
 const routeRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
+const eventHandlers = createAgentTriggerIngressHandlers({
+  enqueue: enqueueAgentTrigger,
+  getDeliveryStatus: getAgentTriggerDeliveryStatus,
+});
+const eventBindingHandlers = createAgentEventBindingHandlers({
+  getAgent: db.getAgent,
+  getConvo: db.getConvo,
+  getBinding: db.getAgentEventBinding,
+  getMessage: db.getMessage,
+  deleteConvos: db.deleteConvos,
+  reserveThread: db.reserveSubagentThread,
+});
 
 router.use(preAuthTenantMiddleware);
 router.use(requireRemoteAgentAuth);
@@ -43,6 +73,42 @@ router.use(checkRemoteAgentsFeature);
 router.use(routeRateLimiter);
 router.use(accessIpLimiter);
 router.use(accessUserLimiter);
+
+/**
+ * @route POST /v1/events/bindings
+ * @desc Bind one authenticated source key to a durable child actor thread
+ * @access Private (API key auth required)
+ */
+router.post(
+  '/events/bindings',
+  agentEventUserLimiter,
+  checkAgentTriggerPermission,
+  eventBindingHandlers.register,
+);
+
+/**
+ * @route POST /v1/events
+ * @desc Durably deliver a source-neutral event to an agent
+ * @access Private (API key auth required)
+ */
+router.post(
+  '/events',
+  agentEventUserLimiter,
+  createMessageFilterPii({
+    onTraversalFailure: reportLocatorTraversalFailure,
+    getConfig: (req) => req.config?.messageFilter?.pii,
+  }),
+  eventBindingHandlers.resolve,
+  checkAgentTriggerPermission,
+  eventHandlers.enqueueEvent,
+);
+
+/**
+ * @route GET /v1/events/:id
+ * @desc Read the authenticated owner's delivery status and result
+ * @access Private (API key auth required)
+ */
+router.get('/events/:id', eventHandlers.getEvent);
 
 /**
  * @route POST /v1/chat/completions

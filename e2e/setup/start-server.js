@@ -11,6 +11,8 @@ const GENERATED_CREDS_KEY = crypto.randomBytes(32).toString('hex');
 const GENERATED_CREDS_IV = crypto.randomBytes(16).toString('hex');
 const GENERATED_JWT_SECRET = crypto.randomBytes(32).toString('hex');
 const GENERATED_JWT_REFRESH_SECRET = crypto.randomBytes(32).toString('hex');
+const REDIS_STREAM_STARTUP_TIMEOUT_MS = 15_000;
+const REDIS_PING_TIMEOUT_MS = 10_000;
 let mongoServer;
 
 function ensureDefaultEnv() {
@@ -25,8 +27,7 @@ function ensureDefaultEnv() {
   process.env.CREDS_KEY = process.env.CREDS_KEY || GENERATED_CREDS_KEY;
   process.env.CREDS_IV = process.env.CREDS_IV || GENERATED_CREDS_IV;
   process.env.JWT_SECRET = process.env.JWT_SECRET || GENERATED_JWT_SECRET;
-  process.env.JWT_REFRESH_SECRET =
-    process.env.JWT_REFRESH_SECRET || GENERATED_JWT_REFRESH_SECRET;
+  process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || GENERATED_JWT_REFRESH_SECRET;
   process.env.SEARCH = process.env.SEARCH || 'false';
   process.env.EMAIL_HOST = process.env.EMAIL_HOST || '';
   process.env.SESSION_EXPIRY = process.env.SESSION_EXPIRY || '60000';
@@ -182,6 +183,46 @@ async function shutdown() {
   }
 }
 
+async function requireRedisStreams() {
+  if (process.env.E2E_REQUIRE_REDIS_STREAMS !== 'true') {
+    return;
+  }
+  const { ioredisClient } = require('@librechat/api');
+  if (!ioredisClient) {
+    throw new Error('[e2e] Redis stream mode was required but no Redis client was configured');
+  }
+  let timeout;
+  try {
+    await Promise.race([
+      ioredisClient.ping(),
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`[e2e] Redis did not respond within ${REDIS_PING_TIMEOUT_MS}ms`)),
+          REDIS_PING_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function verifyRedisStreams() {
+  if (process.env.E2E_REQUIRE_REDIS_STREAMS !== 'true') {
+    return;
+  }
+  const { GenerationJobManager } = require('@librechat/api');
+  const deadline = Date.now() + REDIS_STREAM_STARTUP_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (GenerationJobManager.isRedis) {
+      console.log('[e2e] Verified Redis-backed generation streams');
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error('[e2e] Redis stream mode was required but the server fell back to memory');
+}
+
 process.once('SIGINT', async () => {
   await shutdown();
   process.exit(130);
@@ -195,8 +236,10 @@ process.once('SIGTERM', async () => {
 function startServer() {
   ensureDefaultEnv();
   return maybeStartMemoryMongo()
-    .then(() => {
+    .then(requireRedisStreams)
+    .then(async () => {
       require(path.resolve(__dirname, '../../api/server/index.js'));
+      await verifyRedisStreams();
     })
     .catch((error) => {
       console.error('[e2e] Failed to start test server:', error);
