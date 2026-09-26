@@ -87,6 +87,7 @@ export interface LoadAgentParams {
     config?: AppConfig;
     body?: {
       appId?: string | number;
+      additionalModelRequestFields?: { appId?: string | number };
       promptPrefix?: string;
       instructions?: string;
       ephemeralAgent?: TEphemeralAgent;
@@ -214,7 +215,8 @@ export async function loadEphemeralAgent(
     modelPromptPrefix,
     requestPromptPrefix,
   );
-  const appInstructions = await resolveResponseAppInstructions(req.body?.appId);
+  const appId = req.body?.appId ?? req.body?.additionalModelRequestFields?.appId;
+  const appInstructions = await resolveResponseAppInstructions(appId);
   const requestTaskInstructions = stripAppInstructions(requestInstructions, appInstructions);
   const instructions = appInstructions || requestInstructions;
 
@@ -336,7 +338,8 @@ export async function loadAgent(
    */
   const requestInstructions =
     typeof req.body?.instructions === 'string' ? req.body.instructions.trim() : '';
-  const appInstructions = await resolveResponseAppInstructions(req.body?.appId);
+  const appId = req.body?.appId ?? req.body?.additionalModelRequestFields?.appId;
+  const appInstructions = await resolveResponseAppInstructions(appId);
   const requestTaskInstructions = stripAppInstructions(requestInstructions, appInstructions);
 
   if (appInstructions) {

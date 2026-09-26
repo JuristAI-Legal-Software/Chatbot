@@ -114,6 +114,61 @@ describe('loadAgent request instructions', () => {
     expect(result?.additional_instructions).toBe(`Stored author instructions.\n\nCase context: active caseId is 73181283.`);
   });
 
+  test('loads the app prompt from the appId forwarded by Django for persistent agents', async () => {
+    const getAgent = jest.fn(async () => makeAgent());
+    const deps: LoadAgentDeps = {
+      getAgent,
+      getMCPServerTools: jest.fn(),
+    };
+
+    const result = await loadAgent(
+      {
+        req: {
+          user: { id: 'user-1' },
+          body: {
+            additionalModelRequestFields: { appId: 5 },
+            instructions: 'Case context: matter-5.',
+          },
+        },
+        agent_id: 'agent_case_context',
+        endpoint: 'openai',
+        model_parameters: { model: 'gpt-4o' } as AgentModelParameters,
+      },
+      deps,
+    );
+
+    expect(GeneratedPrompts.resolveResponseAppInstructions).toHaveBeenCalledWith(5);
+    expect(result?.instructions).toBe(APP_PROMPT);
+    expect(result?.additional_instructions).toBe('Stored author instructions.\n\nCase context: matter-5.');
+  });
+
+  test('loads the app prompt from forwarded appId for ephemeral agents', async () => {
+    const deps: LoadAgentDeps = {
+      getAgent: jest.fn(),
+      getMCPServerTools: jest.fn(),
+    };
+
+    const result = await loadAgent(
+      {
+        req: {
+          user: { id: 'user-1' },
+          body: {
+            additionalModelRequestFields: { appId: 4 },
+            instructions: 'Task context: matter-4.',
+          },
+        },
+        agent_id: Constants.EPHEMERAL_AGENT_ID as string,
+        endpoint: 'openai',
+        model_parameters: { model: 'gpt-4o' } as AgentModelParameters,
+      },
+      deps,
+    );
+
+    expect(GeneratedPrompts.resolveResponseAppInstructions).toHaveBeenCalledWith(4);
+    expect(result?.instructions).toBe(APP_PROMPT);
+    expect(result?.additional_instructions).toBe('Task context: matter-4.');
+  });
+
   test('keeps the repository app prompt when callers supply alternate instructions', async () => {
     const prompt = APP_PROMPT;
     const deps: LoadAgentDeps = {
