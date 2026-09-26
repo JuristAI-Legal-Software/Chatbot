@@ -185,6 +185,10 @@ jobs:
       E2E_CHROMIUM_CHANNEL: chrome
       E2E_STREAM_STORE: ${{ matrix.stream_store }}
       REDIS_URI: redis://127.0.0.1:6379
+      # MCP approval specs repeatedly poll the tool list across a shared test user.
+      # Keep production OAuth throttles enabled while avoiding cross-spec CI throttling.
+      MCP_OAUTH_IP_MAX: 1000
+      MCP_OAUTH_USER_MAX: 1000
     steps:
       - uses: actions/checkout@v5
 

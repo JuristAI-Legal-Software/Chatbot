@@ -37,6 +37,7 @@ jest.mock('librechat-data-provider', () => ({
   EToolResources: {},
   isActionTool: (name) => String(name).includes('_action_'),
   actionDelimiter: '_action_',
+  actionDomainSeparator: '---',
   ImageVisionTool: { function: { name: 'image_gen' } },
   openapiToFunction: () => ({
     requestBuilders: { echoMessage: { path: '/echo' } },
@@ -67,6 +68,7 @@ jest.mock('@librechat/api', () => ({
   buildWebSearchDynamicContext: jest.fn(),
   getCodeApiAuthHeaders: jest.fn(),
   createRepositoryInstructionLoader: () => ({}),
+  normalizeActionToolName: (name) => name,
 }));
 jest.mock('~/server/services/Config', () => ({ getCachedTools: jest.fn(() => ({})) }));
 jest.mock('~/server/services/Files/process', () => ({

@@ -26,10 +26,22 @@ jobs:
     if: >
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.run_workflow == 'true')
-    
+
     steps:
       - uses: actions/checkout@v5
+      - name: Check for axe-linter API key
+        id: axe-key
+        env:
+          AXE_LINTER_API_KEY: ${{ secrets.AXE_LINTER_API_KEY }}
+        run: |
+          if [ -n "$AXE_LINTER_API_KEY" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Skipping axe-linter because AXE_LINTER_API_KEY is not configured."
+          fi
       - uses: dequelabs/axe-linter-action@v2.0.0
+        if: steps.axe-key.outputs.available == 'true'
         with:
           api_key: ${{ secrets.AXE_LINTER_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
