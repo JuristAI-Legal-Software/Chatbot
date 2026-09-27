@@ -1,10 +1,12 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { promisify } = require('util');
 const express = require('express');
 const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
+const mockTestRoot = path.join(os.tmpdir(), 'librechat-server-index');
 
 jest.mock('~/server/services/Config', () => ({
   syncStaticTools: jest.fn().mockResolvedValue(undefined),
@@ -12,10 +14,10 @@ jest.mock('~/server/services/Config', () => ({
   loadCustomConfig: jest.fn(() => Promise.resolve({})),
   getAppConfig: jest.fn().mockResolvedValue({
     paths: {
-      uploads: '/tmp',
-      dist: '/tmp/dist',
-      fonts: '/tmp/fonts',
-      assets: '/tmp/assets',
+      uploads: mockTestRoot,
+      dist: require('path').join(mockTestRoot, 'dist'),
+      fonts: require('path').join(mockTestRoot, 'fonts'),
+      assets: require('path').join(mockTestRoot, 'assets'),
     },
     fileStrategy: 'local',
     imageOutputType: 'PNG',
@@ -262,10 +264,7 @@ describe('Server Configuration', () => {
 
   beforeAll(async () => {
     // Create the required directories and files for the test
-    const fs = require('fs');
-    const path = require('path');
-
-    const dirs = ['/tmp/dist', '/tmp/fonts', '/tmp/assets'];
+    const dirs = ['dist', 'fonts', 'assets'].map((dir) => path.join(mockTestRoot, dir));
     dirs.forEach((dir) => {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -273,7 +272,7 @@ describe('Server Configuration', () => {
     });
 
     fs.writeFileSync(
-      path.join('/tmp/dist', 'index.html'),
+      path.join(mockTestRoot, 'dist', 'index.html'),
       '<!DOCTYPE html><html><head><title>LibreChat</title></head><body><div id="root"></div></body></html>',
     );
 
