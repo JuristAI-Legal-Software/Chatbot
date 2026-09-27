@@ -1,15 +1,16 @@
-import type { Agent, AgentModelParameters } from 'librechat-data-provider';
 import { Constants } from 'librechat-data-provider';
+import type { Agent, AgentModelParameters } from 'librechat-data-provider';
 import type { LoadAgentDeps, LoadAgentParams } from '../load';
-import { loadAgent } from '../load';
+import { resolveResponseAppInstructionsForRequest } from '../appPrompt';
 import * as GeneratedPrompts from '../generatedResponsePrompts';
+import { loadAgent } from '../load';
 
 const APP_PROMPT = 'Prompt content returned by S3.';
 
 beforeEach(() => {
-  jest.spyOn(GeneratedPrompts, 'resolveResponseAppInstructions').mockImplementation(async (appId) =>
-    appId === undefined ? '' : APP_PROMPT,
-  );
+  jest
+    .spyOn(GeneratedPrompts, 'resolveResponseAppInstructions')
+    .mockImplementation(async (appId) => (appId === undefined ? '' : APP_PROMPT));
 });
 
 jest.mock('@librechat/data-schemas', () => ({
@@ -77,10 +78,7 @@ describe('loadAgent request instructions', () => {
       getMCPServerTools: jest.fn(),
     };
 
-    const result = await loadAgent(
-      makeParams('Case context: active caseId is 73181283.'),
-      deps,
-    );
+    const result = await loadAgent(makeParams('Case context: active caseId is 73181283.'), deps);
 
     expect(result?.instructions).toBe('Stored author instructions.');
     expect(result?.additional_instructions).toBe(
@@ -111,7 +109,9 @@ describe('loadAgent request instructions', () => {
     );
 
     expect(result?.instructions).toBe(prompt);
-    expect(result?.additional_instructions).toBe(`Stored author instructions.\n\nCase context: active caseId is 73181283.`);
+    expect(result?.additional_instructions).toBe(
+      `Stored author instructions.\n\nCase context: active caseId is 73181283.`,
+    );
   });
 
   test('loads the app prompt from the appId forwarded by Django for persistent agents', async () => {
@@ -120,16 +120,17 @@ describe('loadAgent request instructions', () => {
       getAgent,
       getMCPServerTools: jest.fn(),
     };
+    const req = {
+      user: { id: 'user-1' },
+      body: {
+        additionalModelRequestFields: { appId: 5 },
+        instructions: 'Case context: matter-5.',
+      },
+    };
 
     const result = await loadAgent(
       {
-        req: {
-          user: { id: 'user-1' },
-          body: {
-            additionalModelRequestFields: { appId: 5 },
-            instructions: 'Case context: matter-5.',
-          },
-        },
+        req,
         agent_id: 'agent_case_context',
         endpoint: 'openai',
         model_parameters: { model: 'gpt-4o' } as AgentModelParameters,
@@ -138,8 +139,12 @@ describe('loadAgent request instructions', () => {
     );
 
     expect(GeneratedPrompts.resolveResponseAppInstructions).toHaveBeenCalledWith(5);
+    await expect(resolveResponseAppInstructionsForRequest(req, 5)).resolves.toBe(APP_PROMPT);
+    expect(GeneratedPrompts.resolveResponseAppInstructions).toHaveBeenCalledTimes(1);
     expect(result?.instructions).toBe(APP_PROMPT);
-    expect(result?.additional_instructions).toBe('Stored author instructions.\n\nCase context: matter-5.');
+    expect(result?.additional_instructions).toBe(
+      'Stored author instructions.\n\nCase context: matter-5.',
+    );
   });
 
   test('loads the app prompt from forwarded appId for ephemeral agents', async () => {
@@ -178,7 +183,10 @@ describe('loadAgent request instructions', () => {
 
     const result = await loadAgent(
       {
-        req: { user: { id: 'user-1' }, body: { appId: 2, instructions: 'Caller replacement instructions.' } },
+        req: {
+          user: { id: 'user-1' },
+          body: { appId: 2, instructions: 'Caller replacement instructions.' },
+        },
         agent_id: 'agent_case_context',
         endpoint: 'openai',
         model_parameters: { model: 'gpt-4o' } as AgentModelParameters,
@@ -187,7 +195,9 @@ describe('loadAgent request instructions', () => {
     );
 
     expect(result?.instructions).toBe(prompt);
-    expect(result?.additional_instructions).toBe('Stored author instructions.\n\nCaller replacement instructions.');
+    expect(result?.additional_instructions).toBe(
+      'Stored author instructions.\n\nCaller replacement instructions.',
+    );
   });
 
   test('ignores blank request instructions and leaves dynamic context unchanged', async () => {

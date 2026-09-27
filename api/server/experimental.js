@@ -19,6 +19,11 @@ const mongoose = require('mongoose');
 const passport = require('passport');
 const compression = require('compression');
 const cookieParser = require('cookie-parser');
+const rateLimit = require('express-rate-limit');
+const mcpRouteRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'CI' ? 1000 : 150,
+});
 const { logger, runAsSystem } = require('@librechat/data-schemas');
 const mongoSanitize = require('express-mongo-sanitize');
 const {
@@ -690,7 +695,7 @@ if (cluster.isMaster) {
     app.use('/api/tags', routes.tags);
     /* CodeQL note: `/api/mcp` applies per-route OAuth limiters and validates
      * CSRF/session bindings inside `routes/mcp.js` before completing callbacks. */
-    app.use('/api/mcp', routes.mcp);
+    app.use('/api/mcp', mcpRouteRateLimiter, routes.mcp);
 
     app.use('/api', routes.openapi);
 

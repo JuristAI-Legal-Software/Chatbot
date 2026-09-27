@@ -29,8 +29,7 @@ import type {
   StatefulCodeEnvironment,
   TAgentsEndpoint,
 } from 'librechat-data-provider';
-import { applyResponseAppPrompt } from '../appPrompt';
-import { resolveResponseAppInstructions } from '../generatedResponsePrompts';
+import { applyResponseAppPrompt, resolveResponseAppInstructionsForRequest } from '../appPrompt';
 import type { Response as ServerResponse, Request } from 'express';
 import type {
   ChatCompletionResponse,
@@ -668,7 +667,7 @@ export async function createAgentChatCompletion(
     typeof requestBody.instructions === 'string' ? requestBody.instructions.trim() : '';
   let appInstructions = '';
   try {
-    appInstructions = await resolveResponseAppInstructions(appId);
+    appInstructions = await resolveResponseAppInstructionsForRequest(req, appId);
   } catch (error) {
     logger.error('[OpenAIChatCompletion] Failed to load mapped app prompt from S3', error);
     sendErrorResponse(

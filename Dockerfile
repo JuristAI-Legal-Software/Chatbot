@@ -123,7 +123,7 @@ RUN rm -rf /usr/local/include/node
 USER node
 
 # Re-apply patched package versions after npm prune for Vanta high/medium findings.
-RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.parse(fs.readFileSync(p,"utf8")); const names=["hono","multer","undici","uuid","form-data","protobufjs","nodemailer","dompurify","@opentelemetry/core","file-type"]; if (pkg.overrides) { for (const n of names) delete pkg.overrides[n]; } fs.writeFileSync(p, JSON.stringify(pkg,null,2));' \
+RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.parse(fs.readFileSync(p,"utf8")); const names=["hono","multer","nanoid","undici","uuid","form-data","protobufjs","nodemailer","dompurify","postcss","svgo","@opentelemetry/propagator-jaeger","@hono/node-server","body-parser","axios","@opentelemetry/core","file-type","js-yaml","brace-expansion","fast-uri","fflate","ip-address","pdfjs-dist","sharp"]; if (pkg.overrides) { for (const key of Object.keys(pkg.overrides)) { if (names.some((n) => key === n || key.startsWith(n + "@"))) delete pkg.overrides[key]; } } fs.writeFileSync(p, JSON.stringify(pkg,null,2));' \
     && npm install --force --legacy-peer-deps --ignore-scripts --no-audit --omit=dev --save=false \
     hono@4.13.7 \
     multer@2.3.0 \

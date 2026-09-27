@@ -12,6 +12,7 @@ const passport = require('passport');
 const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const mongoSanitize = require('express-mongo-sanitize');
+const rateLimit = require('express-rate-limit');
 const { logger, runAsSystem } = require('@librechat/data-schemas');
 const {
   isEnabled,
@@ -105,6 +106,10 @@ const host = HOST || 'localhost';
 const trusted_proxy = Number(TRUST_PROXY) || 1; /* trust first proxy by default */
 
 const app = express();
+const mcpRouteRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'CI' ? 1000 : 150,
+});
 app.locals.codeApiUploadRegistry = createCodeApiUploadRegistry();
 let serverReady = false;
 /** @type {import('@librechat/api').ScheduleEngineState} */
@@ -233,13 +238,18 @@ const startServer = async () => {
    * code so image rollouts and agent edits can't silently strip it
    * (#CHAT-AGENT-NO-TOOLS-BOUND). Opt out with JURISTAI_ENSURE_AGENT_ACTION=false.
    * Non-fatal: fresh installs without the agent just log and continue. */
-  if (process.env.JURISTAI_ENSURE_AGENT_ACTION !== 'false') {
-    const { ensureJuristaiAgentAction } = require('../../config/ensure-juristai-agent-action');
-    await runAsSystem(() =>
-      ensureJuristaiAgentAction({ dryRun: false, deps: { connect: async () => undefined } }),
-    ).catch((err) => {
+  if (
+    process.env.JURISTAI_ENSURE_AGENT_ACTION !== 'false' &&
+    process.env.JEST_WORKER_ID === undefined
+  ) {
+    try {
+      const { ensureJuristaiAgentAction } = require('../../config/ensure-juristai-agent-action');
+      await runAsSystem(() =>
+        ensureJuristaiAgentAction({ dryRun: false, deps: { connect: async () => undefined } }),
+      );
+    } catch (err) {
       logger.warn(`[ensureJuristaiAgentAction] Skipped at startup: ${err.message}`);
-    });
+    }
   }
   /* Recover stuck `status: 'pending'` records from a crash mid-render.
    * `runAsSystem` is required — `File` is tenant-isolated and strict
@@ -483,7 +493,7 @@ const startServer = async () => {
   app.use('/api/tags', routes.tags);
   /* CodeQL note: `/api/mcp` applies per-route OAuth limiters and validates
    * CSRF/session bindings inside `routes/mcp.js` before completing callbacks. */
-  app.use('/api/mcp', routes.mcp);
+  app.use('/api/mcp', mcpRouteRateLimiter, routes.mcp);
   app.use('/api/rum', routes.rum);
 
   app.use('/metrics', metricsRouter);

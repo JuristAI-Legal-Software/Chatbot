@@ -1,5 +1,4 @@
 const { Router } = require('express');
-const rateLimit = require('express-rate-limit');
 const { logger, getTenantId, tenantStorage } = require('@librechat/data-schemas');
 const {
   CacheKeys,
@@ -83,10 +82,6 @@ const db = require('~/models');
 const router = Router();
 const { mcpOAuthIpLimiter, mcpOAuthUserLimiter, mcpOAuthCallbackLimiter } =
   createMCPOAuthLimiters();
-/** Baseline IP rate limiter applied alongside the per-route limiters. */
-const routeRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
-router.use(routeRateLimiter);
-
 const OAUTH_CSRF_COOKIE_PATH = '/api/mcp';
 
 const getOAuthFlowId = (userId, serverName) =>

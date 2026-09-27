@@ -22,7 +22,7 @@ import {
   validateMCPServerConfig,
 } from '~/mcp/utils';
 import { ASK_USER_QUESTION_TOOL_NAME } from '~/agents/hitl/askUserQuestionTool';
-import { resolveResponseAppInstructions } from './generatedResponsePrompts';
+import { resolveResponseAppInstructionsForRequest } from './appPrompt';
 import { synthesizeBackgroundToolOptions } from '~/agents/background';
 import { mergeSynthesizedToolOptions } from '~/agents/selection';
 import { synthesizeIntentToolOptions } from '~/agents/intent';
@@ -216,7 +216,7 @@ export async function loadEphemeralAgent(
     requestPromptPrefix,
   );
   const appId = req.body?.appId ?? req.body?.additionalModelRequestFields?.appId;
-  const appInstructions = await resolveResponseAppInstructions(appId);
+  const appInstructions = await resolveResponseAppInstructionsForRequest(req, appId);
   const requestTaskInstructions = stripAppInstructions(requestInstructions, appInstructions);
   const instructions = appInstructions || requestInstructions;
 
@@ -339,7 +339,7 @@ export async function loadAgent(
   const requestInstructions =
     typeof req.body?.instructions === 'string' ? req.body.instructions.trim() : '';
   const appId = req.body?.appId ?? req.body?.additionalModelRequestFields?.appId;
-  const appInstructions = await resolveResponseAppInstructions(appId);
+  const appInstructions = await resolveResponseAppInstructionsForRequest(req, appId);
   const requestTaskInstructions = stripAppInstructions(requestInstructions, appInstructions);
 
   if (appInstructions) {
