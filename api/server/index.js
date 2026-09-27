@@ -108,7 +108,7 @@ const trusted_proxy = Number(TRUST_PROXY) || 1; /* trust first proxy by default 
 const app = express();
 const mcpRouteRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'CI' ? 1000 : 150,
+  max: process.env.NODE_ENV === 'CI' ? 10_000 : 150,
 });
 app.locals.codeApiUploadRegistry = createCodeApiUploadRegistry();
 let serverReady = false;
