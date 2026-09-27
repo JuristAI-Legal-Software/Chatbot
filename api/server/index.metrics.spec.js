@@ -1,22 +1,19 @@
 const fs = require('fs');
-const os = require('os');
-const path = require('path');
 const { promisify } = require('util');
 const express = require('express');
 const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
-const mockTestRoot = path.join(os.tmpdir(), 'librechat-metrics');
 
 jest.mock('~/server/services/Config', () => ({
   syncStaticTools: jest.fn().mockResolvedValue(undefined),
   loadCustomConfig: jest.fn(() => Promise.resolve({})),
   getAppConfig: jest.fn().mockResolvedValue({
     paths: {
-      uploads: mockTestRoot,
-      dist: require('path').join(mockTestRoot, 'dist'),
-      fonts: require('path').join(mockTestRoot, 'fonts'),
-      assets: require('path').join(mockTestRoot, 'assets'),
+      uploads: '/tmp',
+      dist: '/tmp/dist',
+      fonts: '/tmp/fonts',
+      assets: '/tmp/assets',
     },
     fileStrategy: 'local',
     imageOutputType: 'PNG',
@@ -37,59 +34,6 @@ jest.mock('~/config', () => ({
   createMCPManager: jest.fn().mockResolvedValue({
     getAppToolFunctions: jest.fn().mockResolvedValue({}),
   }),
-}));
-
-jest.mock('@librechat/data-schemas', () => ({
-  logger: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    debug: jest.fn(),
-    error: jest.fn(),
-  },
-  runAsSystem: jest.fn(async (callback) => callback()),
-  createModels: jest.fn(),
-  createMethods: jest.fn(() => ({})),
-  SystemCapabilities: new Proxy({}, { get: (_target, property) => String(property) }),
-  getTenantId: jest.fn(),
-}));
-
-jest.mock(
-  '~/models',
-  () =>
-    new Proxy(
-      {},
-      {
-        get: (_target, property) =>
-          property === 'seedDatabase' ? jest.fn().mockResolvedValue(undefined) : jest.fn(),
-      },
-    ),
-);
-
-jest.mock(
-  '@librechat/api/telemetry',
-  () => ({
-    initializeTelemetry: jest.fn(() => ({
-      enabled: false,
-      status: 'disabled',
-      shutdown: jest.fn(),
-    })),
-    telemetryMiddleware: jest.fn((_req, _res, next) => next()),
-    telemetryErrorMiddleware: jest.fn((err, _req, _res, next) => next(err)),
-  }),
-  { virtual: true },
-);
-
-jest.mock('~/server/services/initializeMCPs', () => jest.fn().mockResolvedValue(undefined));
-jest.mock('~/server/services/Endpoints/agents/subagentThreadStore', () => {
-  const store = jest.requireActual('~/server/services/Endpoints/agents/subagentThreadStore');
-  store.configureSubagentTaskRouting = jest.fn().mockResolvedValue(undefined);
-  return store;
-});
-jest.mock('~/server/services/initializeOAuthReconnectManager', () =>
-  jest.fn().mockResolvedValue(undefined),
-);
-jest.mock('~/server/services/start/migration', () => ({
-  checkMigrations: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('~/server/services/Agents/triggers', () => ({
@@ -123,7 +67,10 @@ describe('Server metrics route', () => {
   });
 
   beforeAll(async () => {
-    const dirs = ['dist', 'fonts', 'assets'].map((dir) => path.join(mockTestRoot, dir));
+    const fs = require('fs');
+    const path = require('path');
+
+    const dirs = ['/tmp/dist', '/tmp/fonts', '/tmp/assets'];
     dirs.forEach((dir) => {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -131,13 +78,11 @@ describe('Server metrics route', () => {
     });
 
     fs.writeFileSync(
-      path.join(mockTestRoot, 'dist', 'index.html'),
+      path.join('/tmp/dist', 'index.html'),
       '<!DOCTYPE html><html><head><title>LibreChat</title></head><body><div id="root"></div></body></html>',
     );
 
-    mongoServer = await MongoMemoryServer.create({
-      instance: { launchTimeout: 30_000 },
-    });
+    mongoServer = await MongoMemoryServer.create();
     process.env.MONGO_URI = mongoServer.getUri();
     process.env.PORT = '0';
     process.env.METRICS_SECRET = 'test-secret';
@@ -155,15 +100,10 @@ describe('Server metrics route', () => {
   });
 
   afterAll(async () => {
-    if (app?.server) {
-      await new Promise((resolve) => app.server.close(resolve));
-    }
     delete process.env.METRICS_SECRET;
-    if (server) {
-      await promisify(server.close).call(server);
-    }
+    await promisify(server.close).call(server);
+    await mongoServer.stop();
     await mongoose.disconnect();
-    await mongoServer?.stop();
   });
 
   it('returns 401 at /metrics when METRICS_SECRET is unset', async () => {

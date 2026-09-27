@@ -1,38 +1,10 @@
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { promisify } = require('util');
 const express = require('express');
 const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
-const mockTestRoot = path.join(os.tmpdir(), 'librechat-server-index');
-
-jest.mock('@librechat/data-schemas', () => ({
-  logger: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    debug: jest.fn(),
-    error: jest.fn(),
-  },
-  runAsSystem: jest.fn(async (callback) => callback()),
-  createModels: jest.fn(),
-  createMethods: jest.fn(() => ({})),
-  SystemCapabilities: new Proxy({}, { get: (_target, property) => String(property) }),
-  getTenantId: jest.fn(),
-}));
-
-jest.mock(
-  '~/models',
-  () =>
-    new Proxy(
-      {},
-      {
-        get: (_target, property) =>
-          property === 'seedDatabase' ? jest.fn().mockResolvedValue(undefined) : jest.fn(),
-      },
-    ),
-);
 
 jest.mock('~/server/services/Config', () => ({
   syncStaticTools: jest.fn().mockResolvedValue(undefined),
@@ -40,10 +12,10 @@ jest.mock('~/server/services/Config', () => ({
   loadCustomConfig: jest.fn(() => Promise.resolve({})),
   getAppConfig: jest.fn().mockResolvedValue({
     paths: {
-      uploads: mockTestRoot,
-      dist: require('path').join(mockTestRoot, 'dist'),
-      fonts: require('path').join(mockTestRoot, 'fonts'),
-      assets: require('path').join(mockTestRoot, 'assets'),
+      uploads: '/tmp',
+      dist: '/tmp/dist',
+      fonts: '/tmp/fonts',
+      assets: '/tmp/assets',
     },
     fileStrategy: 'local',
     imageOutputType: 'PNG',
@@ -86,19 +58,6 @@ jest.mock(
   }),
   { virtual: true },
 );
-
-jest.mock('~/server/services/initializeMCPs', () => jest.fn().mockResolvedValue(undefined));
-jest.mock('~/server/services/Endpoints/agents/subagentThreadStore', () => {
-  const store = jest.requireActual('~/server/services/Endpoints/agents/subagentThreadStore');
-  store.configureSubagentTaskRouting = jest.fn().mockResolvedValue(undefined);
-  return store;
-});
-jest.mock('~/server/services/initializeOAuthReconnectManager', () =>
-  jest.fn().mockResolvedValue(undefined),
-);
-jest.mock('~/server/services/start/migration', () => ({
-  checkMigrations: jest.fn().mockResolvedValue(undefined),
-}));
 
 describe('Telemetry wiring', () => {
   const source = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
@@ -279,7 +238,7 @@ describe('Startup readiness wiring', () => {
 
 describe('Server Configuration', () => {
   // Increase the default timeout to allow for Mongo cleanup
-  jest.setTimeout(120_000);
+  jest.setTimeout(30_000);
 
   let mongoServer;
   let app;
@@ -303,7 +262,10 @@ describe('Server Configuration', () => {
 
   beforeAll(async () => {
     // Create the required directories and files for the test
-    const dirs = ['dist', 'fonts', 'assets'].map((dir) => path.join(mockTestRoot, dir));
+    const fs = require('fs');
+    const path = require('path');
+
+    const dirs = ['/tmp/dist', '/tmp/fonts', '/tmp/assets'];
     dirs.forEach((dir) => {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -311,13 +273,11 @@ describe('Server Configuration', () => {
     });
 
     fs.writeFileSync(
-      path.join(mockTestRoot, 'dist', 'index.html'),
+      path.join('/tmp/dist', 'index.html'),
       '<!DOCTYPE html><html><head><title>LibreChat</title></head><body><div id="root"></div></body></html>',
     );
 
-    mongoServer = await MongoMemoryServer.create({
-      instance: { launchTimeout: 30_000 },
-    });
+    mongoServer = await MongoMemoryServer.create();
     process.env.MONGO_URI = mongoServer.getUri();
     process.env.PORT = '0'; // Use a random available port
     /* This deployment configures a footer, so the shell it serves has to say so
@@ -334,10 +294,8 @@ describe('Server Configuration', () => {
   });
 
   afterAll(async () => {
-    if (server) {
-      await promisify(server.close).call(server);
-    }
-    await mongoServer?.stop();
+    await promisify(server.close).call(server);
+    await mongoServer.stop();
     await mongoose.disconnect();
     delete process.env.CUSTOM_FOOTER;
   });
@@ -453,13 +411,25 @@ describe('Server Configuration', () => {
   it('should return 500 for unknown errors via ErrorController', async () => {
     // Testing the error handling here on top of unit tests to ensure the middleware is correctly integrated
 
+    // Mock MongoDB operations to fail
+    const originalFindOne = mongoose.models.User.findOne;
     const mockError = new Error('MongoDB operation failed');
-    const { ErrorController } = require('@librechat/api');
-    const response = { status: jest.fn().mockReturnThis(), send: jest.fn() };
-    ErrorController(mockError, {}, response, jest.fn());
+    mongoose.models.User.findOne = jest.fn().mockImplementation(() => {
+      throw mockError;
+    });
 
-    expect(response.status).toHaveBeenCalledWith(500);
-    expect(response.send).toHaveBeenCalledWith('An unknown error occurred.');
+    try {
+      const response = await request(app).post('/api/auth/login').send({
+        email: 'test@example.com',
+        password: 'password123',
+      });
+
+      expect(response.status).toBe(500);
+      expect(response.text).toBe('An unknown error occurred.');
+    } finally {
+      // Restore original function
+      mongoose.models.User.findOne = originalFindOne;
+    }
   });
 });
 

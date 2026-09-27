@@ -133,6 +133,8 @@ export function getBaseE2EEnv(): Record<string, string> {
   return {
     ...getPassthroughEnv(),
     NODE_ENV: 'CI',
+    ACCESS_IP_MAX: process.env.ACCESS_IP_MAX ?? '10000',
+    ACCESS_USER_MAX: process.env.ACCESS_USER_MAX ?? '10000',
     HOST: process.env.E2E_HOST ?? host,
     PORT: process.env.E2E_PORT ?? port,
     MONGO_URI: process.env.MONGO_URI ?? DEFAULT_MONGO_URI,

@@ -31,7 +31,10 @@ const setBalanceConfig = createSetBalanceConfig({
 const router = express.Router();
 const { accessIpLimiter, accessUserLimiter } = middleware.createAccessLimiters();
 /** Baseline IP rate limiter applied alongside the access limiters. */
-const routeRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
+const routeRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'CI' ? 10_000 : 150,
+});
 router.use(routeRateLimiter);
 const getCloudFrontAuthCookieRefreshResult = (req, res) => {
   const warmedResult = req.cloudFrontAuthCookieRefreshResult;

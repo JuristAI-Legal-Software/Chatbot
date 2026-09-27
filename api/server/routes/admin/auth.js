@@ -50,7 +50,10 @@ const setBalanceConfig = createSetBalanceConfig({
 
 const router = express.Router();
 /** Baseline IP rate limiter applied alongside the per-route login limiter. */
-const routeRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
+const routeRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'CI' ? 10_000 : 150,
+});
 router.use(routeRateLimiter);
 
 function getOptionalOpenIdConfig() {

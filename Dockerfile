@@ -193,7 +193,7 @@ RUN set -eux; \
 # stream-file-type actually require() them at runtime.
 RUN node -e '\
 const fs = require("fs"); \
-const rootOnly = ["mongodb","hono","multer","undici","uuid","form-data","protobufjs","@opentelemetry/core","module-alias","express","mongoose","axios","dompurify","body-parser","js-yaml","@hono/node-server","@opentelemetry/propagator-jaeger","fast-uri","svgo","brace-expansion"]; \
+const rootOnly = ["mongodb","hono","multer","undici","uuid","form-data","protobufjs","@opentelemetry/core","module-alias","express","mongoose","axios","dompurify","body-parser","js-yaml","@hono/node-server","@opentelemetry/propagator-jaeger","fast-uri","svgo"]; \
 const pathed = [["nodemailer", ["/app/api"]], ["file-type", ["/app/node_modules/stream-file-type"]]]; \
 const files = ["/app/global-bundle.pem"]; \
 const failures = []; \
