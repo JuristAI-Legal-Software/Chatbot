@@ -13,6 +13,13 @@ interface:
     share: false
     public: false
 
+endpoints:
+  agents:
+    # Use model-written progress from the agent's existing provider. Bound
+    # the additional label work for long runs.
+    activityLabel: true
+    activityMaxPerRun: 6
+
 mcpSettings:
   allowedAddresses:
     - "127.0.0.1:8001"
