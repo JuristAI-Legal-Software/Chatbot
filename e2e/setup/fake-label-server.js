@@ -29,6 +29,7 @@ const DEFAULT_BEHAVIOR = {
   labelsByPrompt: {},
   delayMs: 0,
 };
+const MAX_TEST_DELAY_MS = 30_000;
 let behavior = { ...DEFAULT_BEHAVIOR };
 let labelCount = 0;
 
@@ -141,7 +142,14 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && url.pathname === '/__e2e/behavior') {
     const body = await readBody(req);
-    behavior = { ...DEFAULT_BEHAVIOR, ...body };
+    const requestedDelay = Number(body.delayMs);
+    behavior = {
+      ...DEFAULT_BEHAVIOR,
+      ...body,
+      delayMs: Number.isFinite(requestedDelay)
+        ? Math.min(MAX_TEST_DELAY_MS, Math.max(0, requestedDelay))
+        : DEFAULT_BEHAVIOR.delayMs,
+    };
     sendJson(res, 200, { ok: true, behavior });
     return;
   }

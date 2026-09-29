@@ -19,7 +19,7 @@ test(
   async () => {
     const temporary = await mkdtemp(path.join(tmpdir(), 'librechat-builds-'));
     const appHtml = await readFile(path.join(root, 'client/index.html'), 'utf8');
-    const guards = [...appHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    const guards = [...appHtml.matchAll(/<script>([\s\S]*?)<\/script>/gi)]
       .map((match) => match[0])
       .join('\n');
     const heal = await readFile(path.join(root, 'client/sw/heal.js'), 'utf8');

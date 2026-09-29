@@ -40,10 +40,10 @@ function normalizeUrlTarget(value: string | undefined): string {
 
   try {
     const url = new URL(value);
-    const pathname = url.pathname.replace(/\/+$/, '');
+    const pathname = trimTrailingSlashes(url.pathname);
     return `${url.protocol}//${url.host.toLowerCase()}${pathname}${url.search}`;
   } catch {
-    return value.trim().toLowerCase().replace(/\/+$/, '');
+    return trimTrailingSlashes(value.trim().toLowerCase());
   }
 }
 
@@ -57,8 +57,16 @@ function normalizeDomainTarget(value: string | undefined): string {
     const url = new URL(urlValue);
     return `${url.protocol}//${url.host.toLowerCase()}`;
   } catch {
-    return value.trim().toLowerCase().replace(/\/+$/, '');
+    return trimTrailingSlashes(value.trim().toLowerCase());
   }
+}
+
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') {
+    end -= 1;
+  }
+  return value.slice(0, end);
 }
 
 function getSpecServerTarget(rawSpec: string | undefined): string {

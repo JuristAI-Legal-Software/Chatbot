@@ -20,6 +20,14 @@ const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._~:/+=-]+$/;
 const DELIVERY_KEY_PATTERN = /^trigger_[a-f0-9]{64}$/;
 
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 interface AgentTriggerIngressRequest extends Request {
   apiKeyId?: { toString(): string } | string;
   requestId?: string;
@@ -272,7 +280,7 @@ export function createAgentTriggerIngressHandlers(deps: AgentTriggerIngressDepen
         tenant_id: user.tenantId,
         replayed: receipt.replayed,
       });
-      const collectionPath = req.originalUrl.split('?')[0].replace(/\/+$/, '');
+      const collectionPath = trimTrailingSlashes(req.originalUrl.split('?')[0]);
       res.setHeader('Location', `${collectionPath}/${encodeURIComponent(receipt.deliveryKey)}`);
       res.status(202).json({
         id: receipt.deliveryKey,

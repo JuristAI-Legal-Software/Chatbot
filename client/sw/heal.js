@@ -15,7 +15,7 @@ self.addEventListener('message', (event) => {
     return;
   }
   const resolvePong = pendingPongs.get(event.source.id);
-  if (resolvePong) {
+  if (typeof resolvePong === 'function') {
     pendingPongs.delete(event.source.id);
     resolvePong(true);
   }

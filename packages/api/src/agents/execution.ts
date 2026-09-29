@@ -87,6 +87,14 @@ type CodeExecutionApprovalAgent = {
 const CODE_EXECUTION_TARGET_HASH = /^[a-f0-9]{64}$/;
 const MAX_CODE_EXECUTION_APPROVAL_TARGETS = 128;
 
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 /**
  * Captures an opaque identity for every stateful code target reachable by a
  * paused run. Raw base URLs, worker IDs and session hints never enter the
@@ -228,7 +236,7 @@ export function createCodeExecutionRouteKey(
   }
   const identity = JSON.stringify([
     environment.id,
-    environment.baseURL.trim().replace(/\/+$/, ''),
+    trimTrailingSlashes(environment.baseURL.trim()),
     environment.workerId ?? environment.pairing?.workerId ?? '',
   ]);
   return `stateful:${createHash('sha256').update(identity).digest('hex').slice(0, 32)}`;
@@ -257,12 +265,13 @@ export function getCodeExecutionBaseUrl(
   environment?: CodeEnvironmentConfig,
 ): string {
   if (profile === 'default') {
-    return getCodeBaseURL().replace(/\/+$/, '');
+    return trimTrailingSlashes(getCodeBaseURL());
   }
   if (environment) {
-    return environment.baseURL.trim().replace(/\/+$/, '');
+    return trimTrailingSlashes(environment.baseURL.trim());
   }
-  const baseUrl = process.env.LIBRECHAT_CODE_BASEURL_STATEFUL?.trim().replace(/\/+$/, '');
+  const configuredBaseUrl = process.env.LIBRECHAT_CODE_BASEURL_STATEFUL?.trim();
+  const baseUrl = configuredBaseUrl == null ? undefined : trimTrailingSlashes(configuredBaseUrl);
   if (baseUrl) {
     return baseUrl;
   }

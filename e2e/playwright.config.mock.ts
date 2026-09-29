@@ -370,7 +370,7 @@ export default defineConfig({
   webServer: [
     {
       // URL-based MCP fixture for the allowlist-override spec (its health route is GET /).
-      command: `node ${mcpHttpServerPath}`,
+      command: `node "${mcpHttpServerPath}"`,
       cwd: rootPath,
       env: { ...process.env, E2E_MCP_HTTP_PORT: MCP_HTTP_PORT },
       url: `http://127.0.0.1:${MCP_HTTP_PORT}/`,
@@ -380,7 +380,7 @@ export default defineConfig({
     },
     {
       // Protected resource whose OAuth flow intentionally remains pending across navigation.
-      command: `node ${mcpOAuthServerPath}`,
+      command: `node "${mcpOAuthServerPath}"`,
       cwd: rootPath,
       env: { ...process.env, E2E_MCP_OAUTH_PORT: MCP_OAUTH_PORT },
       url: `http://127.0.0.1:${MCP_OAUTH_PORT}/`,
@@ -392,7 +392,7 @@ export default defineConfig({
       ? [
           {
             // One real SDK server exposes both current HTTP and legacy SSE transports.
-            command: `node ${dynamicMcpServerPath}`,
+            command: `node "${dynamicMcpServerPath}"`,
             cwd: rootPath,
             env: {
               ...process.env,
@@ -408,7 +408,7 @@ export default defineConfig({
       : []),
     {
       // Serves the activity-label model call (the custom endpoints' baseURL).
-      command: `node ${labelServerPath}`,
+      command: `node "${labelServerPath}"`,
       cwd: rootPath,
       env: { ...process.env, E2E_LABEL_PORT: LABEL_PORT },
       url: `http://127.0.0.1:${LABEL_PORT}/`,
@@ -418,7 +418,7 @@ export default defineConfig({
     },
     {
       // Stateful provider-boundary fake for Assistant CRUD and streamed runs.
-      command: `node ${assistantsServerPath}`,
+      command: `node "${assistantsServerPath}"`,
       cwd: rootPath,
       env: { ...process.env, E2E_ASSISTANTS_PORT: ASSISTANTS_PORT },
       url: `http://127.0.0.1:${ASSISTANTS_PORT}/`,
@@ -428,7 +428,7 @@ export default defineConfig({
     },
     {
       // Fake code-execution API for file-provisioning specs (LIBRECHAT_CODE_BASEURL).
-      command: `node ${codeServerPath}`,
+      command: `node "${codeServerPath}"`,
       cwd: rootPath,
       env: { ...process.env, E2E_CODE_API_PORT: CODE_API_PORT },
       url: `http://127.0.0.1:${CODE_API_PORT}/health`,
@@ -438,7 +438,7 @@ export default defineConfig({
     },
     {
       // Fake RAG (vector DB) API for file-provisioning specs (RAG_API_URL).
-      command: `node ${ragServerPath}`,
+      command: `node "${ragServerPath}"`,
       cwd: rootPath,
       env: { ...process.env, E2E_RAG_API_PORT: RAG_API_PORT },
       url: `http://127.0.0.1:${RAG_API_PORT}/health`,
@@ -449,7 +449,7 @@ export default defineConfig({
     {
       // Start one LibreChat process, or a two-process topology behind a test-only proxy, after the
       // network fixtures so inspection and persistent connections agree.
-      command: `node ${serverPath}`,
+      command: `node "${serverPath}"`,
       cwd: rootPath,
       // Only the one-replica harness may assert the scheduler's single-process topology.
       // The two-replica MCP suite must leave scheduled writes disabled.

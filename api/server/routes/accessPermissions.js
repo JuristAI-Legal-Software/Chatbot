@@ -19,17 +19,25 @@ const {
   checkShareAccess,
   checkSharePublicAccess,
 } = require('~/server/middleware/checkSharePublicAccess');
-const { requireJwtAuth, checkBan, uaParser, canAccessResource } = require('~/server/middleware');
+const {
+  requireJwtAuth,
+  checkBan,
+  uaParser,
+  canAccessResource,
+  createAccessLimiters,
+} = require('~/server/middleware');
 const { checkPeoplePickerAccess } = require('~/server/middleware/checkPeoplePickerAccess');
 const db = require('~/models');
 const { findMCPServerByObjectId, getSkillById } = db;
 
 const router = express.Router();
+const { accessIpLimiter, accessUserLimiter } = createAccessLimiters();
 
 // Apply common middleware
 router.use(requireJwtAuth);
 router.use(checkBan);
 router.use(uaParser);
+router.use(accessIpLimiter, accessUserLimiter);
 
 /**
  * Generic routes for resource permissions

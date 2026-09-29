@@ -79,8 +79,16 @@ export function scopeHeadersToDestination(
 
 export function getLangfuseDestinationId(baseUrl: string, projectId: string): string {
   return createHash('sha256')
-    .update(`${baseUrl.replace(/\/+$/, '')}\n${projectId}`)
+    .update(`${trimTrailingSlashes(baseUrl)}\n${projectId}`)
     .digest('hex');
+}
+
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') {
+    end -= 1;
+  }
+  return value.slice(0, end);
 }
 
 function getCentralEnvBaseUrl(): string {

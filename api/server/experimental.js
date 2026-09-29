@@ -603,6 +603,8 @@ if (cluster.isMaster) {
     app.use(mongoSanitize());
     app.use(cors());
     app.use(cookieParser());
+    // Keep the clustered server's cookie-authenticated routes behind the same CSRF guard.
+    app.use(require('~/server/middleware/requireSameOrigin'));
 
     if (!isEnabled(DISABLE_COMPRESSION)) {
       app.use(compression());

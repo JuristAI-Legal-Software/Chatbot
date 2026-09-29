@@ -380,6 +380,8 @@ const startServer = async () => {
   app.use(mongoSanitize());
   app.use(cors());
   app.use(cookieParser());
+  // Cookie-authenticated state changes must originate from this app or a configured client.
+  app.use(require('~/server/middleware/requireSameOrigin'));
 
   if (!isEnabled(DISABLE_COMPRESSION)) {
     app.use(compression());

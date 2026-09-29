@@ -21,7 +21,12 @@ const {
   restoreTenantContextFromReq,
   resolveToolRoleGrants,
 } = require('@librechat/api');
-const { checkBan, configMiddleware, createFileLimiters } = require('~/server/middleware');
+const {
+  checkBan,
+  configMiddleware,
+  createAccessLimiters,
+  createFileLimiters,
+} = require('~/server/middleware');
 const { hasCapability } = require('~/server/middleware/roles/capabilities');
 const { checkPermission, findAccessibleResources } = require('~/server/services/PermissionService');
 const { createMulterInstance } = require('~/server/routes/files/multer');
@@ -32,6 +37,7 @@ const db = require('~/models');
 const { requireAgentManagementAuth } = require('./middleware');
 
 const router = express.Router();
+const { accessIpLimiter, accessUserLimiter } = createAccessLimiters();
 const readHandlers = createAgentManagementReadHandlers({
   getRoleByName: db.getRoleByName,
   getAgentWithVersionCount: db.getAgentWithVersionCount,
@@ -149,6 +155,7 @@ const handleUploadError = (error, _req, res, _next) => {
 
 router.use(requireAgentManagementAuth);
 router.use(checkBan);
+router.use(accessIpLimiter, accessUserLimiter);
 
 router.post('/', configMiddleware, createHandler);
 router.get('/', readHandlers.list);

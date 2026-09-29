@@ -1,7 +1,33 @@
 const TOOL_INPUT_SCHEMA_ERROR = 'Received tool input did not match expected schema';
 const SCHEMA_ERROR_PATH_PATTERN = /(?:→|->)\s+at\s+([A-Za-z0-9_.[\]-]{1,120})/;
 const ASK_OPTION_LABEL_PATH_PATTERN = /^(?:questions\[\d+\]\.)?options\[\d+\]\.label$/;
-const OPTION_LABEL_LIMIT_PATTERN = /(?:at most \d+|\d+ characters or fewer)/i;
+function containsOptionLabelLimit(message: string): boolean {
+  const normalized = message.toLowerCase();
+  const atMost = normalized.indexOf('at most ');
+  if (atMost >= 0 && hasDigitsAfter(normalized, atMost + 'at most '.length)) {
+    return true;
+  }
+
+  const suffix = ' characters or fewer';
+  const suffixIndex = normalized.indexOf(suffix);
+  return suffixIndex > 0 && hasDigitsBefore(normalized, suffixIndex);
+}
+
+function hasDigitsAfter(value: string, start: number): boolean {
+  let index = start;
+  while (index < value.length && value.charCodeAt(index) >= 48 && value.charCodeAt(index) <= 57) {
+    index += 1;
+  }
+  return index > start;
+}
+
+function hasDigitsBefore(value: string, end: number): boolean {
+  let index = end - 1;
+  while (index >= 0 && value.charCodeAt(index) >= 48 && value.charCodeAt(index) <= 57) {
+    index -= 1;
+  }
+  return index < end - 1;
+}
 
 interface CompletedToolCall {
   tool_call?: {
@@ -43,7 +69,7 @@ export function parseToolInputValidationError(error: unknown): ToolInputValidati
 
   const fieldPath = message.match(SCHEMA_ERROR_PATH_PATTERN)?.[1];
   return {
-    isLengthLimit: OPTION_LABEL_LIMIT_PATTERN.test(message),
+    isLengthLimit: containsOptionLabelLimit(message),
     ...(fieldPath != null ? { fieldPath } : {}),
   };
 }

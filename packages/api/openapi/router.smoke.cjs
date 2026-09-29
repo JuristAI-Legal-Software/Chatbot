@@ -57,7 +57,7 @@ async function assertNotFound(baseUrl, pathname) {
 }
 
 function runInitializer(html, pathname) {
-  const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+  const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/i)?.[1];
   assert.ok(inlineScript, 'Docs HTML should include an inline initializer');
 
   let onDOMContentLoaded;

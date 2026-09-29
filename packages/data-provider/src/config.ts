@@ -4090,7 +4090,16 @@ export function normalizeServerName(serverName: string): string {
     return serverName;
   }
 
-  const normalized = serverName.replace(/[^a-zA-Z0-9_.-]/g, '_').replace(/^_+|_+$/g, '');
+  const sanitized = serverName.replace(/[^a-zA-Z0-9_.-]/g, '_');
+  let start = 0;
+  let end = sanitized.length;
+  while (start < end && sanitized[start] === '_') {
+    start += 1;
+  }
+  while (end > start && sanitized[end - 1] === '_') {
+    end -= 1;
+  }
+  const normalized = sanitized.slice(start, end);
   if (normalized) {
     return normalized;
   }
