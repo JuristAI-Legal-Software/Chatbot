@@ -494,7 +494,7 @@ export function hasSeriesAIContext(
 export function buildSeriesAIContextInstructions(context?: SeriesAIContext): string {
   if (!hasSeriesAIContext(context)) return '';
   const lines = [
-    `SeriesAI workspace context: appId=${String(context.appId)}, organizationId=${context.organizationId}.`,
+    `Vienna startups & VC workspace context: appId=${String(context.appId)}, organizationId=${context.organizationId}.`,
     context.workspaceMode ? `Workspace mode: ${context.workspaceMode}.` : '',
     context.practiceArea ? `Practice area: ${context.practiceArea}.` : '',
     context.lifecycleStage ? `Lifecycle stage: ${context.lifecycleStage}.` : '',

@@ -31,6 +31,26 @@ git_with_auth() {
   git "$@"
 }
 
+push_tag_with_retries() {
+  tag_ref="$1"
+  max_attempts=3
+
+  for attempt in $(seq 1 "$max_attempts"); do
+    if git_with_auth push origin "$tag_ref"; then
+      return 0
+    fi
+
+    if [ "$attempt" -lt "$max_attempts" ]; then
+      delay=$((attempt * 2))
+      printf 'Push of %s failed (attempt %s/%s); retrying in %ss.\n' \
+        "$tag_ref" "$attempt" "$max_attempts" "$delay" >&2
+      sleep "$delay"
+    fi
+  done
+
+  return 1
+}
+
 dispatch_release() {
   tag="$1"
 
@@ -219,7 +239,7 @@ while IFS="$(printf '\t')" read -r tag commit; do
 
   git tag "$tag" "$commit"
 
-  if git_with_auth push origin "refs/tags/${tag}"; then
+  if push_tag_with_retries "refs/tags/${tag}"; then
     printf 'Created %s at %s.\n' "$tag" "$short_commit"
     dispatch_release "$tag"
     continue

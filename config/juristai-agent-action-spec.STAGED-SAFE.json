@@ -1,8 +1,8 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "JuristAI Tools",
-    "description": "JuristAI legal-platform chat-agent tools. Full x-llm-callable django surface minus a fixed denylist of access-control and destructive data-loss operations.",
+    "title": "Vienna Tools",
+    "description": "Vienna legal-platform chat-agent tools. Full x-llm-callable django surface minus a fixed denylist of access-control and destructive data-loss operations.",
     "version": "3.0.0"
   },
   "servers": [
@@ -170,7 +170,7 @@
       "post": {
         "operationId": "account-manager",
         "description": "Executes the account manager workflow for supported product actions. Exposed to the LibreChat assistant as a callable tool.",
-        "summary": "Run account-level JuristAI workflow actions.",
+        "summary": "Run account-level Vienna workflow actions.",
         "tags": [
           "llm-tools"
         ],
@@ -621,7 +621,7 @@
       "post": {
         "operationId": "add-case-step",
         "description": "Starts the add-case-step Step Function for a known docket or case identifier plus an explicit role. When userId is omitted, the authenticated caller is assigned by default. This is exposed to the LibreChat assistant as a callable workflow starter.",
-        "summary": "Start the existing-case assignment workflow for a docket already known to JuristAI.",
+        "summary": "Start the existing-case assignment workflow for a docket already known to Vienna.",
         "tags": [
           "llm-tools"
         ],
@@ -2572,7 +2572,7 @@
       "post": {
         "operationId": "query-processor",
         "description": "Processes a structured legal query through the query processor workflow. Exposed to the LibreChat assistant as a callable tool.",
-        "summary": "Run the JuristAI legal query processor.",
+        "summary": "Run the Vienna legal query processor.",
         "tags": [
           "llm-tools"
         ],
@@ -2942,7 +2942,7 @@
     "/api/core/retrieve-docket-metadata/": {
       "post": {
         "operationId": "check-docket-updates",
-        "description": "Refreshes the latest docket metadata for a case already known to JuristAI. When docketId is omitted, the authenticated case context is reused.",
+        "description": "Refreshes the latest docket metadata for a case already known to Vienna. When docketId is omitted, the authenticated case context is reused.",
         "summary": "Refresh docket metadata for a known case or docket.",
         "tags": [
           "llm-tools"
@@ -4496,7 +4496,7 @@
     "/api/core/update-user-hourly-rate/": {
       "post": {
         "operationId": "update-user-hourly-rate",
-        "description": "Stores the actor's hourly billing rate directly on the JuristAI user record. Exposed to the LibreChat assistant as a callable tool.",
+        "description": "Stores the actor's hourly billing rate directly on the Vienna user record. Exposed to the LibreChat assistant as a callable tool.",
         "summary": "Update the authenticated user's hourly billing rate.",
         "tags": [
           "llm-tools"
