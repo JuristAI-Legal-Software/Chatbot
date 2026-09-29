@@ -1,5 +1,5 @@
 """
-JuristAI Django MCP Server
+Vienna Django MCP Server
 --------------------------
 Wraps the django-hub REST API as MCP tools so LibreChat's chat proxy can
 invoke them directly rather than routing through the intentHandler.

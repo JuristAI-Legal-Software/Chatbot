@@ -1,7 +1,8 @@
-# SeriesAI Email Agent Tool-Calls — Chatbot (LibreChat) Spec
+# Vienna Startups & VC Workspace Email Agent Tool-Calls — Chatbot (LibreChat) Spec
 
 Covers the tool definitions, context injection, and approval-gate UI pattern
-needed in the LibreChat-based Chatbot for SeriesAI email-first features.
+needed in the LibreChat-based Chatbot for the email-first features of Vienna's
+startups & VC workspace (appIds 3 and 4; formerly SeriesAI).
 
 Related cross-repo specs:
 - Atticus-Back-End: `docs/contracts/seriesai_email_agent_contract.md`
@@ -13,7 +14,7 @@ Related cross-repo specs:
 
 ## 1. Product Context
 
-SeriesAI positions the assistant as **autonomous and proactive** —
+Vienna's startups & VC workspace positions the assistant as **autonomous and proactive** —
 "Directly in your inbox. 1-click setup. Never need to login."
 The three-step model is: **Describe → Agent Acts → Review & Approve**.
 
@@ -45,7 +46,7 @@ These come from `PracticeAreaContext` on the frontend (see
 `SeriesAI-frontend/src/components/pages/Dashboard/Atticus/Integrations/SERIESAI-SUB-SPEC.md`).
 
 The system prompt must also include the mandatory legal disclaimer:
-> SeriesAI is Venture Intelligent AI. It is not a law firm and does not provide
+> Vienna is venture workflow software. It is not a law firm and does not provide
 > legal advice. It is not a broker-dealer, investment adviser, or financial-services
 > firm and does not offer or recommend securities. All legal, tax, and investment
 > decisions remain the user's responsibility.
