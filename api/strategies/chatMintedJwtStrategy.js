@@ -59,7 +59,7 @@ const chatMintedJwtLogin = () =>
         // Cognito sub, and fall back to `sub` for ActionService tokens.
         const id = String(payload?.id ?? payload?.sub ?? '').trim();
         if (!id) {
-          return done(null, false, { message: 'Invalid JuristAI chat token' });
+          return done(null, false, { message: 'Invalid Vienna chat token' });
         }
 
         const email = resolveProvisioningEmail(payload, id);

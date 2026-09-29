@@ -565,7 +565,7 @@ async function processRequiredActions(client, requiredActions) {
           tool_call_id: currentAction.toolCallId,
           output: JSON.stringify({
             type: 'CAPABILITY_DENIED',
-            message: 'This operation is not available for the current JuristAI run.',
+            message: 'This operation is not available for the current Vienna run.',
             operationId: juristAIOperationId(currentAction.tool),
           }),
         }),
