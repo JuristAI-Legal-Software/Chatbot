@@ -1,3 +1,29 @@
+import { resolveResponseAppInstructions } from './generatedResponsePrompts';
+
+const responsePromptRequests = new WeakMap<object, Map<string, Promise<string>>>();
+
+/** Fetch one current app prompt per request and share it between agent loading
+ *  and the OpenAI request boundary. A new request always reads the current S3
+ *  object again. */
+export function resolveResponseAppInstructionsForRequest(
+  request: object,
+  appId: string | number | undefined,
+): Promise<string> {
+  const key = String(appId ?? '').trim();
+  let prompts = responsePromptRequests.get(request);
+  if (!prompts) {
+    prompts = new Map<string, Promise<string>>();
+    responsePromptRequests.set(request, prompts);
+  }
+
+  const existing = prompts.get(key);
+  if (existing) return existing;
+
+  const pending = resolveResponseAppInstructions(appId);
+  prompts.set(key, pending);
+  return pending;
+}
+
 export interface AgentPromptTarget {
   instructions?: string;
   additional_instructions?: string;
@@ -8,8 +34,8 @@ export function applyResponseAppPrompt<T extends AgentPromptTarget>(
   agent: T,
   appInstructions: string,
   requestInstructions?: string,
-): T {
-  const result = { ...agent };
+): T & AgentPromptTarget {
+  const result: T & AgentPromptTarget = { ...agent };
   const requestText = requestInstructions?.trim() ?? '';
   const taskInstructions =
     appInstructions &&

@@ -2,12 +2,16 @@
 // the complete tool/provider registry, which makes the test boot unrelated
 // database, filesystem, and provider modules. Keep those dependencies out of
 // this unit boundary so collection cannot wait on external initialization.
-jest.mock('@librechat/api', () => ({}));
+jest.mock('@librechat/api', () => ({
+  createRepositoryInstructionLoader: () => ({}),
+}));
 jest.mock('@librechat/agents', () => ({}));
 jest.mock('@librechat/agents/langchain/tools', () => ({}));
 jest.mock('@librechat/data-schemas', () => ({}));
 jest.mock('librechat-data-provider', () => ({
   Tools: { execute_code: 'execute_code', file_search: 'file_search', web_search: 'web_search' },
+  AgentCapabilities: {},
+  Constants: { mcp_server: 'mcp_server', mcp_delimiter: '___' },
   actionDomainSeparator: '---',
   imageGenTools: new Set(),
 }));
@@ -20,9 +24,9 @@ jest.mock('~/app/clients/tools/manifest', () => ({ manifestToolMap: {}, toolkits
 jest.mock('~/server/services/Tools/search', () => ({}));
 jest.mock('~/server/services/Tools/mcp', () => ({}));
 jest.mock('~/server/services/MCP', () => ({}));
+jest.mock('~/server/services/OpenIDSessionRefresh', () => ({}));
 jest.mock('~/server/services/Threads', () => ({}));
 jest.mock('~/app/clients/tools/util', () => ({}));
-jest.mock('~/config/parsers', () => ({}));
 jest.mock('~/models', () => ({}));
 jest.mock('~/config', () => ({}));
 jest.mock('~/cache', () => ({}));

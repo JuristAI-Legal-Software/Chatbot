@@ -1,17 +1,26 @@
 const path = require('path');
+const { maxWorkers } = require('../config/jest.workers.cjs');
 
-const babelPresetEnv = require.resolve('@babel/preset-env', {
-  paths: [path.resolve(__dirname, '..')],
-});
+const resolveFromRoot = (name) => require.resolve(name, { paths: [path.resolve(__dirname, '..')] });
+const babelPresetEnv = resolveFromRoot('@babel/preset-env');
+const babelPresetTypescript = resolveFromRoot('@babel/preset-typescript');
 
 const esModules = [
   'openid-client',
   'oauth4webapi',
   'jose',
-  'uuid',
-  '@mistralai[\\\\/]mistralai',
   '@langchain[\\\\/]langgraph',
   '@langchain[\\\\/]langgraph-checkpoint',
+  '@langchain[\\\\/]langgraph-sdk',
+  '@mistralai[\\\\/]mistralai',
+  'uuid',
+  'sanitize-html',
+  'htmlparser2',
+  'domhandler',
+  'domelementtype',
+  'domutils',
+  'dom-serializer',
+  'entities',
 ].join('|');
 
 module.exports = {
@@ -19,7 +28,7 @@ module.exports = {
   clearMocks: true,
   roots: ['<rootDir>'],
   coverageDirectory: 'coverage',
-  maxWorkers: '50%',
+  maxWorkers,
   testTimeout: 30000, // 30 seconds timeout for all tests
   setupFiles: ['./test/jestSetup.js', './test/__mocks__/logger.js'],
   moduleNameMapper: {
@@ -32,7 +41,7 @@ module.exports = {
     '\\.[jt]sx?$': [
       'babel-jest',
       {
-        presets: [[babelPresetEnv, { targets: { node: 'current' } }]],
+        presets: [[babelPresetEnv, { targets: { node: 'current' } }], babelPresetTypescript],
       },
     ],
   },

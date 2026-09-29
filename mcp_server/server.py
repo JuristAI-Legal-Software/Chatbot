@@ -42,7 +42,7 @@ _SERIESAI_APP_IDS = frozenset({"3", "4"})
 mcp = FastMCP(
     "juristai-django",
     instructions=(
-        "Tools for the JuristAI legal platform. "
+        "Tools for the Vienna legal operations platform. "
         "Always supply caseId when the tool requires it. "
         "Prefer read-only tools unless the user explicitly requests a mutation."
     ),
@@ -109,7 +109,7 @@ def _seriesai_litigation_block(app_id: str | None, operation: str) -> dict[str, 
     if str(app_id or "").strip() not in _SERIESAI_APP_IDS:
         return None
     return {
-        "error": "This litigation workflow is not available for SeriesAI.",
+        "error": "This litigation workflow is not available for Vienna.",
         "code": "SERIESAI_LITIGATION_WORKFLOW_UNAVAILABLE",
         "operation": operation,
     }
@@ -443,7 +443,7 @@ async def procedural_posture(ctx: Context, case_id: str, app_id: str | None = No
     return await _post(ctx, "/api/classify-docket/", {"caseId": case_id, "appId": app_id})
 
 
-@mcp.tool(description="Refresh the latest docket metadata for a case already known to JuristAI.")
+@mcp.tool(description="Refresh the latest docket metadata for a case already known to Vienna.")
 async def check_docket_updates(
     ctx: Context,
     case_id: str,
@@ -563,7 +563,7 @@ async def delete_motion_template(  # noqa: PLR0913
     )
 
 
-@mcp.tool(description="Run the general JuristAI query processor.")
+@mcp.tool(description="Run the general Vienna query processor.")
 async def query_processor(ctx: Context, query: str, case_id: str | None = None) -> dict:
     return await _post(ctx, "/api/query-processor/", {"query": query, "caseId": case_id})
 
@@ -1235,7 +1235,7 @@ async def recommend_lawsuit(ctx: Context, case_id: str | None = None, support: s
 # ===========================================================================
 
 
-@mcp.tool(description="Run account-level JuristAI workflow actions (account manager).")
+@mcp.tool(description="Run account-level Vienna workflow actions (account manager).")
 async def account_manager(ctx: Context, action: str, payload: dict | None = None) -> dict:
     return await _post(ctx, "/api/account-manager/", {"action": action, **(payload or {})})
 
@@ -1543,7 +1543,7 @@ async def cr_action_items_gen(
     return await _post(ctx, "/api/cr-action-items-gen/", payload)
 
 
-@mcp.tool(description="Start a SAFE draft workflow for a SeriesAI investor and queue it for user approval.")
+@mcp.tool(description="Start a SAFE draft workflow for a Vienna venture investor and queue it for user approval.")
 async def series_ai_trigger_safe_draft(  # noqa: PLR0913 - MCP tool schema is intentionally flat
     ctx: Context,
     app_id: str,
@@ -1575,7 +1575,7 @@ async def series_ai_trigger_safe_draft(  # noqa: PLR0913 - MCP tool schema is in
     return await _post(ctx, "/api/tools/execute/", payload)
 
 
-@mcp.tool(description="Queue a round update email to SeriesAI investors, optionally including a cap table summary.")
+@mcp.tool(description="Queue a round update email to venture investors, optionally including a cap table summary.")
 async def series_ai_send_round_update(
     ctx: Context,
     app_id: str,
@@ -1595,7 +1595,7 @@ async def series_ai_send_round_update(
     return await _post(ctx, "/api/tools/execute/", payload)
 
 
-@mcp.tool(description="Read-only query of a SeriesAI organization's committed cap table ownership.")
+@mcp.tool(description="Read-only query of a venture organization's committed cap table ownership.")
 async def series_ai_query_cap_table_ownership(
     ctx: Context,
     app_id: str,
@@ -1613,7 +1613,7 @@ async def series_ai_query_cap_table_ownership(
     return await _post(ctx, "/api/tools/execute/", payload)
 
 
-@mcp.tool(description="Schedule a SeriesAI compliance deadline (83(b) election, Form D, franchise tax, etc.).")
+@mcp.tool(description="Schedule a venture compliance deadline (83(b) election, Form D, franchise tax, etc.).")
 async def series_ai_schedule_compliance_deadline(  # noqa: PLR0913 - MCP tool schema is intentionally flat
     ctx: Context,
     app_id: str,
@@ -1641,7 +1641,7 @@ async def series_ai_schedule_compliance_deadline(  # noqa: PLR0913 - MCP tool sc
     return await _post(ctx, "/api/tools/execute/", payload)
 
 
-@mcp.tool(description="Request signatures on a SeriesAI document instance and queue it for user approval.")
+@mcp.tool(description="Request signatures on a Vienna document instance and queue it for user approval.")
 async def series_ai_request_signatures_via_email(  # noqa: PLR0913 - MCP tool schema is intentionally flat
     ctx: Context,
     app_id: str,
@@ -1663,7 +1663,7 @@ async def series_ai_request_signatures_via_email(  # noqa: PLR0913 - MCP tool sc
     return await _post(ctx, "/api/tools/execute/", payload)
 
 
-@mcp.tool(description="Invite an external deal participant (investor, accelerator, or deal-side lawyer) to a SeriesAI organization workspace.")
+@mcp.tool(description="Invite an external deal participant (investor, accelerator, or deal-side lawyer) to a Vienna venture workspace.")
 async def series_ai_invite_external_participant(  # noqa: PLR0913 - MCP tool schema is intentionally flat
     ctx: Context,
     app_id: str,
@@ -1697,7 +1697,7 @@ async def series_ai_invite_external_participant(  # noqa: PLR0913 - MCP tool sch
     return await _post(ctx, "/api/tools/execute/", payload)
 
 
-@mcp.tool(description="Approve or reject a pending SeriesAI action (e.g. a queued SAFE draft or signature request).")
+@mcp.tool(description="Approve or reject a pending Vienna action (e.g. a queued SAFE draft or signature request).")
 async def series_ai_resolve_pending_action(
     ctx: Context,
     request_id: str,

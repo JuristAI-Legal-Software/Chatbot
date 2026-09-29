@@ -27,10 +27,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Node.js 20.x
+      - name: Set up Node.js 24.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '24.16.0'
           cache: npm
 
       - name: Install dependencies
@@ -59,11 +59,13 @@ jobs:
             exit 0
           fi
 
-          # Run ESLint
-          npx eslint --no-error-on-unmatched-pattern --no-warn-ignored \
-            --config eslint.config.mjs \
-            --max-warnings=0 \
-            -- "${CHANGED_FILES[@]}"
+          # Batch the file list: a large sync PR changes thousands of files, and one
+          # command line that long fails with E2BIG (exit 249).
+          printf '%s\0' "${CHANGED_FILES[@]}" |
+            xargs -0 -n 200 node_modules/.bin/eslint --no-error-on-unmatched-pattern --no-warn-ignored \
+              --config eslint.config.mjs \
+              --max-warnings=0 \
+              --
 
       # Run Prettier --check on the same set of changed files to catch
       # formatting drift in PRs that bypassed the local pre-commit hook
@@ -87,7 +89,8 @@ jobs:
           # `prettier --check` exits non-zero if any file would be reformatted.
           # Suggest the local fix in the failure message so contributors aren't
           # left guessing how to resolve.
-          if ! npx prettier --check --no-error-on-unmatched-pattern -- "${CHANGED_FILES[@]}"; then
+          if ! printf '%s\0' "${CHANGED_FILES[@]}" |
+            xargs -0 -n 200 node_modules/.bin/prettier --check --no-error-on-unmatched-pattern --; then
             echo ""
             echo "::error::Prettier formatting drift detected. Fix locally with:"
             echo "::error::  npx prettier --write <files>"

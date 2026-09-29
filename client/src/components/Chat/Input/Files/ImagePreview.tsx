@@ -3,9 +3,10 @@ import { Button } from '@librechat/client';
 import { Maximize2, X } from 'lucide-react';
 import { FileSources } from 'librechat-data-provider';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
+import { cn, isSafeImageSrc, toRenderableImageUrl } from '~/utils';
 import ProgressCircle from './ProgressCircle';
 import SourceIcon from './SourceIcon';
-import { cn, isSafeImageSrc, toRenderableImageUrl } from '~/utils';
+import { useLocalize } from '~/hooks';
 
 const ImagePreview = ({
   imageBase64,
@@ -22,8 +23,10 @@ const ImagePreview = ({
   source?: FileSources;
   alt?: string;
 }) => {
+  const localize = useLocalize();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -89,6 +92,9 @@ const ImagePreview = ({
     transition: 'stroke-dashoffset 0.3s linear',
   };
 
+  /** Keyboard users need the same expand affordance the pointer gets on hover. */
+  const showExpandAffordance = isHovered || isFocused;
+
   return (
     <>
       <button
@@ -96,7 +102,7 @@ const ImagePreview = ({
         type="button"
         className={cn(
           'relative size-14 overflow-hidden rounded-xl transition-shadow',
-          'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface-primary',
+          'focus:outline-none focus-visible:ring-2 focus-visible:ring-text-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-primary',
           className,
         )}
         aria-label={`View ${alt} in full size`}
@@ -108,13 +114,16 @@ const ImagePreview = ({
         }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
       >
+        {/* Decorative via empty alt; the trigger's aria-label names it. No aria-hidden,
+            so the expand affordance stays the only aria-hidden child (see spec). */}
         <img
           src={safeRenderableImageUrl}
           alt=""
           className="size-full object-cover"
           draggable={false}
-          aria-hidden="true"
         />
         {progress < 1 ? (
           <ProgressCircle
@@ -127,14 +136,14 @@ const ImagePreview = ({
           <div
             className={cn(
               'absolute inset-0 flex transform-gpu cursor-pointer items-center justify-center rounded-xl transition-opacity duration-200 ease-in-out',
-              isHovered ? 'bg-black/20 opacity-100' : 'opacity-0',
+              showExpandAffordance ? 'bg-black/20 opacity-100' : 'opacity-0',
             )}
             aria-hidden="true"
           >
             <Maximize2
               className={cn(
                 'size-5 transform-gpu text-white drop-shadow-lg transition-all duration-200',
-                isHovered ? 'scale-110' : '',
+                showExpandAffordance ? 'scale-110' : '',
               )}
             />
           </div>
@@ -166,8 +175,9 @@ const ImagePreview = ({
               ref={closeButtonRef}
               onClick={() => handleOpenChange(false)}
               variant="ghost"
-              className="absolute right-4 top-4 z-20 h-10 w-10 p-0 text-white hover:bg-white/10"
-              aria-label="Close"
+              size="icon"
+              className="absolute right-4 top-4 z-20 text-white hover:bg-white/10"
+              aria-label={localize('com_ui_close')}
             >
               <X className="size-5" aria-hidden="true" />
             </Button>

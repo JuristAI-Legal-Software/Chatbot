@@ -28,7 +28,9 @@ function prepareKeyvFile(filename: string): string {
   return filePath;
 }
 
-export const logFile = new KeyvFile({ filename: prepareKeyvFile('logs.json') }).setMaxListeners(20);
-export const violationFile = new KeyvFile({ filename: prepareKeyvFile('violations.json') }).setMaxListeners(
-  20,
-);
+export const logFile: KeyvFile = new KeyvFile({
+  filename: prepareKeyvFile('logs.json'),
+}).setMaxListeners(20);
+export const violationFile: KeyvFile = new KeyvFile({
+  filename: prepareKeyvFile('violations.json'),
+}).setMaxListeners(20);

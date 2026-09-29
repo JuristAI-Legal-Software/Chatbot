@@ -1,20 +1,27 @@
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { promisify } = require('util');
+const express = require('express');
 const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
+const mockTestRoot = path.join(os.tmpdir(), 'librechat-metrics');
 
 jest.mock('~/server/services/Config', () => ({
+  syncStaticTools: jest.fn().mockResolvedValue(undefined),
   loadCustomConfig: jest.fn(() => Promise.resolve({})),
   getAppConfig: jest.fn().mockResolvedValue({
     paths: {
-      uploads: '/tmp',
-      dist: '/tmp/dist',
-      fonts: '/tmp/fonts',
-      assets: '/tmp/assets',
+      uploads: mockTestRoot,
+      dist: require('path').join(mockTestRoot, 'dist'),
+      fonts: require('path').join(mockTestRoot, 'fonts'),
+      assets: require('path').join(mockTestRoot, 'assets'),
     },
     fileStrategy: 'local',
     imageOutputType: 'PNG',
   }),
+  mergeAppTools: jest.fn().mockResolvedValue(undefined),
   setCachedTools: jest.fn(),
 }));
 
@@ -32,52 +39,12 @@ jest.mock('~/config', () => ({
   }),
 }));
 
-jest.mock('@librechat/data-schemas', () => ({
-  logger: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    debug: jest.fn(),
-    error: jest.fn(),
-  },
-  runAsSystem: jest.fn(async (callback) => callback()),
-  createModels: jest.fn(),
-  createMethods: jest.fn(() => ({})),
-  SystemCapabilities: new Proxy({}, { get: (_target, property) => String(property) }),
-  getTenantId: jest.fn(),
+jest.mock('~/server/services/Agents/triggers', () => ({
+  initializeAgentTriggerService: jest.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock(
-  '~/models',
-  () =>
-    new Proxy(
-      {},
-      {
-        get: (_target, property) =>
-          property === 'seedDatabase' ? jest.fn().mockResolvedValue(undefined) : jest.fn(),
-      },
-    ),
-);
-
-jest.mock(
-  '@librechat/api/telemetry',
-  () => ({
-    initializeTelemetry: jest.fn(() => ({
-      enabled: false,
-      status: 'disabled',
-      shutdown: jest.fn(),
-    })),
-    telemetryMiddleware: jest.fn((_req, _res, next) => next()),
-    telemetryErrorMiddleware: jest.fn((err, _req, _res, next) => next(err)),
-  }),
-  { virtual: true },
-);
-
-jest.mock('~/server/services/initializeMCPs', () => jest.fn().mockResolvedValue(undefined));
-jest.mock('~/server/services/initializeOAuthReconnectManager', () =>
-  jest.fn().mockResolvedValue(undefined),
-);
-jest.mock('~/server/services/start/migration', () => ({
-  checkMigrations: jest.fn().mockResolvedValue(undefined),
+jest.mock('~/server/services/Schedules', () => ({
+  initializeScheduleEngine: jest.fn().mockResolvedValue(undefined),
 }));
 
 describe('Server metrics route', () => {
@@ -85,6 +52,7 @@ describe('Server metrics route', () => {
 
   let mongoServer;
   let app;
+  let server;
 
   const originalReadFileSync = fs.readFileSync;
 
@@ -102,10 +70,7 @@ describe('Server metrics route', () => {
   });
 
   beforeAll(async () => {
-    const fs = require('fs');
-    const path = require('path');
-
-    const dirs = ['/tmp/dist', '/tmp/fonts', '/tmp/assets'];
+    const dirs = ['dist', 'fonts', 'assets'].map((dir) => path.join(mockTestRoot, dir));
     dirs.forEach((dir) => {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -113,19 +78,21 @@ describe('Server metrics route', () => {
     });
 
     fs.writeFileSync(
-      path.join('/tmp/dist', 'index.html'),
+      path.join(mockTestRoot, 'dist', 'index.html'),
       '<!DOCTYPE html><html><head><title>LibreChat</title></head><body><div id="root"></div></body></html>',
     );
 
-    mongoServer = await MongoMemoryServer.create({
-      instance: { launchTimeout: 30_000 },
-    });
+    mongoServer = await MongoMemoryServer.create();
     process.env.MONGO_URI = mongoServer.getUri();
     process.env.PORT = '0';
     process.env.METRICS_SECRET = 'test-secret';
+    /* index.js listens at module scope and exports only the app, so capture the server to close it. */
+    const listenSpy = jest.spyOn(express.application, 'listen');
     app = require('~/server');
 
     await healthCheckPoll(app);
+    server = listenSpy.mock.results[0].value;
+    listenSpy.mockRestore();
   });
 
   afterEach(() => {
@@ -133,12 +100,10 @@ describe('Server metrics route', () => {
   });
 
   afterAll(async () => {
-    if (app?.server) {
-      await new Promise((resolve) => app.server.close(resolve));
-    }
     delete process.env.METRICS_SECRET;
-    await mongoose.disconnect();
+    await promisify(server.close).call(server);
     await mongoServer.stop();
+    await mongoose.disconnect();
   });
 
   it('returns 401 at /metrics when METRICS_SECRET is unset', async () => {

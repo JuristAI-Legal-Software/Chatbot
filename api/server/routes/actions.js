@@ -16,14 +16,17 @@ const {
 } = require('@librechat/api');
 const { findToken, updateToken, createToken } = require('~/models');
 const { requireJwtAuth, loginLimiter } = require('~/server/middleware');
-const { getFlowStateManager } = require('~/config');
+const { getActionFlowStateManager } = require('~/config');
 const { getLogStores } = require('~/cache');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 const OAUTH_CSRF_COOKIE_PATH = '/api/actions';
 /** Baseline IP rate limiter applied alongside the login and OAuth limiters. */
-const routeRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150 });
+const routeRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'CI' ? 10_000 : 150,
+});
 const actionOAuthLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -84,7 +87,7 @@ router.get(
     const { action_id } = req.params;
     const { code, state } = req.query;
     const flowsCache = getLogStores(CacheKeys.FLOWS);
-    const flowManager = getFlowStateManager(flowsCache);
+    const flowManager = getActionFlowStateManager(flowsCache);
     const basePath = getBasePath();
     let identifier = action_id;
     try {

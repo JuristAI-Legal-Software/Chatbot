@@ -1,6 +1,14 @@
 const fs = require('fs').promises;
 const express = require('express');
 const { logger } = require('@librechat/data-schemas');
+const {
+  inspectContent,
+  extractFileContent,
+  hasActiveFileFieldPolicy,
+  contentFilterBlockResponse,
+  contentFilterUninspectableResponse,
+  getBlockedUninspectableFileField,
+} = require('@librechat/api');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { resizeAvatar } = require('~/server/services/Files/images/avatar');
 const { getFileStrategy } = require('~/server/utils/getFileStrategy');
@@ -18,6 +26,19 @@ router.post('/', fileUploadIpLimiter, fileUploadUserLimiter, async (req, res) =>
   try {
     const appConfig = req.config;
     filterFile({ req, file: req.file, image: true, isAvatar: true });
+    if (hasActiveFileFieldPolicy(req.config?.filters, ['name', 'content'])) {
+      const finding = inspectContent(extractFileContent({ name: req.file.originalname }), {
+        filters: req.config.filters,
+      });
+      if (finding != null) {
+        return res.status(400).json(contentFilterBlockResponse(finding));
+      }
+      const uninspectableField = getBlockedUninspectableFileField(req.config.filters, ['content']);
+      if (uninspectableField != null) {
+        return res.status(400).json(contentFilterUninspectableResponse(uninspectableField));
+      }
+    }
+
     const rawUserId = req.user.id;
     if (!rawUserId) {
       throw new Error('User ID is undefined');

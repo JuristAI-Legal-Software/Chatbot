@@ -1,33 +1,10 @@
 import { WebSearchToolDefinition, CalculatorToolDefinition } from '@librechat/agents';
+import type { ExtendedJsonSchema } from './schema';
+import { AskUserQuestionToolDefinition } from '~/agents/hitl/askUserQuestionTool';
 import { geminiToolkit } from '~/tools/toolkits/gemini';
 import { oaiToolkit } from '~/tools/toolkits/oai';
 
-/** Extended JSON Schema type that includes standard validation keywords */
-export type ExtendedJsonSchema = {
-  type?: 'string' | 'number' | 'integer' | 'float' | 'boolean' | 'array' | 'object' | 'null';
-  enum?: (string | number | boolean | null)[];
-  items?: ExtendedJsonSchema;
-  properties?: Record<string, ExtendedJsonSchema>;
-  required?: string[];
-  description?: string;
-  additionalProperties?: boolean | ExtendedJsonSchema;
-  minLength?: number;
-  maxLength?: number;
-  minimum?: number;
-  maximum?: number;
-  minItems?: number;
-  maxItems?: number;
-  pattern?: string;
-  format?: string;
-  default?: unknown;
-  const?: unknown;
-  oneOf?: ExtendedJsonSchema[];
-  anyOf?: ExtendedJsonSchema[];
-  allOf?: ExtendedJsonSchema[];
-  $ref?: string;
-  $defs?: Record<string, ExtendedJsonSchema>;
-  definitions?: Record<string, ExtendedJsonSchema>;
-};
+export type { ExtendedJsonSchema } from './schema';
 
 export interface ToolRegistryDefinition {
   name: string;
@@ -471,6 +448,12 @@ const agentToolDefinitions: Record<string, ToolRegistryDefinition> = {
     schema: WebSearchToolDefinition.schema as unknown as ExtendedJsonSchema,
     toolType: 'builtin',
   },
+  [AskUserQuestionToolDefinition.name]: {
+    name: AskUserQuestionToolDefinition.name,
+    description: AskUserQuestionToolDefinition.description,
+    schema: AskUserQuestionToolDefinition.schema as ExtendedJsonSchema,
+    toolType: 'builtin',
+  },
 };
 
 export function getToolDefinition(toolName: string): ToolRegistryDefinition | undefined {
@@ -499,7 +482,7 @@ export type SeriesAIContext = {
   lifecycleStage?: string;
 };
 export const SERIESAI_DISCLAIMER =
-  "SeriesAI is Venture Intelligent AI. It is not a law firm and does not provide legal advice. It is not a broker-dealer, investment adviser, or financial-services firm and does not offer or recommend securities. All legal, tax, and investment decisions remain the user's responsibility.";
+  "Vienna is venture workflow software. It is not a law firm and does not provide legal advice. It is not a broker-dealer, investment adviser, or financial-services firm and does not offer or recommend securities. All legal, tax, and investment decisions remain the user's responsibility.";
 export function hasSeriesAIContext(
   context: SeriesAIContext | undefined,
 ): context is SeriesAIContext & Required<Pick<SeriesAIContext, 'appId' | 'organizationId'>> {

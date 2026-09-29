@@ -37,6 +37,7 @@ jest.mock('librechat-data-provider', () => ({
   EToolResources: {},
   isActionTool: (name) => String(name).includes('_action_'),
   actionDelimiter: '_action_',
+  actionDomainSeparator: '---',
   ImageVisionTool: { function: { name: 'image_gen' } },
   openapiToFunction: () => ({
     requestBuilders: { echoMessage: { path: '/echo' } },
@@ -44,6 +45,9 @@ jest.mock('librechat-data-provider', () => ({
     zodSchemas: {},
   }),
   AgentCapabilities: {},
+  hasActivePiiFields: () => false,
+  hasActivePiiPatterns: () => false,
+  normalizeActionToolName: (name) => name,
   isEphemeralAgentId: () => false,
   validateActionDomain: () => ({ isValid: true }),
   defaultAgentCapabilities: [],
@@ -63,18 +67,23 @@ jest.mock('@librechat/api', () => ({
   getMissingCustomUserVars: jest.fn(() => []),
   buildWebSearchDynamicContext: jest.fn(),
   getCodeApiAuthHeaders: jest.fn(),
+  createRepositoryInstructionLoader: () => ({}),
+  normalizeActionToolName: (name) => name,
 }));
 jest.mock('~/server/services/Config', () => ({ getCachedTools: jest.fn(() => ({})) }));
-jest.mock('~/server/services/Files/process', () => ({ processFileURL: jest.fn(), uploadImageBuffer: jest.fn() }));
+jest.mock('~/server/services/Files/process', () => ({
+  processFileURL: jest.fn(),
+  uploadImageBuffer: jest.fn(),
+}));
 jest.mock('~/app/clients/tools/util/fileSearch', () => ({ primeFiles: jest.fn() }));
 jest.mock('~/server/services/Files/Code/process', () => ({ primeFiles: jest.fn() }));
 jest.mock('~/app/clients/tools/manifest', () => ({ manifestToolMap: {}, toolkits: [] }));
 jest.mock('~/server/services/Tools/search', () => ({ createOnSearchResults: jest.fn() }));
 jest.mock('~/server/services/Tools/mcp', () => ({ reinitMCPServer: jest.fn() }));
 jest.mock('~/server/services/MCP', () => ({ resolveConfigServers: jest.fn() }));
+jest.mock('~/server/services/OpenIDSessionRefresh', () => ({}));
 jest.mock('~/server/services/Threads', () => ({ recordUsage: jest.fn() }));
 jest.mock('~/app/clients/tools/util', () => ({ loadTools: (...args) => mockLoadTools(...args) }));
-jest.mock('~/config/parsers', () => ({ redactMessage: (value) => String(value) }));
 jest.mock('~/models', () => ({ findPluginAuthsByKeys: jest.fn() }));
 jest.mock('~/config', () => ({ getFlowStateManager: jest.fn(), getMCPServersRegistry: jest.fn() }));
 jest.mock('~/cache', () => ({ getLogStores: jest.fn() }));
@@ -91,28 +100,62 @@ const { processRequiredActions } = require('../ToolService');
 test('keeps built-in and action tool output metadata scoped to each call', async () => {
   const builtInCall = jest.fn().mockResolvedValue('{"value":2}');
   mockLoadTools.mockResolvedValue({ loadedTools: [{ name: 'calculator', _call: builtInCall }] });
-  mockLoadActionSets.mockResolvedValue([{ action_id: 'action-a', metadata: {
-    domain: 'https://api.example.com', raw_spec: '{}',
-  } }]);
+  mockLoadActionSets.mockResolvedValue([
+    {
+      action_id: 'action-a',
+      metadata: {
+        domain: 'https://api.example.com',
+        raw_spec: '{}',
+      },
+    },
+  ]);
   mockDomainParser.mockResolvedValue('shared_dom');
   mockLegacyDomainEncode.mockReturnValue('legacy_dom');
   mockDecryptMetadata.mockImplementation(async (metadata) => metadata);
   mockCreateActionTool.mockResolvedValue({ _call: jest.fn().mockResolvedValue('{"status":"ok"}') });
 
   const client = {
-    req: { user: { id: 'user-1' }, body: { assistant_id: 'assistant-1', model: 'gpt-4o-mini', endpoint: 'openAI' }, config: {} },
-    res: {}, apiKey: 'sk-test', mappedOrder: new Map(), seenToolCalls: new Map(), addContentData: jest.fn(),
+    req: {
+      user: { id: 'user-1' },
+      body: { assistant_id: 'assistant-1', model: 'gpt-4o-mini', endpoint: 'openAI' },
+      config: {},
+    },
+    res: {},
+    apiKey: 'sk-test',
+    mappedOrder: new Map(),
+    seenToolCalls: new Map(),
+    addContentData: jest.fn(),
   };
   await processRequiredActions(client, [
-    { tool: 'calculator', toolInput: { input: '1+1' }, toolCallId: 'builtin-1', thread_id: 'thread-1', run_id: 'run-1' },
-    { tool: 'echoMessage_action_shared_dom', toolInput: {}, toolCallId: 'action-1', thread_id: 'thread-1', run_id: 'run-1' },
+    {
+      tool: 'calculator',
+      toolInput: { input: '1+1' },
+      toolCallId: 'builtin-1',
+      thread_id: 'thread-1',
+      run_id: 'run-1',
+    },
+    {
+      tool: 'echoMessage_action_shared_dom',
+      toolInput: {},
+      toolCallId: 'action-1',
+      thread_id: 'thread-1',
+      run_id: 'run-1',
+    },
   ]);
 
   const calls = client.addContentData.mock.calls
     .map(([payload]) => Object.values(payload).find((value) => value?.function?.name))
     .filter(Boolean);
-  expect(calls).toEqual(expect.arrayContaining([
-    expect.objectContaining({ function: expect.objectContaining({ name: 'calculator' }), action: false }),
-    expect.objectContaining({ function: expect.objectContaining({ name: 'echoMessage_action_shared_dom' }), action: true }),
-  ]));
+  expect(calls).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        function: expect.objectContaining({ name: 'calculator' }),
+        action: false,
+      }),
+      expect.objectContaining({
+        function: expect.objectContaining({ name: 'echoMessage_action_shared_dom' }),
+        action: true,
+      }),
+    ]),
+  );
 });

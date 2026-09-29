@@ -15,25 +15,10 @@
  */
 export function stripYamlTrailingComment(value: string): string {
   if (value.trimStart().startsWith('#')) return '';
-  let i = 0;
-  while (i < value.length) {
-    const idx = value.indexOf('#', i);
-    if (idx <= 0) {
-      return value;
+  for (let i = 1; i < value.length; i++) {
+    if (value[i] === '#' && /\s/.test(value[i - 1])) {
+      return value.slice(0, i).trimEnd();
     }
-    const prev = value.charCodeAt(idx - 1);
-    if (prev === 32 || prev === 9) {
-      let end = idx - 1;
-      while (end > 0) {
-        const c = value.charCodeAt(end - 1);
-        if (c !== 32 && c !== 9) {
-          break;
-        }
-        end--;
-      }
-      return value.slice(0, end);
-    }
-    i = idx + 1;
   }
   return value;
 }
