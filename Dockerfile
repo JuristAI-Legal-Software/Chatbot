@@ -149,6 +149,7 @@ RUN node -e 'const fs=require("fs"); const p="package.json"; const pkg=JSON.pars
     ip-address@10.3.1 \
     pdfjs-dist@6.2.108 \
     sharp@0.35.4 \
+    winston-daily-rotate-file@5.0.0 \
     && rm -rf /app/api/node_modules/sharp /app/packages/api/node_modules/sharp \
     && mkdir -p /app/api/node_modules \
     && cp -a /app/node_modules/sharp /app/api/node_modules/sharp \
@@ -193,7 +194,7 @@ RUN set -eux; \
 # stream-file-type actually require() them at runtime.
 RUN node -e '\
 const fs = require("fs"); \
-const rootOnly = ["mongodb","hono","multer","undici","uuid","form-data","protobufjs","@opentelemetry/core","module-alias","express","mongoose","axios","dompurify","body-parser","js-yaml","@hono/node-server","@opentelemetry/propagator-jaeger","fast-uri","svgo"]; \
+const rootOnly = ["winston","winston-daily-rotate-file","mongodb","hono","multer","undici","uuid","form-data","protobufjs","@opentelemetry/core","module-alias","express","mongoose","axios","dompurify","body-parser","js-yaml","@hono/node-server","@opentelemetry/propagator-jaeger","fast-uri","svgo"]; \
 const pathed = [["nodemailer", ["/app/api"]], ["file-type", ["/app/node_modules/stream-file-type"]]]; \
 const files = ["/app/global-bundle.pem"]; \
 const failures = []; \
