@@ -319,10 +319,17 @@ async def read_people_dossiers(
 
 
 @mcp.tool(description="Search cases and dockets by keyword or docket number.")
-async def search_case(ctx: Context, query: str, app_id: str | None = None) -> dict:
-    body: dict[str, str] = {"q": query}
+async def search_case(
+    ctx: Context,
+    query: str,
+    app_id: str | None = None,
+    all_docket_types: bool | None = None,
+) -> dict:
+    body: dict[str, Any] = {"q": query}
     if app_id:
         body["appId"] = app_id
+    if all_docket_types is not None:
+        body["allDocketTypes"] = all_docket_types
     return await _post(ctx, "/api/search-case/", body)
 
 

@@ -20,9 +20,18 @@ def test_search_case_forwards_declared_query_field_and_optional_product_scope(mo
     monkeypatch.setattr(server, "_post", fake_post)
     ctx = object()
 
-    result = asyncio.run(server.search_case(ctx, "KalshiEX LLC v. Knudsen", "2"))
+    result = asyncio.run(server.search_case(
+        ctx,
+        "KalshiEX LLC v. Knudsen",
+        "2",
+        all_docket_types=True,
+    ))
 
-    assert result == {"q": "KalshiEX LLC v. Knudsen", "appId": "2"}
+    assert result == {
+        "q": "KalshiEX LLC v. Knudsen",
+        "appId": "2",
+        "allDocketTypes": True,
+    }
     assert calls == [(ctx, "/api/search-case/", result)]
 
 
